@@ -13,6 +13,7 @@ catch {
 }
 
 if ($gitStatus -and "$gitStatus".Trim() -ne "") {
+    Write-Host "DEBUG: Git Status Content: '$gitStatus'"
     Write-Error "OSTILE AUDIT ABORT: Git working tree is dirty. Commit or stash changes before running Critical Gate.`nStatus: $gitStatus"
 }
 
