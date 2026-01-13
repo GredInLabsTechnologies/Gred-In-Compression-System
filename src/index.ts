@@ -8,8 +8,8 @@
  */
 
 import { gics11_encode, gics11_decode } from '../gics_frozen/v1_1_0/index.js';
-import { GICSv2Encoder } from './gics/v1_2/encode.js'; // [NEW] v1.2
-import { GICSv2Decoder } from './gics/v1_2/decode.js'; // [NEW] v1.2
+export { GICSv2Encoder } from './gics/v1_2/encode.js'; // [NEW] v1.2
+export { GICSv2Decoder } from './gics/v1_2/decode.js'; // [NEW] v1.2
 import { HybridReader, HybridWriter, type HybridConfig } from './gics-hybrid.js';
 import type { Snapshot } from './gics-types.js';
 
