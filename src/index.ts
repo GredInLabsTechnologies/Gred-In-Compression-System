@@ -12,6 +12,7 @@ import { GICSv2Encoder } from './gics/v1_2/encode.js'; // [NEW] v1.2
 import { GICSv2Decoder } from './gics/v1_2/decode.js'; // [NEW] v1.2
 
 export { GICSv2Encoder, GICSv2Decoder }; // [EXPORT FIX]
+export * from './gics/v1_2/errors.js'; // [NEW] Error types
 import { HybridReader, HybridWriter, type HybridConfig } from './gics-hybrid.js';
 import type { Snapshot } from './gics-types.js';
 
