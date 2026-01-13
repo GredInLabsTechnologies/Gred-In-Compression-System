@@ -66,12 +66,9 @@ foreach ($script in $runners) {
     # Run via npx tsx, redirect output. 
     # PowerShell redirection handles stdout/stderr to file
     try {
-        # We invoke cmd /c to handle redirection cleanly natively if PS causes distinct file locking issues or encoding issues
-        # But PS `> file 2>&1` is usually fine.
-        $cmd = "npx tsx bench/sensitive/critical/$script"
-        
-        # Invoke and capture output to file
-        Invoke-Expression "$cmd > ""$logFile"" 2>&1"
+        # Use cmd /c for robust redirection on Windows
+        $cmdLine = "npx tsx bench/sensitive/critical/$script > ""$logFile"" 2>&1"
+        cmd /c $cmdLine
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host " [PASS]" -ForegroundColor Green
