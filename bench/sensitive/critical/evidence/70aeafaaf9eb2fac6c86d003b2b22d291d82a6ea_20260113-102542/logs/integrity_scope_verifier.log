@@ -1,5 +1,0 @@
-=== INTEGRITY SCOPE VERIFIER ===
-[CHM] ANOMALY DETECTED! Ratio=0.57 < Threshold. Base=2.00 Reason=ENTROPY_BURST
-Original Size: 46
-[PROOF] Silent Corruption at offset 34. Orig=100, New=356
-PASS: Verified that GICS v1.2 has NO integrity checksum.

@@ -1,7 +1,14 @@
 # Dependencies
 node_modules/
 dist/
-package-lock.json
+
+
+# Package manager logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
 
 # SonarQube
 .scannerwork/
@@ -11,6 +18,7 @@ sonar-scanner.zip
 
 # IDE / Editor
 .vscode/
+.idea/
 .agent/
 .gemini/
 .claude/
@@ -19,22 +27,33 @@ sonar-scanner.zip
 # Build/Dist Artifacts
 *.tgz
 *.zip
-gics-export/
-gics-v1.2-distribution/
-gics_frozen/
 audit_artifacts/
+
+# Bench / Generated artifacts
+bench/dist/
+bench/results/
+bench/report/
+bench_postfreeze_artifacts/
+bench_postfreeze_report.md
+bench_postfreeze_summary.json
+
+# Test / coverage outputs
+coverage/
+.nyc_output/
+*.tsbuildinfo
 
 # Logs and Benchmarks
 *.log
-*.txt
-bench/sensitive/critical/evidence/
-bench_output.txt
-benchmark_results.txt
-debug_edge.txt
-debug_edge_v2.txt
-debug_log.txt
-failed_log.txt
-failed_test_log.txt
+*.pid
+*.seed
+*.trace
+
+# Text outputs (avoid ignoring all *.txt because repo contains documentation)
+*_output.txt
+*_results.txt
+*_log.txt
+failed_*.txt
+debug_*.txt
 perf_output*.txt
 performance_*.txt
 realism_output*.txt
@@ -45,6 +64,34 @@ verifyA.txt
 verifyB.txt
 proof.txt
 
+# Bench evidence (contains local run configs/logs)
+bench/sensitive/critical/evidence/
+
+# Deploy bundles / extracted release folders (generated)
+deploy/**/dist/
+deploy/**/node_modules/
+deploy/gics-v1.2/src/gics_frozen/
+
+# Local helper outputs generated during cleanup
+.gitignore_ignored_tracked.txt
+
+# Secrets / local configuration
+.env
+.env.*
+!.env.example
+.envrc
+.npmrc
+.yarnrc
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*keystore*
+*credentials*
+*secret*
+
 # System
-THUMBS.db
+Thumbs.db
+ehthumbs.db
 .DS_Store

@@ -1,4 +1,0 @@
-=== RESOURCE DOS PROTECTION TEST ===
-[CHM] ANOMALY DETECTED! Ratio=0.62 < Threshold. Base=2.00 Reason=ENTROPY_BURST
-FAIL [Huge N]: Accepted malicious payload
-Resource protection FAILED.

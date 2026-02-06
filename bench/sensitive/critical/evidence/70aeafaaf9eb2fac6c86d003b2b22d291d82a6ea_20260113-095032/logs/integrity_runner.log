@@ -1,6 +1,0 @@
-=== INTEGRITY SUITE ===
-Running: Baseline Normal (10k) ...
-  FAIL: Clean run crashed. Code=101
-[CAUGHT] IntegrityError: Timestamp mismatch at 1
-
-Integrity Suite FAILED

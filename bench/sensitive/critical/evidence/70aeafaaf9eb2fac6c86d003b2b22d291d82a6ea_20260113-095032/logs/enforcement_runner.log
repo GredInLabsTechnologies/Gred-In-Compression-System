@@ -1,5 +1,0 @@
-=== EOS ENFORCEMENT TEST ===
-[CHM] ANOMALY DETECTED! Ratio=0.57 < Threshold. Base=2.00 Reason=ENTROPY_BURST
-Full Size: 34
-Legacy Size: 23
-FAIL: Decoder accepted file without EOS!

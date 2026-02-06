@@ -1,2 +1,0 @@
-=== ERROR DISCIPLINE VERIFIER ===
-WARN: Caught IncompleteDataError but message was 'Not enough data: required 4, available 0 (Offset: 5)'. (Did explicit check catch it first?)

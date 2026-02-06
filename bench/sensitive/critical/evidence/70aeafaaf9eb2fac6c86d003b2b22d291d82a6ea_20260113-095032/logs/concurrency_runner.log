@@ -1,5 +1,0 @@
-=== CONCURRENCY ISOLATION TEST ===
-Stream Sizes: A=5183, B=5187
-RunnerA: PASS
-RunnerB: PASS
-PASS: Concurrency Isolation Verified.

@@ -1,5 +1,0 @@
-=== EOS ENFORCEMENT TEST ===
-[CHM] ANOMALY DETECTED! Ratio=0.57 < Threshold. Base=2.00 Reason=ENTROPY_BURST
-Full Size: 45
-Legacy Size: 34
-FAIL: Caught unexpected error: Stream ended without EOS marker

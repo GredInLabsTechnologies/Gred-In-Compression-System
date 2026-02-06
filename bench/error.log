@@ -1,9 +1,0 @@
-Starting PRE-SPLIT-5 Benchmark Suite [2026-01-12T17-00-02.746Z]
-
---- FAMILY A: Chunk Size ---
-FATAL BENCHMARK ERROR: TypeError: writer.finish is not a function
-    at file:///C:/Users/shilo/Documents/GitHub/Gred-In-Compression-System/bench/dist/bench/pre_split5_harness.js:67:33
-    at async measureSplit (file:///C:/Users/shilo/Documents/GitHub/Gred-In-Compression-System/bench/dist/bench/scripts/metrics.js:26:20)
-    at async runEnc (file:///C:/Users/shilo/Documents/GitHub/Gred-In-Compression-System/bench/dist/bench/pre_split5_harness.js:61:9)
-    at async runFamilyA (file:///C:/Users/shilo/Documents/GitHub/Gred-In-Compression-System/bench/dist/bench/pre_split5_harness.js:116:21)
-    at async main (file:///C:/Users/shilo/Documents/GitHub/Gred-In-Compression-System/bench/dist/bench/pre_split5_harness.js:30:9)

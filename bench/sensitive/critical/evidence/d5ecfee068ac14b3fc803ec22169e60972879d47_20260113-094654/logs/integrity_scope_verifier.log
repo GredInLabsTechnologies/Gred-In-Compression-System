@@ -1,4 +1,0 @@
-=== INTEGRITY SCOPE VERIFIER ===
-[CHM] ANOMALY DETECTED! Ratio=0.57 < Threshold. Base=2.00 Reason=ENTROPY_BURST
-Original Size: 35
-FAIL: Could not induce silent corruption. Integrity might exist?

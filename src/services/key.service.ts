@@ -84,7 +84,8 @@ class KeyService {
      * @param iterations Optional custom iterations (for reading old files)
      */
     async unlock(password: string, salt: Buffer, iterations?: number): Promise<void> {
-        console.log('[KeyService] Unlocking with password:', password.substring(0, 10) + '...');
+        // SECURITY: Never log passwords (even partially). Keep logs metadata-only.
+        console.log('[KeyService] Unlocking with password: [REDACTED]');
         if (!password) {
             throw new Error('Password cannot be empty');
         }
