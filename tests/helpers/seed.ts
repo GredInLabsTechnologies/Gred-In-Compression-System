@@ -1,6 +1,6 @@
-import { HybridWriter } from '../../src/shared/gics/index.js';
-import * as path from 'path';
-import * as fs from 'fs';
+import { HybridWriter } from '../../src/gics-hybrid.js';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
 
 export const SeedKit = {
     /**
@@ -30,7 +30,7 @@ export const SeedKit = {
      * Create a valid .gics file in the specified directory
      * @param timestamp Optional timestamp for strictly deterministic output
      */
-    async createGICSFile(dir: string, realmId: number, items: Array<{ id: number, price: number }>, timestamp: number = Math.floor(Date.now() / 1000)) {
+    async createGICSFile(dir: string, sourceId: number, items: Array<{ id: number, price: number }>, timestamp: number = Math.floor(Date.now() / 1000)) {
         const writer = new HybridWriter();
 
         // Convert input array to Map as required by HybridWriter
@@ -48,7 +48,7 @@ export const SeedKit = {
 
         // Format filename using the provided timestamp
         const dateStr = new Date(timestamp * 1000).toISOString().slice(0, 7);
-        const filename = `realm_${realmId}_${dateStr}.gics`;
+        const filename = `source_${sourceId}_${dateStr}.gics`;
         const fullPath = path.join(dir, filename);
 
         // Ensure directory exists

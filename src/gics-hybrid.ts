@@ -9,29 +9,28 @@
  * Dual-index architecture for 100× compression with flexible item queries.
  * Maintains complete snapshots while enabling O(1) per-item access.
  * 
- * @author Gred In Labs
+ * @author GICS Team
  */
 
 import { crc32, brotliCompress, brotliDecompress } from 'node:zlib';
 import { promisify } from 'node:util';
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv } from 'node:crypto';
 // Zstd compression via WebAssembly
 import { ZstdCodec } from 'zstd-codec';
-import { encodeVarint, decodeVarint } from './gics-utils.js';
+
 import {
-    type PricePoint,
     type Snapshot,
     type GICSStats,
     type ItemTier,
     type QueryFilter,
     type ItemQueryResult,
-    type TimeRange,
     type HeatScoreResult,
     EncryptionMode,
     BlockType,
     CompressionAlgorithm
 } from './gics-types.js';
-import { keyService, LockedError, KDF_CONFIG, FILE_NONCE_LEN, AUTH_VERIFY_LEN } from './services/key.service.js';
+import { encodeVarint, decodeVarint } from './gics-utils.js';
+import { keyService, KDF_CONFIG, FILE_NONCE_LEN, AUTH_VERIFY_LEN } from './services/key.service.js';
 import { HeatClassifier } from './HeatClassifier.js';
 
 const brotliCompressAsync = promisify(brotliCompress);
@@ -107,9 +106,9 @@ const DEFAULT_WARM_THRESHOLD = 0.05; // 5%+ change rate = WARM
 // ============================================================================
 
 export class TierClassifier {
-    private hotThreshold: number;
-    private warmThreshold: number;
-    private ultraSparseThreshold: number = 0.1; // Items in <10% of snapshots
+    private readonly hotThreshold: number;
+    private readonly warmThreshold: number;
+    private readonly ultraSparseThreshold: number = 0.1; // Items in <10% of snapshots
 
     constructor(config?: HybridConfig) {
         this.hotThreshold = config?.tierThresholds?.hotChangeRate ?? DEFAULT_HOT_THRESHOLD;
@@ -180,19 +179,19 @@ export class TierClassifier {
 // ============================================================================
 
 export class HybridWriter {
-    private config: Required<HybridConfig>;
+    private readonly config: Required<HybridConfig>;
     private snapshots: Snapshot[] = [];
     private blocks: Uint8Array[] = [];
     private temporalIndex: TemporalIndexEntry[] = [];
     private itemIndex: Map<number, ItemIndexEntry> = new Map();
-    private tierClassifier: TierClassifier;
-    private heatClassifier: HeatClassifier;
-    private blockHeatScores: Map<number, Map<number, HeatScoreResult>> = new Map();
-    private encryptionMode: EncryptionMode = EncryptionMode.NONE;
-    private salt?: Buffer;
-    private fileNonce?: Buffer;  // Phase 2: For deterministic IV
+    private readonly tierClassifier: TierClassifier;
+    private readonly heatClassifier: HeatClassifier;
+    private readonly blockHeatScores: Map<number, Map<number, HeatScoreResult>> = new Map();
+    private readonly encryptionMode: EncryptionMode = EncryptionMode.NONE;
+    private readonly salt?: Buffer;
+    private readonly fileNonce?: Buffer;  // Phase 2: For deterministic IV
     private authVerify?: Buffer;
-    private initPromise: Promise<void> | null = null;
+    private readonly initPromise: Promise<void> | null = null;
 
     constructor(config: HybridConfig = {}) {
         this.config = {

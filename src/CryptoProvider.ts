@@ -9,10 +9,10 @@
  * Provides a hardened cryptographic abstraction layer for GICS.
  * Compliance: FIPS 140-3, NIST SP 800-131A, Common Criteria (ISO/IEC 15408)
  * 
- * @author Gred In Labs
+ * @author GICS Team
  */
 
-import { createHash, randomBytes, createCipheriv, createDecipheriv, getCiphers, getHashes } from 'node:crypto';
+import { createHash, randomBytes, getCiphers, getHashes } from 'node:crypto';
 
 // ============================================================================
 // Constants - Approved Algorithms (FIPS 140-3 / NIST SP 800-131A)

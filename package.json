@@ -1,7 +1,7 @@
 {
     "name": "gics-core",
-    "version": "1.2.0",
-    "description": "GICS: Gaming Integrity & Compression System (Generic Core)",
+    "version": "1.3.0",
+    "description": "GICS core compression library (generic)",
     "type": "module",
     "main": "dist/src/index.js",
     "types": "dist/src/index.d.ts",
@@ -11,15 +11,19 @@
     ],
     "scripts": {
         "build": "tsc",
-        "test": "vitest run"
+        "test": "vitest run",
+        "bench": "tsx bench/scripts/harness.ts && tsx bench/scripts/gen-report.ts",
+        "verify": "tsx tools/verify/verify.ts",
+        "claude:ext": "claude-external.bat"
     },
     "dependencies": {
         "zstd-codec": "^0.1.5"
     },
     "devDependencies": {
+        "@types/node": "^20.10.0",
+        "tsx": "^4.19.2",
         "typescript": "^5.3.3",
-        "vitest": "^1.0.0",
-        "@types/node": "^20.10.0"
+        "vitest": "^4.0.18"
     },
     "engines": {
         "node": ">=18.0.0"

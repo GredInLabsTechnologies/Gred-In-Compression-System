@@ -1,12 +1,12 @@
-# GICS v1.2 — Gred-In Compression System
+# GICS — Deterministic Time-Series Compression
 
-![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![Version](https://img.shields.io/badge/version-1.3.0-blue)
 ![Status](https://img.shields.io/badge/status-production-green)
 ![License](https://img.shields.io/badge/license-proprietary-red)
 
 ## 🎯 What Is GICS?
 
-**GICS (Gred-In Compression System)** is a **deterministic, fail-closed, agnostic time-series compression engine** designed for critical infrastructure where **data integrity and auditability are paramount**.
+**GICS** is a **deterministic, fail-closed, agnostic time-series compression engine** designed for critical infrastructure where **data integrity and auditability are paramount**.
 
 **Key Characteristics:**
 - ✅ **Bit-exact lossless compression** for time-series data
@@ -207,20 +207,19 @@ node bench/sensitive/harness.js
 ### Verification Scripts
 
 ```bash
-# Verify roundtrip integrity
-node verify_gics_v1.2.ts
-
-# Generate audit artifacts
-node bench_postfreeze_verifier.ts
+# Verify coverage and benchmarks via Vitest
+npm test
 ```
 
 ---
 
 ## 📚 Documentation
 
-- **[Technical Dossier](./GICS_v1.2_TECHNICAL_DOSSIER.md)**: Architecture, data model, compression pipeline
-- **[Critical Contract](./GICS_v1.2_CRITICAL_CONTRACT.md)**: Safety guarantees and constraints
-- **[Handover Guide](./HANDOVER_GICS_v1.2.md)**: Deployment and integration guide
+- **[Implementation Report](./GICS_v1.3_IMPLEMENTATION_REPORT.md)**: Current architecture and implementation details
+- **[Security Model](./docs/SECURITY_MODEL.md)**: Safety guarantees and threat model
+- **[Format Specification](./docs/FORMAT.md)**: Binary format and encoding details
+- **[Repository Layout](./docs/REPO_LAYOUT.md)**: Project structure overview
+- **[Versioning](./docs/VERSIONING.md)**: Version history and archive references
 
 ---
 
@@ -229,7 +228,7 @@ node bench_postfreeze_verifier.ts
 ### ✅ When to Use GICS
 
 - Financial audit logs (trade/transaction records)
-- Gameplay replication verification (anti-cheat systems)
+- Event sequence verification (anti-tamper systems)
 - Sensor data for safety-critical systems
 - Any domain requiring **provable correctness**
 
@@ -276,7 +275,7 @@ console.log(`
 
 ## 📄 License
 
-**Proprietary** — Owned by Gred In Labs.  
+**Proprietary** — All rights reserved.  
 Unauthorized distribution or modification is prohibited.
 
 ---
@@ -285,7 +284,7 @@ Unauthorized distribution or modification is prohibited.
 
 For technical support, integration questions, or bug reports:
 
-1. Check [Technical Dossier](./GICS_v1.2_TECHNICAL_DOSSIER.md)
+1. Check [Security Model](./docs/SECURITY_MODEL.md)
 2. Review [test cases](./tests/) for usage examples
 3. Contact: [Your Contact Info]
 
@@ -293,16 +292,20 @@ For technical support, integration questions, or bug reports:
 
 ## 🔖 Version History
 
-### v1.2.0 (Current) — Production Release
-- ✅ Dual-stream architecture (CORE/QUARANTINE)
-- ✅ Compression Health Monitor (CHM)
-- ✅ Full EOS enforcement
-- ✅ Type-safe error handling
-- ✅ Domain-agnostic API
-- ✅ Enterprise-grade auditing
+### v1.3.0 (Current) — Production Release
+- ✅ Enhanced CHM telemetry and diagnostics
+- ✅ Improved encoder/decoder performance
+- ✅ Refined QuarantineContext isolation
+- ✅ Production-hardened infrastructure
 
-### v1.1.x — Frozen Legacy
-- Preserved in `gics_frozen/v1_1_0/` for backward compatibility
+### v1.2.0 — Canonical Release
+- Dual-stream architecture (CORE/QUARANTINE)
+- Compression Health Monitor (CHM)
+- Full EOS enforcement
+- Type-safe error handling
+
+### v1.1.x — Legacy (Archived)
+- See [GICS-ARCHIVE](../GICS-ARCHIVE/) for historical versions
 
 ---
 
@@ -318,7 +321,3 @@ All critical assurance gates have been passed:
 - ✅ Performance benchmarks met
 
 **Safe for critical civil infrastructure deployment.**
-
----
-
-**Made with precision by Gred In Labs** 🎯

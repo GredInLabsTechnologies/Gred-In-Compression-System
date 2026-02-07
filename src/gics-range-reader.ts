@@ -10,7 +10,7 @@
  * Client can download only the index (~4KB) and specific blocks (~50KB each)
  * instead of the entire file (~2MB+).
  * 
- * @author Gred In Labs
+ * @author GICS Team
  */
 
 import { CompressionAlgorithm } from './gics-types.js';
@@ -49,7 +49,7 @@ const HEADER_SIZE = 36; // Minimum header size
  * 
  * Usage:
  * ```typescript
- * const reader = new GICSRangeReader('https://storage.example.com/realm_1403_active.gics');
+ * const reader = new GICSRangeReader('https://storage.example.com/source_1403_active.gics');
  * 
  * // 1. Fetch just the header to get file layout
  * const header = await reader.fetchHeader();
@@ -65,8 +65,8 @@ const HEADER_SIZE = 36; // Minimum header size
  * ```
  */
 export class GICSRangeReader {
-    private url: string;
-    private config: Required<RangeReaderConfig>;
+    private readonly url: string;
+    private readonly config: Required<RangeReaderConfig>;
     private cachedFileSize?: number;
 
     constructor(url: string, config: RangeReaderConfig = {}) {
@@ -117,15 +117,15 @@ export class GICSRangeReader {
 
         const temporalIndexOffset = view.getUint32(offset, true); offset += 8; // skip high bits
         const itemIndexOffset = view.getUint32(offset, true); offset += 8;
-        const dataOffset = view.getUint32(offset, true); offset += 8;
+        const dataOffset = view.getUint32(offset, true);
 
         // Get file size from Content-Range header
         const contentRange = response.headers.get('Content-Range');
         let fileSize = 0;
         if (contentRange) {
-            const match = contentRange.match(/\/(\d+)/);
+            const match = /\/(\d+)/.exec(contentRange);
             if (match) {
-                fileSize = parseInt(match[1], 10);
+                fileSize = Number.parseInt(match[1], 10);
                 this.cachedFileSize = fileSize;
             }
         }

@@ -9,7 +9,7 @@
  * Calculates continuous HeatScore for items based on market dynamics.
  * Formula: HeatScore = (Volatility × 0.4) + (Demand × 0.4) + (ChangeFrequency × 0.2)
  * 
- * @author Gred In Labs
+ * @author GICS Team
  */
 
 import type { Snapshot, HeatScoreResult } from './gics-types.js';
@@ -47,7 +47,7 @@ export class HeatClassifier {
 
         // Validate weights sum to 1.0
         const total = this.volatilityWeight + this.demandWeight + this.frequencyWeight;
-        if (Math.abs(total - 1.0) > 0.001) {
+        if (Math.abs(total - 1) > 0.001) {
             console.warn(`[HeatClassifier] Weights sum to ${total}, expected 1.0`);
         }
     }
@@ -102,35 +102,48 @@ export class HeatClassifier {
             return results;
         }
 
-        // Collect all unique item IDs
+        const allItemIds = this.collectAllItemIds(snapshots);
+
+        for (const itemId of allItemIds) {
+            const { prices, quantities } = this.collectItemData(itemId, snapshots);
+            results.set(itemId, this.calculateItemHeat(itemId, prices, quantities));
+        }
+
+        return results;
+    }
+
+    /**
+     * Collect all unique item IDs from snapshots
+     */
+    private collectAllItemIds(snapshots: Snapshot[]): Set<number> {
         const allItemIds = new Set<number>();
         for (const snap of snapshots) {
             for (const itemId of snap.items.keys()) {
                 allItemIds.add(itemId);
             }
         }
+        return allItemIds;
+    }
 
-        // Calculate heat for each item
-        for (const itemId of allItemIds) {
-            const prices: number[] = [];
-            const quantities: number[] = [];
+    /**
+     * Collect price and quantity data for a specific item across snapshots
+     */
+    private collectItemData(itemId: number, snapshots: Snapshot[]): { prices: number[], quantities: number[] } {
+        const prices: number[] = [];
+        const quantities: number[] = [];
 
-            for (const snap of snapshots) {
-                const data = snap.items.get(itemId);
-                if (data) {
-                    prices.push(data.price);
-                    quantities.push(data.quantity);
-                } else {
-                    // Item not present in this snapshot - use 0 or last known value
-                    prices.push(prices.length > 0 ? prices[prices.length - 1] : 0);
-                    quantities.push(quantities.length > 0 ? quantities[quantities.length - 1] : 0);
-                }
+        for (const snap of snapshots) {
+            const data = snap.items.get(itemId);
+            if (data) {
+                prices.push(data.price);
+                quantities.push(data.quantity);
+            } else {
+                prices.push(prices.at(-1) ?? 0);
+                quantities.push(quantities.at(-1) ?? 0);
             }
-
-            results.set(itemId, this.calculateItemHeat(itemId, prices, quantities));
         }
 
-        return results;
+        return { prices, quantities };
     }
 
     /**
@@ -167,7 +180,7 @@ export class HeatClassifier {
         const cv = stddev / mean;
 
         // Normalize: CV of 0.5 (50% variation) → score of 1.0
-        // This is a reasonable max for game economies
+        // This is a reasonable max for typical price time-series
         return Math.min(1, cv * 2);
     }
 

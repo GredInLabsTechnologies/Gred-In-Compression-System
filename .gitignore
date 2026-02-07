@@ -95,6 +95,3 @@ deploy/gics-v1.2/src/gics_frozen/
 Thumbs.db
 ehthumbs.db
 .DS_Store
-
-# Archive (separate repo)
-gics-archive/

@@ -9,7 +9,7 @@
  * Provides SHA-256 based verification for GICS files beyond CRC32.
  * Use cases: Cloud sync verification, long-term archive validation, tamper detection.
  * 
- * @author Gred In Labs
+ * @author GICS Team
  */
 
 import { createHash } from 'node:crypto';

@@ -2,12 +2,11 @@
  * GICS Types - Core type definitions
  *
  * @module gics
- * @version 1.1.0
- * @status FROZEN - Canonical implementation
- * @see docs/GICS_V1.1_SPEC.md
+ * @version 1.3.0
+ * @status PRODUCTION
  *
- * These types are designed to be generic enough for any price time-series,
- * not just WoW Auction House data.
+ * These types are designed to be generic for any price time-series,
+ * supporting financial, sensor, and IoT data streams.
  */
 /**
  * GICS Format Version Constants

@@ -1,6 +1,6 @@
 # GICS Benchmark Suite
 
-This directory contains the empirical benchmark suite for GICS (Gred In Compression System).
+This directory contains the empirical benchmark suite for the GICS compression system.
 
 ## Reproducibility Contract
 1. **Deterministic Inputs**: All datasets are generated via seeded RNG.

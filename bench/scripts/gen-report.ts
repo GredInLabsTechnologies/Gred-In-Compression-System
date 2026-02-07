@@ -6,21 +6,27 @@ const resultsDir = path.join(process.cwd(), 'bench/results');
 const reportFile = path.join(process.cwd(), 'bench/report.md');
 
 function main() {
-    // 1. Read all JSONs
+    // 1. Read all JSONs - ONLY process run-*.json files
     if (!fs.existsSync(resultsDir)) return;
-    const files = fs.readdirSync(resultsDir).filter(f => f.endsWith('.json'));
+
+    // Filter to only run-*.json files (ignore adversarial-*, sensitive-*, pre-split5-*, etc.)
+    const files = fs.readdirSync(resultsDir)
+        .filter(f => f.startsWith('run-') && f.endsWith('.json'));
+
     if (files.length === 0) {
-        console.log('No results found.');
+        console.log('No run-*.json results found.');
         return;
     }
 
-    // Sort by time desc (use latest for now, or append table?)
-    // Requirements: "gen-report reads all... produces report.md"
-    // I'll take the LATEST run file for the main table, or aggregate.
-    // Spec says "Every number... traceable to a result JSON".
-    // I will generate a report for the *latest* run.
+    // Sort by filename (ISO timestamp in filename) and take the latest
     const latestFile = files.sort().pop();
     const data = JSON.parse(fs.readFileSync(path.join(resultsDir, latestFile!), 'utf-8'));
+
+    // Validate data structure
+    if (!Array.isArray(data) || data.length === 0) {
+        console.error('Invalid data format in', latestFile);
+        return;
+    }
 
     const lines: string[] = [];
     lines.push('# GICS Benchmark Report');
@@ -35,6 +41,12 @@ function main() {
     lines.push('|---|---|---|---|---|---|---|---|---|---|');
 
     for (const r of data) {
+        // Skip entries without proper structure
+        if (!r.dataset || !r.metrics || !r.dataset.size) {
+            console.warn('Skipping malformed entry:', r);
+            continue;
+        }
+
         const mb = (r.metrics.output_bytes / 1024 / 1024).toFixed(2);
         const inMb = (r.dataset.size / 1024 / 1024).toFixed(2);
         const setup = r.metrics.time_setup_ms !== undefined ? r.metrics.time_setup_ms.toFixed(1) : '-';

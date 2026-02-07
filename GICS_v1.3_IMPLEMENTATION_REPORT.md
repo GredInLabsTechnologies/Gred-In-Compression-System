@@ -37,7 +37,7 @@ v1.2 usa codecs ligeros (varint/delta/DoD/RLE/bitpack/dict), pero **no tiene una
 
 2) **Agnóstico a variantes/dominio:**
    - El conjunto de items puede variar por snapshot.
-   - No se asumen reglas de WoW/MMO/Wall‑Street (solo estructura genérica de series históricas con items).
+   - No se asumen reglas de dominio específico (solo estructura genérica de series históricas con items).
 
 3) **Fail‑safe bajo ataque (CHM):**
    - Detección de anomalía/regime shift → **QUARANTINE**.
@@ -216,11 +216,11 @@ No se permite:
 - renombrar símbolos,
 - cambiar tests/harness dentro de estos directorios.
 
-### 9.2 Lista “NO TOCAR” (puntos de verdad / golden references)
+### 9.2 Lista “NO TOCAR” (fuentes de verdad / canonical references)
 
 #### A) Referencia v1.1 (congelada)
 - `gics_frozen/v1_1_0/**`
-  - Motivo: implementación inmutable de v1.1 (golden reference para regresión).
+  - Motivo: implementación inmutable de v1.1 (canonical reference para regresión).
 
 #### B) Referencia v1.2 canonical (congelada)
 - `gics_frozen/v1_2_canonical/**`
@@ -231,15 +231,15 @@ No se permite:
 - `deploy/gics-v1.2/**`
   - Motivo: paquetes de distribución, guías, y material contractual.
 
-#### D) Pruebas/herramientas de verificación contractual
+#### D) Pruebas/herramientas de verificación de especificación
 - `verify_gics_v1.2.ts`
 - `PACKAGE_VERIFICATION.md`
 - `DISTRIBUTION_MANIFEST.md`
-- `GICS_v1.2_CRITICAL_CONTRACT.md`
+- `GICS_v1.2_TECHNICAL_SPECIFICATION.md`
 - `GICS_v1.2_TECHNICAL_DOSSIER.md`
 - `HANDOVER_GICS_v1.2.md`
-- `golden_hashes.txt`
-  - Motivo: pruebas/contratos/artefactos para reproducibilidad y auditoría.
+- `baseline_hashes.txt`
+  - Motivo: pruebas/especificaciones/artefactos para reproducibilidad y auditoría.
 
 #### E) Bench suite (para comparativas longitudinales)
 - `bench/**`
@@ -269,7 +269,7 @@ Antes de implementar v1.3 se recomienda una limpieza, **pero respetando 9.x**:
 
 1) Separar claramente “core actual” vs “frozen canonical”.
 2) Aislar tests que hoy no son suites Vitest (evitar ruido en `npm test`).
-3) Consolidar documentación duplicada (sin tocar distribución congelada; crear docs nuevos si hace falta).
+3) Consolidar documentación (sin tocar la referencia congelada).
 
 ---
 

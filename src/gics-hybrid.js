@@ -9,7 +9,7 @@
  * Dual-index architecture for 100× compression with flexible item queries.
  * Maintains complete snapshots while enabling O(1) per-item access.
  *
- * @author Gred In Labs
+ * @author GICS Team
  */
 import { crc32, brotliCompress, brotliDecompress } from 'node:zlib';
 import { promisify } from 'node:util';

@@ -9,7 +9,7 @@
  * Calculates continuous HeatScore for items based on market dynamics.
  * Formula: HeatScore = (Volatility × 0.4) + (Demand × 0.4) + (ChangeFrequency × 0.2)
  *
- * @author Gred In Labs
+ * @author GICS Team
  */
 const DEFAULT_VOLATILITY_WEIGHT = 0.4;
 const DEFAULT_DEMAND_WEIGHT = 0.4;
@@ -27,7 +27,7 @@ export class HeatClassifier {
         this.frequencyWeight = config?.frequencyWeight ?? DEFAULT_FREQUENCY_WEIGHT;
         // Validate weights sum to 1.0
         const total = this.volatilityWeight + this.demandWeight + this.frequencyWeight;
-        if (Math.abs(total - 1.0) > 0.001) {
+        if (Math.abs(total - 1) > 0.001) {
             console.warn(`[HeatClassifier] Weights sum to ${total}, expected 1.0`);
         }
     }
@@ -74,32 +74,42 @@ export class HeatClassifier {
         if (snapshots.length === 0) {
             return results;
         }
-        // Collect all unique item IDs
+        const allItemIds = this.collectAllItemIds(snapshots);
+        for (const itemId of allItemIds) {
+            const { prices, quantities } = this.collectItemData(itemId, snapshots);
+            results.set(itemId, this.calculateItemHeat(itemId, prices, quantities));
+        }
+        return results;
+    }
+    /**
+     * Collect all unique item IDs from snapshots
+     */
+    collectAllItemIds(snapshots) {
         const allItemIds = new Set();
         for (const snap of snapshots) {
             for (const itemId of snap.items.keys()) {
                 allItemIds.add(itemId);
             }
         }
-        // Calculate heat for each item
-        for (const itemId of allItemIds) {
-            const prices = [];
-            const quantities = [];
-            for (const snap of snapshots) {
-                const data = snap.items.get(itemId);
-                if (data) {
-                    prices.push(data.price);
-                    quantities.push(data.quantity);
-                }
-                else {
-                    // Item not present in this snapshot - use 0 or last known value
-                    prices.push(prices.length > 0 ? prices[prices.length - 1] : 0);
-                    quantities.push(quantities.length > 0 ? quantities[quantities.length - 1] : 0);
-                }
+        return allItemIds;
+    }
+    /**
+     * Collect price and quantity data for a specific item across snapshots
+     */
+    collectItemData(itemId, snapshots) {
+        const prices = [];
+        const quantities = [];
+        for (const snap of snapshots) {
+            const data = snap.items.get(itemId);
+            if (data) {
+                prices.push(data.price);
+                quantities.push(data.quantity);
+            } else {
+                prices.push(prices.at(-1) ?? 0);
+                quantities.push(quantities.at(-1) ?? 0);
             }
-            results.set(itemId, this.calculateItemHeat(itemId, prices, quantities));
         }
-        return results;
+        return { prices, quantities };
     }
     /**
      * Get average heat score for a block (useful for block-level classification)
@@ -132,7 +142,7 @@ export class HeatClassifier {
         const stddev = Math.sqrt(variance);
         const cv = stddev / mean;
         // Normalize: CV of 0.5 (50% variation) → score of 1.0
-        // This is a reasonable max for game economies
+        // This is a reasonable max for typical price time-series
         return Math.min(1, cv * 2);
     }
     /**
