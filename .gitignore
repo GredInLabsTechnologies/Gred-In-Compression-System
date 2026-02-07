@@ -29,6 +29,10 @@ sonar-scanner.zip
 *.zip
 audit_artifacts/
 
+# Compiled JS in source (tsc outputs to dist/, these are dead weight)
+src/**/*.js
+src/**/*.js.map
+
 # Bench / Generated artifacts
 bench/dist/
 bench/results/

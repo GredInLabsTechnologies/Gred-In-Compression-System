@@ -1,7 +1,25 @@
 # GICS v1.3 — Informe de Implementación (Propuesta)
 
-**Estado:** propuesta de diseño (sin implementación)
+**Estado:** Propuesta de diseño + Refactorización de Complejidad Finalizada (v1.3.1)
 
+---
+
+## 0) Refactorización de Estabilidad (v1.3.1) — FEB 2026
+
+Como paso previo a la implementación de los Outer Codecs, se ha completado una refactorización integral del motor `gics-hybrid.js` (Core V1.1) para asegurar la mantenibilidad del sistema.
+
+### 0.1 Hallazgos y Acciones
+- **Reducción de Complejidad**: Las funciones críticas (`encodeBlock`, `parseBlockContent`, `getAllSnapshots`) se han reducido de niveles >70 a **≤15** (estándar SonarLint).
+- **Metodología**: Extracción de más de 15 *helper methods* especializados. Se ha priorizado el **Single Responsibility Principle (SRP)** para facilitar la auditoría manual de los algoritmos de compresión.
+- **Correcciones de Calidad**: Se eliminaron advertencias de SonarLint sobre recuento de parámetros (usando objetos de contexto) y se optimizaron operaciones de array (`push()` variádico).
+
+### 0.2 Errores Pre-existentes Identificados (v1.2)
+Durante la verificación, se han detectado los siguientes fallos en la implementación actual de **v1.2** (`src/gics/v1_2/`), los cuales **NO** son causados por la refactorización pero deben ser abordados en v1.3:
+- **Regresiones en CHM**: Tests de anomalías en v1.2 fallan por duraciones de cuarentena incorrectas.
+- **RangeErrors en Recovery**: Fallos de desbordamiento de buffer al intentar recuperar datos mediante Probes.
+- **Integridad**: Desajustes en los hashes de integridad en escenarios de corrupción simulada.
+
+---
 **Objetivo del documento**
 1) Dejar por escrito (en el repo) el plan de cambios para GICS **v1.3**.
 2) Definir una **lista de archivos/directorios que NO se deben tocar bajo ninguna circunstancia** para que la implementación de v1.3 sea reproducible y auditable.

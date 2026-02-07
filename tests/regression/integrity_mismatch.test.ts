@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { GICSv2Encoder, GICSv2Decoder } from '../../src/index.js';
-import { CriticalRNG } from '../../bench/sensitive/critical/common/rng.js';
+import { SeededRNG } from '../../bench/scripts/rng.js';
 
-function generateData(rng: CriticalRNG, size: number) {
+function generateData(rng: SeededRNG, size: number) {
     const data: { t: number, v: number }[] = [];
     let t = 1000;
     let v = 1000;
@@ -18,7 +18,7 @@ describe('Regression: Integrity Mismatch', () => {
     it('should roundtrip bit-exact with seed 12345', async () => {
         const seed = 12345;
         const size = 100;
-        const rng = new CriticalRNG(seed);
+        const rng = new SeededRNG(seed);
         const dataset = generateData(rng, size);
 
         // Encode

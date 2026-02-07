@@ -27,15 +27,10 @@
 
 ### Installation
 
-#### Option 1: From npm package (local)
-```bash
-npm install ./gics-core-1.2.0.tgz
-```
-
-#### Option 2: From source
+#### From source
 ```bash
 git clone <repository-url>
-cd Gred-In-Compression-System
+cd gics-core
 npm install
 npm run build
 ```
@@ -94,25 +89,30 @@ const decoded = await gics_decode(compressed);
 
 ---
 
-## 📦 Package Contents
+## 📦 Project Structure
 
 ```
-gics-core-1.2.0.tgz
-├── dist/
-│   └── src/
-│       ├── index.js              # Main entry point
-│       ├── index.d.ts            # TypeScript definitions
-│       ├── gics/
-│       │   └── v1_2/
-│       │       ├── encode.js     # Encoder implementation
-│       │       ├── decode.js     # Decoder implementation
-│       │       ├── format.js     # Binary format specification
-│       │       ├── context.js    # Compression context
-│       │       ├── chm.js        # Compression Health Monitor
-│       │       └── errors.js     # Typed error definitions
-│       ├── gics-types.js         # Core type definitions
-│       └── ...                   # Additional utilities
-└── README.md
+gics-core/
+├── src/
+│   ├── index.ts                  # Main entry point & public API
+│   ├── gics-hybrid.ts            # Hybrid encoder/decoder (CORE + QUARANTINE)
+│   ├── gics-types.ts             # Core type definitions
+│   ├── gics-utils.ts             # Varint, RLE, and encoding utilities
+│   ├── gics-range-reader.ts      # Range-based binary reader
+│   ├── gics-canonical.ts         # Canonical format support
+│   ├── HeatClassifier.ts         # Entropy analysis for tier routing
+│   ├── CryptoProvider.ts         # Cryptographic abstraction layer
+│   ├── IntegrityGuardian.ts      # Integrity verification
+│   └── gics/v1_2/                # v1.2 codec implementation
+│       ├── encode.ts / decode.ts # Block-level encode/decode
+│       ├── format.ts             # Binary format specification
+│       ├── context.ts            # Compression context
+│       ├── chm.ts                # Compression Health Monitor
+│       └── errors.ts             # Typed error definitions
+├── tests/                        # Vitest test suites
+├── bench/                        # Benchmark harness & results
+├── tools/                        # Verification scripts
+└── docs/                         # Architecture documentation
 ```
 
 ---
@@ -200,15 +200,12 @@ npm test
 
 ### Run Benchmarks
 ```bash
-npm run build
-node bench/sensitive/harness.js
+npm run bench
 ```
 
-### Verification Scripts
-
+### Verify Integrity
 ```bash
-# Verify coverage and benchmarks via Vitest
-npm test
+npm run verify
 ```
 
 ---

@@ -13,8 +13,7 @@
         "build": "tsc",
         "test": "vitest run",
         "bench": "tsx bench/scripts/harness.ts && tsx bench/scripts/gen-report.ts",
-        "verify": "tsx tools/verify/verify.ts",
-        "claude:ext": "claude-external.bat"
+        "verify": "tsx tools/verify/verify.ts"
     },
     "dependencies": {
         "zstd-codec": "^0.1.5"

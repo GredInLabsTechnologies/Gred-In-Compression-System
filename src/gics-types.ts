@@ -36,6 +36,16 @@ export type FileRotationPolicy = 'monthly' | 'weekly' | 'daily' | 'size-based' |
 export const DEFAULT_ROTATION_POLICY: FileRotationPolicy = 'monthly';
 
 /**
+ * Trend direction for price analysis
+ */
+export type TrendDirection = 'up' | 'down' | 'stable';
+
+/**
+ * Market sentiment indicator
+ */
+export type MarketSentiment = 'bullish' | 'bearish' | 'neutral' | 'volatile';
+
+/**
  * A single price point in time
  */
 export interface PricePoint {
@@ -157,7 +167,7 @@ export interface ItemHistory {
         max: number;
         avg: number;
         volatility: number;
-        trend: 'up' | 'down' | 'stable';
+        trend: TrendDirection;
         trendPercent: number;
     };
 }
@@ -346,7 +356,7 @@ export interface ItemQueryResult {
         max: number;
         avg: number;
         volatility: number;
-        trend: 'up' | 'down' | 'stable';
+        trend: TrendDirection;
         trendPercent: number;
     };
 }
@@ -365,7 +375,7 @@ export interface ItemHistoryResult {
         maxPrice: number;
         avgPrice: number;
         volatility: number;
-        trend: 'up' | 'down' | 'stable';
+        trend: TrendDirection;
         trendPercent: number;
     };
 }
@@ -387,7 +397,7 @@ export interface MarketIntelResult {
     hotItems: Array<{
         itemId: number;
         volatility: number;
-        trend: 'up' | 'down' | 'stable';
+        trend: TrendDirection;
         trendPercent: number;
     }>;
     warmItems: number;
@@ -404,7 +414,7 @@ export interface MarketIntelResult {
         currentPrice: number;
         previousPrice: number;
     }>;
-    marketSentiment: 'bullish' | 'bearish' | 'neutral' | 'volatile';
+    marketSentiment: MarketSentiment;
     avgVolatility: number;
 }
 
