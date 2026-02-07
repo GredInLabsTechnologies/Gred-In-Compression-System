@@ -146,7 +146,7 @@ export class TierClassifier {
                 // Track changes
                 if (prev) {
                     const prevData = prev.items.get(itemId);
-                    if (!prevData || prevData.price !== data.price) {
+                    if (!prevData?.price || prevData.price !== data.price) {
                         const changes = (itemChangeCounts.get(itemId) ?? 0) + 1;
                         itemChangeCounts.set(itemId, changes);
                     }
@@ -339,7 +339,8 @@ export class HybridWriter {
 
         const blockId = this.blocks.length;
         const startTimestamp = this.snapshots[0].timestamp;
-        const endTimestamp = this.snapshots[this.snapshots.length - 1].timestamp;
+        // endTimestamp calculated here but only used in debug comments
+        // const endTimestamp = this.snapshots.at(-1)!.timestamp;
 
         // Analyze item tiers for this block
         const tiers = this.tierClassifier.analyzeSnapshots(this.snapshots);
@@ -441,10 +442,12 @@ export class HybridWriter {
                 const data = snapshots[snapIdx].items.get(itemId);
                 if (data) {
                     // Store: itemIdDelta, snapshotIdx, priceDelta, qtyDelta
-                    ultraSparseCOO.push(itemId - prevItemId);
-                    ultraSparseCOO.push(snapIdx);
-                    ultraSparseCOO.push(data.price - prevPrice);
-                    ultraSparseCOO.push(data.quantity - prevQty);
+                    ultraSparseCOO.push(
+                        itemId - prevItemId,
+                        snapIdx,
+                        data.price - prevPrice,
+                        data.quantity - prevQty
+                    );
 
                     prevItemId = itemId;
                     prevPrice = data.price;
@@ -614,7 +617,7 @@ export class HybridWriter {
         headerView.setUint32(hOffset, coldVariableBitmapCombined.length, true); hOffset += 4;
         headerView.setUint32(hOffset, coldVariableValuesEncoded.length, true); hOffset += 4;
         headerView.setUint32(hOffset, quantitiesEncoded.length, true); hOffset += 4;
-        headerView.setUint32(hOffset, ultraSparseEncoded.length, true); hOffset += 4;  // NEW: ULTRA_SPARSE length
+        headerView.setUint32(hOffset, ultraSparseEncoded.length, true);  // NEW: ULTRA_SPARSE length
 
         // Combine all sections (now includes ultraSparseEncoded)
         const totalSize = header.length +
@@ -832,7 +835,10 @@ export class HybridWriter {
             buffer[offset++] = KDF_CONFIG.id;                                // 1 byte KDF ID
             view.setUint32(offset, KDF_CONFIG.iterations, true); offset += 4;// 4 bytes Iterations
             buffer[offset++] = KDF_CONFIG.digestId;                          // 1 byte Digest ID
-            if (this.fileNonce) buffer.set(this.fileNonce, offset); offset += FILE_NONCE_LEN;  // 8 bytes
+            if (this.fileNonce) {
+                buffer.set(this.fileNonce, offset);
+            }
+            offset += FILE_NONCE_LEN;  // 8 bytes
         }
 
         // Data sections
@@ -918,7 +924,10 @@ export class HybridWriter {
             buffer[offset++] = KDF_CONFIG.id;
             view.setUint32(offset, KDF_CONFIG.iterations, true); offset += 4;
             buffer[offset++] = KDF_CONFIG.digestId;
-            if (this.fileNonce) buffer.set(this.fileNonce, offset); offset += FILE_NONCE_LEN;
+            if (this.fileNonce) {
+                buffer.set(this.fileNonce, offset);
+            }
+            offset += FILE_NONCE_LEN;
         }
 
         buffer.set(temporalIndexData, temporalIndexOffset);
@@ -960,9 +969,12 @@ export class HybridWriter {
         const entries: number[] = [];
 
         for (const [itemId, entry] of Array.from(this.itemIndex)) {
-            entries.push(itemId);
-            entries.push(entry.tier === 'hot' ? 0 : entry.tier === 'warm' ? 1 : 2);
-            entries.push(entry.blockPositions.size);
+            const tierValue = entry.tier === 'hot' ? 0 : (entry.tier === 'warm' ? 1 : 2);
+            entries.push(
+                itemId,
+                tierValue,
+                entry.blockPositions.size
+            );
 
             for (const [blockId, pos] of Array.from(entry.blockPositions)) {
                 entries.push(blockId);
@@ -1000,14 +1012,14 @@ export class HybridWriter {
 // ============================================================================
 
 export class HybridReader {
-    private buffer: Uint8Array;
-    private view: DataView;
+    private readonly buffer: Uint8Array;
+    private readonly view: DataView;
     private header: any; // Using implicit type for internal header
-    private temporalIndex: TemporalIndexEntry[] = [];
-    private itemIndex: Map<number, ItemIndexEntry> = new Map();
+    private readonly temporalIndex: TemporalIndexEntry[] = [];
+    private readonly itemIndex: Map<number, ItemIndexEntry> = new Map();
     private encryptionMode: EncryptionMode = EncryptionMode.NONE;
     private compressionAlgorithm: CompressionAlgorithm = CompressionAlgorithm.BROTLI;
-    private config: { salvageMode?: boolean };
+    private readonly config: { salvageMode?: boolean };
 
     constructor(data: Uint8Array, config: { salvageMode?: boolean } = {}) {
         this.buffer = data;
@@ -1031,7 +1043,7 @@ export class HybridReader {
         const flags = this.buffer[offset++]; // FLAGS = compression algorithm
         this.compressionAlgorithm = flags as CompressionAlgorithm;
         const blockCount = this.view.getUint16(offset, true); offset += 2;
-        const itemCount = this.view.getUint32(offset, true); offset += 4;
+        this.view.getUint32(offset, true); offset += 4; // itemCount - read but not used
 
         // Read Offsets
         const temporalIndexOffset = this.view.getUint32(offset, true); offset += 8; // skip high bits
@@ -1054,7 +1066,7 @@ export class HybridReader {
         }
 
         // Parse Item Index
-        offset = itemIndexOffset;
+        // Item Index is Varint Encoded flatten stream
         // Item Index is Varint Encoded flatten stream
         // [itemId, tier(0=hot,1=warm,2=cold), blockCount, (blockId, pos)...]
         // This is tricky to parse without streaming varint decoder.
@@ -1066,9 +1078,8 @@ export class HybridReader {
         while (i < values.length) {
             const itemId = values[i++];
             const tierVal = values[i++];
-            const tier: ItemTier = tierVal === 0 ? 'hot' : tierVal === 1 ? 'warm' : 'cold'; // 2=cold, 3=ultra_sparse?
-            // Handle new ultra_sparse tier if mapped
-            const actualTier = (tierVal === 3) ? 'ultra_sparse' : tier;
+            const baseTier: ItemTier = tierVal === 0 ? 'hot' : (tierVal === 1 ? 'warm' : 'cold');
+            const actualTier = tierVal === 3 ? 'ultra_sparse' : baseTier;
 
             const count = values[i++];
             const blockPositions = new Map<number, number>();
@@ -1077,7 +1088,7 @@ export class HybridReader {
                 const pos = values[i++];
                 blockPositions.set(bId, pos);
             }
-            this.itemIndex.set(itemId, { itemId, tier: actualTier as ItemTier, blockPositions });
+            this.itemIndex.set(itemId, { itemId, tier: actualTier, blockPositions });
         }
     }
 
@@ -1108,9 +1119,8 @@ export class HybridReader {
         const blocks: Uint8Array[] = [];
 
         // Extract raw blocks using temporal index offsets
-        for (let i = 0; i < this.temporalIndex.length; i++) {
-            const current = this.temporalIndex[i];
-            const start = dataStart + current.offset;
+        for (const entry of this.temporalIndex) {
+            const start = dataStart + entry.offset;
 
             // Read block size from wrapper: Type(1) + Size(4) + CRC(4) = 9 bytes header
             const size = this.view.getUint32(start + 1, true);
@@ -1158,8 +1168,8 @@ export class HybridReader {
             // In Hybrid format, blocks are just sequentially concatenated at DataOffset + meta.offset
             const absOffset = dataStart + blockMeta.offset;
 
-            // Read Block Header Wrapper
-            const blockType = this.buffer[absOffset];
+            // blockType: Read packet type for potential future metadata tracking
+            // this.buffer[absOffset];
             const size = this.view.getUint32(absOffset + 1, true);
             const storedCrc = this.view.getUint32(absOffset + 5, true);
 
@@ -1234,6 +1244,7 @@ export class HybridReader {
             ultra: 0
         };
 
+
         let hOff = 12; // Start of lengths
         offsets.timestamps = view.getUint32(hOff, true); hOff += 4;
         offsets.ids = view.getUint32(hOff, true); hOff += 4;
@@ -1244,7 +1255,7 @@ export class HybridReader {
         offsets.coldVarBitmap = view.getUint32(hOff, true); hOff += 4;
         offsets.coldVarVal = view.getUint32(hOff, true); hOff += 4;
         offsets.qty = view.getUint32(hOff, true); hOff += 4;
-        offsets.ultra = view.getUint32(hOff, true); hOff += 4;
+        offsets.ultra = view.getUint32(hOff, true);
 
         // Extract Sections
         let dOff = 52; // Header size
@@ -1253,6 +1264,7 @@ export class HybridReader {
         // Reconstruct absolute timestamps from DoD
         let currentTs = timestamps[0];
         let prevDelta = timestamps[1]; // First delta
+        const lastDelta = timestamps.length > 1 ? timestamps.at(-1)! : 0;
         const absTimestamps = [currentTs];
         if (timestamps.length > 1) {
             absTimestamps.push(currentTs + prevDelta);
@@ -1301,8 +1313,11 @@ export class HybridReader {
         let coldVarIdx = 0;
 
         // Section views for random access
-        const warmBitmaps = data.subarray(dOff, dOff + offsets.warmBitmap); dOff += offsets.warmBitmap;
-        const warmVals = decodeVarint(data.subarray(dOff, dOff + offsets.warmVal)); dOff += offsets.warmVal;
+        // warmBitmaps and warmValsData: Section data read but not used in current parsing logic
+        // Advance dOff past warmBitmap section
+        dOff += offsets.warmBitmap;
+        // Advance dOff past warmVal section
+        dOff += offsets.warmVal;
 
         const coldConsts = decodeVarint(data.subarray(dOff, dOff + offsets.coldConst)); dOff += offsets.coldConst;
         const coldVarBitmaps = data.subarray(dOff, dOff + offsets.coldVarBitmap); dOff += offsets.coldVarBitmap;
@@ -1314,15 +1329,15 @@ export class HybridReader {
         // Ultra Sparse COO
         const ultraData = decodeVarint(data.subarray(dOff, dOff + offsets.ultra));
         // Parse Ultra Sparse into a map: itemId -> {snapshotIdx: {price, qty}}
-        const ultraMap = new Map<number, Map<number, { p: number, q: number }>>();
+        // new Map<number, Map<number, { p: number, q: number }>>(); // ultraMap - not used
         // [count, (idDelta, snapIdx, pDelta, qDelta)...]
         // This is complex to reconstruct without full state.
         // Assuming we just want to hit targets.
 
         // Reconstruct Data for Targets
         // Iterate all IDs in block order
-        let processed = 0;
-        let warmValPtr = 0;
+        // let processed = 0; // Not used
+        let warmValPtr = 0; // Placeholder for warm value tracking
         let coldVarValPtr = 0;
 
         // Helper to reconstruct hot stream
@@ -1602,8 +1617,8 @@ export class HybridReader {
         // Collect all unique timestamps from the first item's history
         // (all items should have the same timestamps due to GICS snapshot design)
         if (results[0].history.length > 0) {
-            for (let i = 0; i < results[0].history.length; i++) {
-                const ts = results[0].history[i].timestamp;
+            for (const point of results[0].history) {
+                const ts = point.timestamp;
                 if (!timestampToIndex.has(ts)) {
                     timestampToIndex.set(ts, allTimestamps.length);
                     allTimestamps.push(ts);
@@ -1660,7 +1675,7 @@ export class HybridReader {
 // ============================================================================
 
 export class ItemQuery {
-    private reader: HybridReader;
+    private readonly reader: HybridReader;
 
     constructor(reader: HybridReader) {
         this.reader = reader;
@@ -1684,7 +1699,7 @@ export class ItemQuery {
 // ============================================================================
 
 export class MarketIntelligence {
-    private reader: HybridReader;
+    private readonly reader: HybridReader;
 
     constructor(reader: HybridReader) {
         this.reader = reader;

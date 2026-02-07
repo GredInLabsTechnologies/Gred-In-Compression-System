@@ -54,7 +54,10 @@ async function main() {
     console.log(`[verify] OK. snapshots=${snapshots.length}, encodedBytes=${encoded.length}`);
 }
 
-main().catch((err) => {
-    console.error(String(err?.stack ?? err));
+
+try {
+    await main();
+} catch (err: unknown) {
+    console.error(String((err as Error)?.stack ?? err));
     process.exit(1);
-});
+}
