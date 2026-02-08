@@ -38,10 +38,24 @@ npm run build
 ### Basic Usage
 
 ```typescript
-import { GICSv2Encoder, GICSv2Decoder } from 'gics-core';
+import { GICS } from 'gics-core';
 
-// 1. Encode time-series data
-const encoder = new GICSv2Encoder();
+// 1. Simple API (Pack/Unpack)
+const snapshots = [
+  { itemId: 1, price: 100, quantity: 10, timestamp: Date.now() }
+];
+
+// Pack to Uint8Array
+const bytes = await GICS.pack(snapshots);
+
+// Unpack
+const decoded = await GICS.unpack(bytes);
+
+// Verify integrity (hash chain + CRC) without decompression
+const isValid = await GICS.verify(bytes);
+
+// 2. Advanced / Streaming API
+const encoder = new GICS.Encoder();
 
 await encoder.addSnapshot({
   itemId: 1001,
@@ -50,42 +64,14 @@ await encoder.addSnapshot({
   timestamp: Date.now()
 });
 
-await encoder.addSnapshot({
-  itemId: 1001,
-  price: 126.00,
-  quantity: 38,
-  timestamp: Date.now() + 1000
-});
-
-const compressed = await encoder.flush();
-await encoder.finalize();
-
+const compressed = await encoder.finish();
 console.log(`Compressed size: ${compressed.length} bytes`);
 
-// 2. Decode compressed data
-const decoder = new GICSv2Decoder(compressed);
-const snapshots = await decoder.getAllSnapshots();
-
-console.log(`Decoded ${snapshots.length} snapshots`);
-console.log(snapshots);
+const decoder = new GICS.Decoder(compressed);
+const result = await decoder.getAllSnapshots();
 ```
 
-### Convenience API
 
-```typescript
-import { gics_encode, gics_decode } from 'gics-core';
-
-const snapshots = [
-  { itemId: 1, price: 100, quantity: 10, timestamp: Date.now() },
-  { itemId: 1, price: 101, quantity: 12, timestamp: Date.now() + 1000 }
-];
-
-// Encode
-const compressed = await gics_encode(snapshots);
-
-// Decode
-const decoded = await gics_decode(compressed);
-```
 
 ---
 
@@ -290,10 +276,12 @@ For technical support, integration questions, or bug reports:
 ## 🔖 Version History
 
 ### v1.3.0 (Current) — Production Release
-- ✅ Enhanced CHM telemetry and diagnostics
-- ✅ Improved encoder/decoder performance
-- ✅ Refined QuarantineContext isolation
-- ✅ Production-hardened infrastructure
+- ✅ **Clean Namespace**: `GICS.pack`, `GICS.unpack`, `GICS.verify`.
+- ✅ **StreamSections**: Optimized grouped streams with outer Zstd compression.
+- ✅ **Integrity Chain**: SHA-256 hash chain linking all sections and segments.
+- ✅ **Encryption**: AES-256-GCM per section with deterministic IVs.
+- ✅ **Trial-Based Codecs**: Automatic selection of best internal codec per stream.
+
 
 ### v1.2.0 — Canonical Release
 - Dual-stream architecture (CORE/QUARANTINE)

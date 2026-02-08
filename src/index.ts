@@ -1,53 +1,55 @@
 /**
- * GICS Core API
- * 
+ * GICS v1.3 Public API
+ *
  * @module gics
  */
 
 import { GICSv2Encoder } from './gics/encode.js';
 import { GICSv2Decoder } from './gics/decode.js';
 import type { Snapshot } from './gics-types.js';
-import type { HybridConfig } from './gics-hybrid.js';
+import type { GICSv2EncoderOptions, GICSv2DecoderOptions, GICSv2Logger } from './gics/types.js';
 
-export { GICSv2Encoder } from './gics/encode.js';
-export { GICSv2Decoder } from './gics/decode.js';
-export * from './gics/errors.js';
-export * from './gics-types.js';
-export * from './gics-hybrid.js'; // Keep types but not usage?
-export * from './gics-utils.js';
-export * from './HeatClassifier.js';
-export * from './IntegrityGuardian.js';
-export * from './CryptoProvider.js';
-export * from './gics-range-reader.js';
+// Re-export specific types and errors
+export type { Snapshot } from './gics-types.js';
+export type { GICSv2EncoderOptions as EncoderOptions, GICSv2DecoderOptions as DecoderOptions, GICSv2Logger as Logger } from './gics/types.js';
+export { IncompleteDataError, IntegrityError } from './gics/errors.js';
 
-/**
- * Public Encoder Entry Point - v1.2 Canonical
- */
-export async function gics_encode(snapshots: Snapshot[], config?: HybridConfig): Promise<Uint8Array> {
-    const encoder = new GICSv2Encoder();
-    for (const s of snapshots) await encoder.addSnapshot(s);
-    return await encoder.finish();
-}
-
-/**
- * Public Decoder Entry Point - v1.2 Canonical
- */
-export async function gics_decode(data: Uint8Array): Promise<Snapshot[]> {
-    const decoder = new GICSv2Decoder(data);
-    return await decoder.getAllSnapshots();
-}
-
-/**
- * GICS v1.3 Standard API
- */
+// The GICS Namespace Object
 export const GICS = {
-    pack: gics_encode,
-    unpack: gics_decode,
+    /**
+     * Packs an array of snapshots into GICS format.
+     */
+    pack: async (snapshots: Snapshot[], options?: GICSv2EncoderOptions): Promise<Uint8Array> => {
+        const encoder = new GICSv2Encoder(options);
+        for (const s of snapshots) await encoder.addSnapshot(s);
+        return await encoder.finish();
+    },
+
+    /**
+     * Unpacks GICS formatted data into an array of snapshots.
+     */
+    unpack: async (data: Uint8Array, options?: GICSv2DecoderOptions): Promise<Snapshot[]> => {
+        const decoder = new GICSv2Decoder(data, options);
+        return await decoder.getAllSnapshots();
+    },
+
     /**
      * Verifies the entire file integrity (Hash Chain, CRCs) WITHOUT decompressing payloads.
      */
     verify: async (data: Uint8Array): Promise<boolean> => {
         const decoder = new GICSv2Decoder(data);
         return await decoder.verifyIntegrityOnly();
-    }
+    },
+
+    /**
+     * GICS Encoder class for streaming/append operations.
+     */
+    Encoder: GICSv2Encoder,
+
+    /**
+     * GICS Decoder class for advanced reading/querying.
+     */
+    Decoder: GICSv2Decoder
 };
+
+export default GICS;

@@ -5,7 +5,7 @@
  * Not dependent on random offsets or guessing file structure.
  */
 
-import { HybridWriter, HybridReader } from '../src/index.js';
+import { HybridWriter, HybridReader } from '../src/gics-hybrid.js';
 
 // Header layout constants (must match gics-hybrid.ts)
 const HEADER_VERSION_OFFSET = 4;

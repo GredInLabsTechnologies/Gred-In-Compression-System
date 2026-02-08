@@ -1,4 +1,4 @@
-import { gics_encode, gics_decode, Snapshot } from '../src/index.js';
+import { GICS, Snapshot } from '../src/index.js';
 
 describe('GICS Multi-Item Roundtrip', () => {
     it('should roundtrip multi-item snapshots exactly', async () => {
@@ -16,12 +16,12 @@ describe('GICS Multi-Item Roundtrip', () => {
             snapshots.push({ timestamp: baseTime + (i * 60), items: map });
         }
 
-        const encoded = await gics_encode(snapshots);
+        const encoded = await GICS.pack(snapshots);
 
         // Validate EOS marker (v1.3: 0xFF at -37)
         expect(encoded.at(-37)).toBe(0xFF);
 
-        const decoded = await gics_decode(encoded);
+        const decoded = await GICS.unpack(encoded);
 
         // Same number of snapshots
         expect(decoded.length).toBe(snapshots.length);
@@ -50,8 +50,8 @@ describe('GICS Multi-Item Roundtrip', () => {
             { timestamp: 1000, items: map }
         ];
 
-        const encoded = await gics_encode(snapshots);
-        const decoded = await gics_decode(encoded);
+        const encoded = await GICS.pack(snapshots);
+        const decoded = await GICS.unpack(encoded);
 
         expect(decoded[0].items.has(12345)).toBe(true);
         expect(decoded[0].items.has(67890)).toBe(true);
@@ -71,8 +71,8 @@ describe('GICS Multi-Item Roundtrip', () => {
             { timestamp: 2000, items: map }
         ];
 
-        const encoded = await gics_encode(snapshots);
-        const decoded = await gics_decode(encoded);
+        const encoded = await GICS.pack(snapshots);
+        const decoded = await GICS.unpack(encoded);
 
         expect(decoded[0].items.get(1)!.quantity).toBe(500);
         expect(decoded[0].items.get(2)!.quantity).toBe(1);
@@ -108,8 +108,8 @@ describe('GICS Multi-Item Roundtrip', () => {
         map4.set(77, { price: 777, quantity: 77 });
         snapshots.push({ timestamp: 4000, items: map4 });
 
-        const encoded = await gics_encode(snapshots);
-        const decoded = await gics_decode(encoded);
+        const encoded = await GICS.pack(snapshots);
+        const decoded = await GICS.unpack(encoded);
 
         expect(decoded.length).toBe(4);
         expect(decoded[0].items.size).toBe(1);
@@ -124,8 +124,8 @@ describe('GICS Multi-Item Roundtrip', () => {
             { timestamp: 2000, items: new Map() }
         ];
 
-        const encoded = await gics_encode(snapshots);
-        const decoded = await gics_decode(encoded);
+        const encoded = await GICS.pack(snapshots);
+        const decoded = await GICS.unpack(encoded);
 
         expect(decoded.length).toBe(2);
         expect(decoded[0].items.size).toBe(0);
@@ -147,8 +147,8 @@ describe('GICS Multi-Item Roundtrip', () => {
         const snapshots1: Snapshot[] = [{ timestamp: 1000, items: map1 }];
         const snapshots2: Snapshot[] = [{ timestamp: 1000, items: map2 }];
 
-        const encoded1 = await gics_encode(snapshots1);
-        const encoded2 = await gics_encode(snapshots2);
+        const encoded1 = await GICS.pack(snapshots1);
+        const encoded2 = await GICS.pack(snapshots2);
 
         // Same bytes regardless of insertion order
         expect(encoded1.length).toBe(encoded2.length);
@@ -162,11 +162,11 @@ describe('GICS Multi-Item Roundtrip', () => {
         map.set(1, { price: 100, quantity: 1 });
 
         const snapshots: Snapshot[] = [{ timestamp: 1000, items: map }];
-        const encoded = await gics_encode(snapshots);
+        const encoded = await GICS.pack(snapshots);
 
         // Corrupt: remove whole 37-byte footer
         const corrupted = encoded.slice(0, -37);
 
-        await expect(gics_decode(corrupted)).rejects.toThrow('EOS marker');
+        await expect(GICS.unpack(corrupted)).rejects.toThrow('EOS marker');
     });
 });

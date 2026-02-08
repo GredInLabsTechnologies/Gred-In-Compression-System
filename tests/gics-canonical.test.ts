@@ -1,4 +1,4 @@
-import { gics_encode } from '../src/index.js';
+import { GICS } from '../src/index.js';
 import { Snapshot } from '../src/gics-types.js';
 import crypto from 'node:crypto';
 
@@ -45,7 +45,7 @@ describe('GICS v1.3 Canonical Reference', () => {
             snapshots.push({ timestamp: baseTime + (i * 60), items: map });
         }
 
-        const encoded = await gics_encode(snapshots);
+        const encoded = await GICS.pack(snapshots);
 
         // Compute SHA-256
         const hash = crypto.createHash('sha256').update(encoded).digest('hex');

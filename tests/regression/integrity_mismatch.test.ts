@@ -1,4 +1,4 @@
-import { GICSv2Encoder, GICSv2Decoder } from '../../src/index.js';
+import { GICS } from '../../src/index.js';
 import { SeededRNG } from '../../bench/scripts/rng.js';
 
 function generateData(rng: SeededRNG, size: number) {
@@ -21,14 +21,14 @@ describe('Regression: Integrity Mismatch', () => {
         const dataset = generateData(rng, size);
 
         // Encode
-        const encoder = new GICSv2Encoder();
+        const encoder = new GICS.Encoder();
         for (const row of dataset) {
             await encoder.addSnapshot({ timestamp: row.t, items: new Map([[1, { price: row.v, quantity: 1 }]]) });
         }
         const data = await encoder.finish();
 
         // Decode
-        const decoder = new GICSv2Decoder(data);
+        const decoder = new GICS.Decoder(data);
         const result = await decoder.getAllSnapshots();
 
         expect(result.length).toBe(dataset.length);

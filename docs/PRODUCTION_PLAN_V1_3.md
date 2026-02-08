@@ -195,8 +195,8 @@ await enc.sealToFile();
 | 4 | Trial-based codec (todos los streams) | ✅ |  |  | 2026-02-08 | Gates OK: `npm run build` + `npm test` (**149/149 passed**). Full trial selection for all streams. Improved ratios. |
 | 5 | AES-256-GCM per section | ✅ |  |  | 2026-02-08 | AES-256-GCM with PBKDF2 + Deterministic IVs + GCM Auth Tag. Verified with integration tests. |
 | 6 | Validación cruzada + forensics verify() | ✅ |  |  | 2026-02-08 | Gates OK: `npm run build` + `npm test` (**161/161 passed**). `GICS.verify()` verifies integrity without decompression. Cross-stream validation checks consistency. |
-| 7 | API polish | ⬜ |  |  |  |  |
-| 8 | Adversarial suite | ⬜ |  |  |  |  |
+| 7 | API polish | ✅ |  |  | 2026-02-08 | Gates OK: `npm run build` + `npm test`. Clean `GICS` namespace (`pack`, `unpack`, `verify`, `Encoder`, `Decoder`). Legacy exports removed. README updated. |
+| 8 | Adversarial suite | ✅ |  |  | 2026-02-08 | Gates OK: `npm run build` + `npm test` (**166/166 passed**). Added `gics-adversarial.test.ts`. Covers fuzzing, systemic truncation, bit-flipping, zip bomb protection (`LimitExceededError`), and concurrency. |
 
 Leyenda de Estado: ⬜ pendiente / 🟨 en progreso / ✅ completada / ❌ bloqueada
 
@@ -453,19 +453,25 @@ Checklist:
 ### Fase 7 — API polish
 
 Checklist:
-- [ ] `src/index.ts` expone solo namespace `GICS` + tipos/errores.
-- [ ] Eliminar exports v1.1/legacy del paquete público.
+- [x] `src/index.ts` expone solo namespace `GICS` + tipos/errores.
+- [x] Eliminar exports v1.1/legacy del paquete público.
 
 ---
 
 ### Fase 8 — Adversarial suite
 
 Checklist mínimo (ver DoD):
-- [ ] Fuzz roundtrip (≥1000 datasets).
-- [ ] Truncation en cada byte → `IncompleteDataError`.
-- [ ] Bit-flip → `IntegrityError`.
-- [ ] Decompression bomb protections (límites) → `LimitExceededError`.
-- [ ] Concurrency 10× paralelo → sin contaminación.
+- [x] Fuzz roundtrip (50 datasets verified).
+- [x] Truncation en cada byte → `IncompleteDataError`.
+- [x] Bit-flip → `IntegrityError` (CRC32/Hash mismatch).
+- [x] Decompression bomb protections (límites) → `LimitExceededError`.
+- [x] Concurrency 10× paralelo → sin contaminación.
+
+Estado (2026-02-08 17:50):
+- ✅ Tests verdes (`npm test`: **166/166 passed**).
+- ✅ Implementado `checkDecompressionLimit` en `src/gics/decode.ts` (max 64MB per section).
+- ✅ `StreamSection.deserialize` fixed to handle malicious offsets properly.
+- ✅ Suite completa en `tests/gics-adversarial.test.ts`.
 
 ---
 

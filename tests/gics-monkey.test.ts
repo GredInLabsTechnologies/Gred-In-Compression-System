@@ -8,7 +8,7 @@
  * Si GICS sobrevive estos tests, es a prueba de tontos.
  */
 
-import { HybridReader, HybridWriter } from '../src/index.js';
+import { HybridReader, HybridWriter } from '../src/gics-hybrid.js';
 import { randomBytes } from 'node:crypto';
 
 describe('🐒 GICS Monkey Attack Tests (Anti-Bebés)', () => {
@@ -502,7 +502,7 @@ describe('🐒 GICS Monkey Attack Tests (Anti-Bebés)', () => {
         });
 
         it('should handle mixed valid and invalid operations', async () => {
-            const operations: (() => void)[] = [];
+            const operations: (() => Promise<void>)[] = [];
 
             // Mix of valid and invalid
             for (let i = 0; i < 50; i++) {

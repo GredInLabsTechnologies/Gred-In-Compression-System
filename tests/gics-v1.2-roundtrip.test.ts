@@ -1,4 +1,4 @@
-import { gics_encode, gics_decode, Snapshot } from '../src/index.js';
+import { GICS, Snapshot } from '../src/index.js';
 import { GICSv2Encoder } from '../src/gics/encode.js';
 import { Regime } from '../src/gics/metrics.js';
 
@@ -21,14 +21,14 @@ describe('GICS v1.2 Roundtrip', () => {
             });
         }
 
-        const encoded = await gics_encode(snapshots);
+        const encoded = await GICS.pack(snapshots);
 
         // Basic format check
         const magic = new TextDecoder().decode(encoded.slice(0, 4));
         expect(magic).toBe('GICS');
         expect(encoded[4]).toBe(0x03);
 
-        const decoded = await gics_decode(encoded);
+        const decoded = await GICS.unpack(encoded);
 
         expect(decoded.length).toBe(snapshots.length);
 

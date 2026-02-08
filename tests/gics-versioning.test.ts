@@ -1,4 +1,4 @@
-﻿import { HybridReader, HybridWriter, VersionMismatchError } from '../src/index.js';
+﻿import { HybridReader, HybridWriter, VersionMismatchError } from '../src/gics-hybrid.js';
 
 describe('GICS Versioning & Security', () => {
     it('should write the correct magic bytes (GICS)', async () => {

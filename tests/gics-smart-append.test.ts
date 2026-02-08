@@ -7,12 +7,8 @@
  * 3. Compression algorithm detection
  */
 
-import {
-    HybridWriter,
-    HybridReader,
-    CompressionAlgorithm,
-    type Snapshot
-} from '../src/index.js';
+import { HybridWriter, HybridReader } from '../src/gics-hybrid.js';
+import { CompressionAlgorithm, type Snapshot } from '../src/gics-types.js';
 
 // Helper to create test snapshots
 function createTestSnapshot(timestamp: number, itemCount: number): Snapshot {

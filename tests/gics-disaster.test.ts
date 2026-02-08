@@ -1,5 +1,5 @@
 
-import { HybridWriter, HybridReader } from '../src/index.js';
+import { HybridWriter, HybridReader } from '../src/gics-hybrid.js';
 import { fork } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

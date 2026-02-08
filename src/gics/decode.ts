@@ -7,7 +7,7 @@ import {
 } from './format.js';
 import { ContextV0 } from './context.js';
 import { Codecs } from './codecs.js';
-import { IncompleteDataError, IntegrityError } from './errors.js';
+import { IncompleteDataError, IntegrityError, LimitExceededError } from './errors.js';
 import { StreamSection } from './stream-section.js';
 import { getOuterCodec } from './outer-codecs.js';
 import { IntegrityChain, calculateCRC32 } from './integrity.js';
@@ -230,6 +230,7 @@ export class GICSv2Decoder {
                 this.pos = nextPos;
             } catch (err) {
                 if (err instanceof IntegrityError) throw err;
+                if (err instanceof LimitExceededError) throw err;
                 throw new IntegrityError(err instanceof Error ? err.message : "Segment decoding failed");
             }
         }
@@ -267,6 +268,11 @@ export class GICSv2Decoder {
 
         this.verifySegmentIntegrity(segmentStart, nextSegmentPos, footer);
 
+        // Sanity check: indexOffset must point before the footer
+        if (absoluteIndexOffset >= nextSegmentPos - SEGMENT_FOOTER_SIZE) {
+            throw new IntegrityError("Segment index offset out of bounds");
+        }
+
         if (skipIfMissing && itemId !== undefined && !index.contains(itemId)) {
             if (chain) this.updateIntegrityChain(chain, sections);
             return { snapshots: [], nextPos: nextSegmentPos, index };
@@ -285,8 +291,18 @@ export class GICSv2Decoder {
     private extractSections(start: number, end: number): StreamSection[] {
         let currentPos = start;
         const sections: StreamSection[] = [];
+        // Safety: Ensure we don't loop infinitely or OOM if 'end' is huge but sections are 0-size (impossible as header=12 min)
         while (currentPos < end) {
+            // Extra safety against start offset being out of bounds for the view creation
+            if (currentPos >= this.data.length) throw new IncompleteDataError("Section offset out of bounds");
+
             const section = StreamSection.deserialize(this.data, currentPos, this.isEncrypted);
+
+            // Safety: section end must not exceed 'end' (which is the index start)
+            if (currentPos + section.totalSize > end) {
+                throw new IntegrityError("Section extends beyond section area");
+            }
+
             sections.push(section);
             currentPos += section.totalSize;
         }
@@ -339,6 +355,10 @@ export class GICSv2Decoder {
                 if (this.options.integrityMode === 'strict') throw new IntegrityError(`Hash mismatch for stream ${section.streamId}`);
             }
         }
+
+        // Decompression Bomb Protection
+        this.checkDecompressionLimit(section.uncompressedLen);
+
         const outerCodec = getOuterCodec(section.outerCodecId);
 
         let payload = section.payload;
@@ -553,6 +573,15 @@ export class GICSv2Decoder {
             offset += arr.length;
         }
         return result;
+    }
+
+    private checkDecompressionLimit(len: number) {
+        // Limit: 64MB per section.
+        // Segments are usually 1MB. 64MB is a very generous safety upper bound.
+        const MAX_ALLOCATION = 64 * 1024 * 1024;
+        if (len > MAX_ALLOCATION) {
+            throw new LimitExceededError(`Decompression size ${len} exceeds limit of ${MAX_ALLOCATION}`);
+        }
     }
 
     private compareHashes(h1: Uint8Array, h2: Uint8Array): boolean {

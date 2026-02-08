@@ -1,9 +1,9 @@
-import { GICSv2Encoder, GICSv2Decoder } from '../../src/index.js';
+import { GICS } from '../../src/index.js';
 
 
 describe('Regression: Truncation Silent Success', () => {
     it('should throw IncompleteDataError for truncated streams', async () => {
-        const encoder = new GICSv2Encoder();
+        const encoder = new GICS.Encoder();
         // Create enough data to have multiple blocks/varints
         for (let i = 0; i < 50; i++) {
             await encoder.addSnapshot({ timestamp: 1000 + i, items: new Map([[1, { price: 100 + i, quantity: 1 }]]) });
@@ -13,7 +13,7 @@ describe('Regression: Truncation Silent Success', () => {
         // Try truncating at every single byte offset
         for (let i = 1; i < fullData.length; i++) {
             const truncated = fullData.slice(0, i);
-            const decoder = new GICSv2Decoder(truncated);
+            const decoder = new GICS.Decoder(truncated);
 
             // Must throw. Prefer IncompleteDataError, but generic Error/Format is better than silent success.
             // The audit requirement is IncompleteDataError (102) for EOF-related fails.
