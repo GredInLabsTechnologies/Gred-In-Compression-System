@@ -1,12 +1,11 @@
-import { Snapshot } from '../../gics-types.js';
-import { encodeVarint } from '../../gics-utils.js';
+import { Snapshot } from '../gics-types.js';
+import { encodeVarint } from '../gics-utils.js';
 import { GICS_MAGIC_V2, V12_FLAGS, StreamId, CodecId, GICS_VERSION_BYTE, BLOCK_HEADER_SIZE, HealthTag } from './format.js';
 import { ContextV0, ContextSnapshot } from './context.js';
 import { calculateBlockMetrics, classifyRegime, BlockMetrics } from './metrics.js';
 import { Codecs } from './codecs.js';
 import { HealthMonitor, RoutingDecision } from './chm.js';
-import * as fs from 'fs';
-import * as path from 'path';
+import type { GICSv2EncoderOptions } from './types.js';
 
 const BLOCK_SIZE = 1000;
 
@@ -19,59 +18,40 @@ export class GICSv2Encoder {
     private context: ContextV0;
     private chmTime: HealthMonitor;
     private chmValue: HealthMonitor;
-    private mode: string;
+    private mode: 'on' | 'off';
     private lastTelemetry: any = null;
     private isFinalized = false;
     private hasEmittedHeader = false;
     private runId: string;
-
-    private static sharedContext: ContextV0 | null = null;
-    private static sharedCHMTime: HealthMonitor | null = null;
-    private static sharedCHMValue: HealthMonitor | null = null;
+    private readonly options: Required<GICSv2EncoderOptions>;
 
     static reset() {
-        GICSv2Encoder.sharedContext = null;
-        GICSv2Encoder.sharedCHMTime = null;
-        GICSv2Encoder.sharedCHMValue = null;
+        // Backward-compat for existing tests. No global mutable state is used anymore.
     }
 
     static resetSharedContext() {
-        GICSv2Encoder.reset();
+        // Backward-compat for existing tests. No global mutable state is used anymore.
     }
 
-    constructor() {
-        if (process.env.GICS_TEST_RUN_ID) {
-            this.runId = process.env.GICS_TEST_RUN_ID;
-        } else {
-            this.runId = `run_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-        }
-        this.mode = process.env.GICS_CONTEXT_MODE || 'on';
+    constructor(options: GICSv2EncoderOptions = {}) {
+        const defaults: Required<GICSv2EncoderOptions> = {
+            runId: `run_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            contextMode: 'on',
+            probeInterval: 4,
+            sidecarWriter: null,
+            logger: null,
+        };
+        this.options = { ...defaults, ...options };
 
-        if (this.mode === 'off') {
-            this.context = new ContextV0('hash_placeholder', null);
-            const envProbe = process.env.GICS_PROBE_INTERVAL;
-            const probeInterval = (envProbe !== undefined && envProbe !== '') ? parseInt(envProbe, 10) : 4;
-            this.chmTime = new HealthMonitor(`${this.runId}:TIME`, probeInterval);
-            this.chmValue = new HealthMonitor(`${this.runId}:VALUE`, probeInterval);
-        } else {
-            if (!GICSv2Encoder.sharedContext) {
-                GICSv2Encoder.sharedContext = new ContextV0('hash_placeholder');
-            }
-            this.context = GICSv2Encoder.sharedContext;
+        this.runId = this.options.runId;
+        this.mode = this.options.contextMode;
 
-            if (!GICSv2Encoder.sharedCHMTime || !GICSv2Encoder.sharedCHMValue) {
-                const envProbe = process.env.GICS_PROBE_INTERVAL;
-                const probeInterval = (envProbe !== undefined && envProbe !== '') ? parseInt(envProbe, 10) : 4;
-                if (!GICSv2Encoder.sharedCHMTime) {
-                    GICSv2Encoder.sharedCHMTime = new HealthMonitor(`${this.runId}:TIME`, probeInterval);
-                }
-                if (!GICSv2Encoder.sharedCHMValue) {
-                    GICSv2Encoder.sharedCHMValue = new HealthMonitor(`${this.runId}:VALUE`, probeInterval);
-                }
-            }
-            this.chmTime = GICSv2Encoder.sharedCHMTime!;
-            this.chmValue = GICSv2Encoder.sharedCHMValue!;
-        }
+        this.context = this.mode === 'off'
+            ? new ContextV0('hash_placeholder', null)
+            : new ContextV0('hash_placeholder');
+
+        this.chmTime = new HealthMonitor(`${this.runId}:TIME`, this.options.probeInterval, this.options.logger);
+        this.chmValue = new HealthMonitor(`${this.runId}:VALUE`, this.options.probeInterval, this.options.logger);
     }
 
     async addSnapshot(snapshot: Snapshot): Promise<void> {
@@ -451,21 +431,15 @@ export class GICSv2Encoder {
         };
         const filename = `gics-anomalies.${this.runId}.json`;
 
-        // Only write sidecar if GICS_SIDECAR_PATH is set (avoid CWD pollution)
-        const sidecarPath = process.env.GICS_SIDECAR_PATH;
-        if (sidecarPath) {
-            try {
-                fs.writeFileSync(path.join(sidecarPath, filename), JSON.stringify(report, null, 2));
-            } catch (e) {
-                console.error("Failed to write sidecar report", e);
-            }
+        if (this.options.sidecarWriter) {
+            await this.options.sidecarWriter({ filename, report, encoderRunId: this.runId });
         }
 
         this.context = null as any;
         this.isFinalized = true;
 
         if (this.lastTelemetry) {
-            this.lastTelemetry.sidecar = sidecarPath ? filename : null;
+            this.lastTelemetry.sidecar = this.options.sidecarWriter ? filename : null;
         }
     }
 

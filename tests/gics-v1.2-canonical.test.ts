@@ -1,5 +1,5 @@
 import { gics_encode } from '../src/index.js';
-import { GICSv2Encoder } from '../src/gics/v1_2/encode.js';
+import { GICSv2Encoder } from '../src/gics/encode.js';
 import { Snapshot } from '../src/gics-types.js';
 import crypto from 'node:crypto';
 

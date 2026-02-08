@@ -1,5 +1,5 @@
-import { Snapshot } from '../../gics-types.js';
-import { decodeVarint } from '../../gics-utils.js';
+import { Snapshot } from '../gics-types.js';
+import { decodeVarint } from '../gics-utils.js';
 import { GICS_MAGIC_V2, StreamId, CodecId, BLOCK_HEADER_SIZE } from './format.js';
 import { ContextV0 } from './context.js';
 import { Codecs } from './codecs.js';

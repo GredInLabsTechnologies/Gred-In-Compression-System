@@ -4,12 +4,12 @@
  * @module gics
  */
 
-import { GICSv2Encoder } from './gics/v1_2/encode.js';
-import { GICSv2Decoder } from './gics/v1_2/decode.js';
+import { GICSv2Encoder } from './gics/encode.js';
+import { GICSv2Decoder } from './gics/decode.js';
 import type { Snapshot } from './gics-types.js';
 import type { HybridConfig } from './gics-hybrid.js';
 export { GICSv2Encoder, GICSv2Decoder };
-export * from './gics/v1_2/errors.js';
+export * from './gics/errors.js';
 export * from './gics-types.js';
 export * from './gics-hybrid.js'; // Keep types but not usage?
 export * from './gics-utils.js';

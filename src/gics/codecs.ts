@@ -1,5 +1,5 @@
 
-import { encodeVarint, decodeVarint, encodeRLE, decodeRLE } from '../../gics-utils.js';
+import { encodeVarint, decodeVarint, encodeRLE, decodeRLE } from '../gics-utils.js';
 
 export class Codecs {
 

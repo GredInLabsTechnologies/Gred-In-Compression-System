@@ -1,6 +1,6 @@
 import { gics_encode, gics_decode, Snapshot } from '../src/index.js';
-import { GICSv2Encoder } from '../src/gics/v1_2/encode.js';
-import { Regime } from '../src/gics/v1_2/metrics.js';
+import { GICSv2Encoder } from '../src/gics/encode.js';
+import { Regime } from '../src/gics/metrics.js';
 
 describe('GICS v1.2 Roundtrip', () => {
 

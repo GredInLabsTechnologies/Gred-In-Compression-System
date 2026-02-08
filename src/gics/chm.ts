@@ -5,6 +5,7 @@
 
 import { BlockMetrics } from './metrics.js';
 import { HealthTag, BLOCK_FLAGS } from './format.js';
+import type { GICSv2Logger } from './types.js';
 
 export interface AnomalyReport {
     schema_version: 1;
@@ -91,8 +92,11 @@ export class HealthMonitor {
 
     private currentSegment: AnomalySegment | null = null;
 
-    constructor(private runId: string, probeInterval: number = 4) {
+    private readonly logger: GICSv2Logger | null;
+
+    constructor(private runId: string, probeInterval: number = 4, logger: GICSv2Logger | null = null) {
         this.PROBE_INTERVAL = probeInterval;
+        this.logger = logger;
     }
 
     /**
@@ -114,7 +118,7 @@ export class HealthMonitor {
         if (this.state === CHMState.NORMAL) {
             const detection = this.detectAnomaly(probeRatio, metrics.unique_ratio);
             if (detection.isAnomaly) {
-                console.log(`[CHM] ANOMALY DETECTED! Ratio=${probeRatio.toFixed(2)} < Threshold. Base=${this.baselineRatio.toFixed(2)} Reason=${detection.reason}`);
+                this.logger?.info?.(`[CHM] ANOMALY DETECTED! Ratio=${probeRatio.toFixed(2)} < Threshold. Base=${this.baselineRatio.toFixed(2)} Reason=${detection.reason}`);
                 return { decision: RoutingDecision.QUARANTINE, reason: detection.reason };
             }
             return { decision: RoutingDecision.CORE, reason: null };

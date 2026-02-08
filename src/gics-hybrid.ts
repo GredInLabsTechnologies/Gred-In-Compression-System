@@ -308,10 +308,9 @@ export class HybridWriter {
             this.config.compressionAlgorithm = compressionAlgorithm;
         }
 
+
         // Reset pending snapshots (they'll be added fresh via addSnapshot)
         this.snapshots = [];
-
-        console.log(`[HybridWriter] Recovered state: ${blocks.length} blocks, ${itemIndex.size} items`);
     }
 
     /**

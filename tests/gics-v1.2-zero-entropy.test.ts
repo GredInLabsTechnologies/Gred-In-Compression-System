@@ -2,7 +2,7 @@
 import assert from 'node:assert'; // Keep assert or use expect
 import { SeededRNG } from '../bench/scripts/rng.js';
 import { generateVolatileInt } from '../bench/scripts/datasets.js';
-import { GICSv2Encoder } from '../src/gics/v1_2/encode.js';
+import { GICSv2Encoder } from '../src/gics/encode.js';
 
 describe('GICS Zero-Entropy Verification', () => {
 

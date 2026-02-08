@@ -1,6 +1,6 @@
 import { gics_encode, gics_decode, Snapshot } from '../src/index.js';
-import { GICSv2Encoder } from '../src/gics/v1_2/encode.js';
-import { GICSv2Decoder } from '../src/gics/v1_2/decode.js';
+import { GICSv2Encoder } from '../src/gics/encode.js';
+import { GICSv2Decoder } from '../src/gics/decode.js';
 
 describe('GICS v1.2 Multi-Item Roundtrip', () => {
     beforeEach(() => {

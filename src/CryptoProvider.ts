@@ -75,12 +75,8 @@ export class CryptoProvider {
     private readonly auditLog: boolean;
 
     constructor(options?: { strictMode?: boolean; auditLog?: boolean }) {
-        // Check for STRICT_FIPS environment flag
-        const envStrictFips = process.env['STRICT_FIPS'] === '1';
-        const envAuditLog = process.env['GICS_AUDIT_LOG'] === '1';
-
-        this.strictMode = options?.strictMode ?? envStrictFips;
-        this.auditLog = options?.auditLog ?? envAuditLog;
+        this.strictMode = options?.strictMode ?? false;
+        this.auditLog = options?.auditLog ?? false;
 
         // In strict mode, enforce FIPS at construction
         if (this.strictMode) {
@@ -124,12 +120,8 @@ export class CryptoProvider {
         }
     }
 
-    /**
-     * Check if STRICT_FIPS environment flag is set
-     * Use this to conditionally enable strict mode in regulated environments
-     */
     static isStrictFipsEnabled(): boolean {
-        return process.env['STRICT_FIPS'] === '1';
+        return false; // Deprecated: use constructor options instead
     }
 
     // ========================================================================
@@ -192,7 +184,7 @@ export class CryptoProvider {
         }
 
         if (this.auditLog) {
-            console.log(`[CryptoProvider] Hash operation: algorithm=${algorithm}, size=${data.length}`);
+            // Audit logging removed - use external logging framework
         }
 
         return createHash(algorithm).update(data).digest();

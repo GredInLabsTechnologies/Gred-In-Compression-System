@@ -85,7 +85,6 @@ class KeyService {
      */
     async unlock(password: string, salt: Buffer, iterations?: number): Promise<void> {
         // SECURITY: Never log passwords (even partially). Keep logs metadata-only.
-        console.log('[KeyService] Unlocking with password: [REDACTED]');
         if (!password) {
             throw new Error('Password cannot be empty');
         }
@@ -107,7 +106,6 @@ class KeyService {
                 KDF_CONFIG.digest
             );
             this.isLocked = false;
-            console.log('[KeyService] Unlocked successfully.');
         } catch (error) {
             console.error('[KeyService] Unlock failed:', error);
             this.lock();

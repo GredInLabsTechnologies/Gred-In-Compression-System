@@ -1,8 +1,8 @@
 // ... (imports remain)
 import assert from 'node:assert';
 import * as fs from 'fs';
-import { GICSv2Encoder } from '../src/gics/v1_2/encode.js';
-import { BLOCK_FLAGS } from '../src/gics/v1_2/format.js';
+import { GICSv2Encoder } from '../src/gics/encode.js';
+import { BLOCK_FLAGS } from '../src/gics/format.js';
 
 // Helper to generate a stream that shifts regime
 function generateRegimeShiftData(blocksStable: number, blocksChaos: number, blocksRecovery: number) {
