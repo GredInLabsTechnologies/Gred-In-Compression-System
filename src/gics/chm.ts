@@ -47,8 +47,8 @@ export enum CHMState {
 export class HealthMonitor {
     // Config (Fixed Defaults per Spec)
     // CHM Configuration (Split-4.2.1 Hardening)
-    public readonly K_RATIO_DEV_TRIGGER = 3.0;   // Trigger threshold (Sigma)
-    public readonly K_RATIO_DEV_RECOVERY = 10.0;  // Recovery threshold (Sigma)
+    public readonly K_RATIO_DEV_TRIGGER = 3;   // Trigger threshold (Sigma)
+    public readonly K_RATIO_DEV_RECOVERY = 10;  // Recovery threshold (Sigma)
     public readonly PROBE_INTERVAL: number;       // Blocks between probes (Injected)
     public readonly M_RECOVERY_BLOCKS = 3;       // Consecutive successes needed
     private readonly EMA_ALPHA = 0.1;            // Smoothing factor
@@ -57,7 +57,7 @@ export class HealthMonitor {
     private state: CHMState = CHMState.NORMAL;
 
     // Baseline Statstics (Exponential Moving Average)
-    private baselineRatio: number = 2.0; // Initial optimistic guess
+    private baselineRatio: number = 2; // Initial optimistic guess
     private baselineRatioDev: number = 0.5;
     private baselineUniqueRatioProxy: number = 0.5; // "Entropy"
 
@@ -70,7 +70,7 @@ export class HealthMonitor {
     private recoveryCounter = 0;
 
     // Split-5 Stats
-    private stats = {
+    private readonly stats = {
         core_blocks: 0,
         core_input_bytes: 0,
         core_output_bytes: 0,
@@ -84,7 +84,7 @@ export class HealthMonitor {
     }
 
     // Reporting
-    private anomalies: AnomalySegment[] = [];
+    private readonly anomalies: AnomalySegment[] = [];
     private worstBlocks: WorstBlock[] = []; // Top 10 worst
 
     // History
@@ -94,7 +94,7 @@ export class HealthMonitor {
 
     private readonly logger: GICSv2Logger | null;
 
-    constructor(private runId: string, probeInterval: number = 4, logger: GICSv2Logger | null = null) {
+    constructor(private readonly runId: string, probeInterval: number = 4, logger: GICSv2Logger | null = null) {
         this.PROBE_INTERVAL = probeInterval;
         this.logger = logger;
     }
@@ -162,162 +162,153 @@ export class HealthMonitor {
         this.totalBlocks++;
         this.lastBlockIndexSeen = blockIndex;
 
-        // Stats Update
-        if (decision === RoutingDecision.CORE) {
-            this.stats.core_blocks++;
-            this.stats.core_input_bytes += payloadIn;
-            this.stats.core_output_bytes += (payloadOut + headerBytes); // Honest KPI: Include Headers
-        } else {
-            this.stats.quar_blocks++;
-            this.stats.quar_input_bytes += payloadIn;
-            this.stats.quar_output_bytes += (payloadOut + headerBytes); // Honest KPI: Include Headers
-        }
+        this.updateStats(decision, payloadIn, payloadOut, headerBytes);
 
         // 1. Compute Ratio (for logging/worst block)
         const safeOut = payloadOut > 0 ? payloadOut : 1;
         const currentRatio = payloadIn / safeOut;
 
         // 2. State Logic - Transition based on DECISION
-        let flags = 0;
-        let healthTag = HealthTag.OK;
-        let blockAnomalous = false;
-        let reasonCode: string | null = null; // We might need to persist reason from decideRoute?
-
-        if (this.state === CHMState.NORMAL) {
-            if (decision === RoutingDecision.QUARANTINE) {
-                // TRANSITION: NORMAL -> QUARANTINE
-                this.state = CHMState.QUARANTINE_ACTIVE;
-                this.frozenBaselineRatio = this.baselineRatio; // Freeze
-                this.recoveryCounter = 0;
-                this.quarantineStartBlock = blockIndex;
-
-                flags |= BLOCK_FLAGS.ANOMALY_START;
-                flags |= BLOCK_FLAGS.HEALTH_QUAR;
-                healthTag = HealthTag.QUAR;
-                blockAnomalous = true;
-                reasonCode = 'RATIO_DROP'; // Simplify or pass in? Using detection for consistency.
-                // Re-detect to get reason if needed? Or just generic.
-                const det = this.detectAnomaly(currentRatio, metrics.unique_ratio);
-                reasonCode = det.reason || 'UNKNOWN';
-
-                // Start Segment
-                this.currentSegment = {
-                    segment_id: `seg_${this.anomalies.length + 1}`,
-                    start_block_index: blockIndex,
-                    reason_code: reasonCode,
-                    min_ratio: currentRatio,
-                    max_unique_ratio_proxy: metrics.unique_ratio,
-                    suggested_action: 'INSPECT',
-                    probe_attempts: 0,
-                    probe_successes: 0
-                };
-                this.anomalies.push(this.currentSegment);
-            } else {
-                // REMAIN NORMAL
-                healthTag = HealthTag.OK;
-            }
-
-        } else {
-            // QUARANTINE ACTIVE
-            if (decision === RoutingDecision.CORE) {
-                // TRANSITION: QUARANTINE -> NORMAL
-                // This block is MARKED as the End.
-                this.state = CHMState.NORMAL;
-                this.frozenBaselineRatio = null; // Unfreeze
-
-                flags |= BLOCK_FLAGS.ANOMALY_END;
-                healthTag = HealthTag.OK; // Signal resolution
-
-                // Close Segment
-                if (this.currentSegment) {
-                    this.currentSegment.end_block_index = blockIndex;
-                    this.currentSegment = null;
-                }
-                this.recoveryCounter = 0;
-            } else {
-                // REMAIN QUARANTINE
-                const shouldProbe = (blockIndex % this.PROBE_INTERVAL) === 0;
-                const isGood = shouldProbe && this.checkRecoveryCriteria(currentRatio);
-
-                // Update Recovery Counter ONLY on probes.
-                if (shouldProbe) {
-                    if (isGood) {
-                        this.recoveryCounter++;
-                        if (this.currentSegment) this.currentSegment.probe_successes = (this.currentSegment.probe_successes || 0) + 1;
-                    } else {
-                        this.recoveryCounter = 0;
-                    }
-
-                    if (this.currentSegment) {
-                        this.currentSegment.probe_attempts = (this.currentSegment.probe_attempts || 0) + 1;
-                    }
-                }
-
-                flags |= BLOCK_FLAGS.ANOMALY_MID;
-                flags |= BLOCK_FLAGS.HEALTH_QUAR;
-                healthTag = HealthTag.QUAR;
-                blockAnomalous = true;
-
-                // Update Segment Stats
-                if (this.currentSegment) {
-                    this.currentSegment.min_ratio = Math.min(this.currentSegment.min_ratio, currentRatio);
-                    this.currentSegment.max_unique_ratio_proxy = Math.max(this.currentSegment.max_unique_ratio_proxy, metrics.unique_ratio);
-                }
-            }
-        }
-
-
+        const logicResult = this.updateStateLogic(decision, metrics, currentRatio, blockIndex);
 
         // 3. Train Baseline (Hard Guard)
         // Train ONLY if CORE decision (which implies Normal state or Recovery point)
         // AND not high entropy (prevent adaptation to noise)
         const effectiveTrain = (decision === RoutingDecision.CORE)
-            && ((flags & BLOCK_FLAGS.ANOMALY_END) === 0)
+            && ((logicResult.flags & BLOCK_FLAGS.ANOMALY_END) === 0)
             && (metrics.unique_ratio <= 0.8);
 
         if (effectiveTrain) {
-            // Fast Start: If this is the first training block, snap to it.
-            // (Or close to it, to avoid startup shock deviation)
-            // We use a flag or check totalBlocks.
-            // Note: totalBlocks increments on every update.
-            // If this is the *first* effective train, we might want to snap.
-            // But let's just check if baseline is still at default (2.0) and dev is default (0.5) 
-            // and we have a huge jump.
-            // Simpler: Just snap on first few blocks?
-            // "Train only if Normal".
-            // Let's rely on totalBlocks for now, assuming we start Clean.
-
-            if (this.totalBlocks <= 1) {
-                this.baselineRatio = currentRatio;
-                this.baselineRatioDev = currentRatio * 0.1; // Assume 10% variability initially
-                this.baselineUniqueRatioProxy = metrics.unique_ratio;
-            } else {
-                const prevBaseline = this.baselineRatio;
-
-                // EMA Update Ratio
-                this.baselineRatio = (this.EMA_ALPHA * currentRatio) + ((1 - this.EMA_ALPHA) * this.baselineRatio);
-
-                // Deviation: |Current - PrevBaseline|
-                const dev = Math.abs(currentRatio - prevBaseline);
-                this.baselineRatioDev = (this.EMA_ALPHA * dev) + ((1 - this.EMA_ALPHA) * this.baselineRatioDev);
-
-                // EMA Update Proxy
-                this.baselineUniqueRatioProxy = (this.EMA_ALPHA * metrics.unique_ratio) + ((1 - this.EMA_ALPHA) * this.baselineUniqueRatioProxy);
-            }
+            this.trainBaseline(currentRatio, metrics.unique_ratio);
         }
 
         // 4. Update Worst Blocks
         this.updateWorstBlocks(blockIndex, currentRatio, metrics.unique_ratio, codecId);
 
-
-
         return {
-            flags,
-            healthTag,
-            isAnomaly: blockAnomalous, // Return true if this block is part of anomaly (Start/Mid)
-            inQuarantine: this.state === CHMState.QUARANTINE_ACTIVE, // Current state AFTER update (End -> Normal)
-            reasonCode
+            flags: logicResult.flags,
+            healthTag: logicResult.healthTag,
+            isAnomaly: logicResult.isAnomaly,
+            inQuarantine: this.state === CHMState.QUARANTINE_ACTIVE,
+            reasonCode: logicResult.reasonCode
         };
+    }
+
+    private updateStats(decision: RoutingDecision, payloadIn: number, payloadOut: number, headerBytes: number) {
+        if (decision === RoutingDecision.CORE) {
+            this.stats.core_blocks++;
+            this.stats.core_input_bytes += payloadIn;
+            this.stats.core_output_bytes += (payloadOut + headerBytes);
+        } else {
+            this.stats.quar_blocks++;
+            this.stats.quar_input_bytes += payloadIn;
+            this.stats.quar_output_bytes += (payloadOut + headerBytes);
+        }
+    }
+
+    private updateStateLogic(decision: RoutingDecision, metrics: BlockMetrics, currentRatio: number, blockIndex: number) {
+        if (this.state === CHMState.NORMAL) {
+            return this.handleNormalState(decision, metrics, currentRatio, blockIndex);
+        } else {
+            return this.handleQuarantineState(decision, metrics, currentRatio, blockIndex);
+        }
+    }
+
+    private handleNormalState(decision: RoutingDecision, metrics: BlockMetrics, currentRatio: number, blockIndex: number) {
+        let flags = 0;
+        let healthTag: HealthTag = HealthTag.OK;
+        let isAnomaly = false;
+        let reasonCode: string | null = null;
+
+        if (decision === RoutingDecision.QUARANTINE) {
+            this.state = CHMState.QUARANTINE_ACTIVE;
+            this.frozenBaselineRatio = this.baselineRatio;
+            this.recoveryCounter = 0;
+            this.quarantineStartBlock = blockIndex;
+
+            flags |= BLOCK_FLAGS.ANOMALY_START;
+            flags |= BLOCK_FLAGS.HEALTH_QUAR;
+            healthTag = HealthTag.QUAR;
+            isAnomaly = true;
+            const det = this.detectAnomaly(currentRatio, metrics.unique_ratio);
+            reasonCode = det.reason || 'UNKNOWN';
+
+            this.currentSegment = {
+                segment_id: `seg_${this.anomalies.length + 1}`,
+                start_block_index: blockIndex,
+                reason_code: reasonCode,
+                min_ratio: currentRatio,
+                max_unique_ratio_proxy: metrics.unique_ratio,
+                suggested_action: 'INSPECT',
+                probe_attempts: 0,
+                probe_successes: 0
+            };
+            this.anomalies.push(this.currentSegment);
+        }
+
+        return { flags, healthTag, isAnomaly, reasonCode };
+    }
+
+    private handleQuarantineState(decision: RoutingDecision, metrics: BlockMetrics, currentRatio: number, blockIndex: number) {
+        let flags = 0;
+        let healthTag: HealthTag;
+        let isAnomaly = false;
+        let reasonCode: string | null = null;
+
+        if (decision === RoutingDecision.CORE) {
+            this.state = CHMState.NORMAL;
+            this.frozenBaselineRatio = null;
+            flags |= BLOCK_FLAGS.ANOMALY_END;
+            healthTag = HealthTag.OK;
+            if (this.currentSegment) {
+                this.currentSegment.end_block_index = blockIndex;
+                this.currentSegment = null;
+            }
+            this.recoveryCounter = 0;
+        } else {
+            this.handleQuarantineProbe(currentRatio, blockIndex, metrics);
+            flags |= BLOCK_FLAGS.ANOMALY_MID | BLOCK_FLAGS.HEALTH_QUAR;
+            healthTag = HealthTag.QUAR;
+            isAnomaly = true;
+        }
+        return { flags, healthTag, isAnomaly, reasonCode };
+    }
+
+    private handleQuarantineProbe(currentRatio: number, blockIndex: number, metrics: BlockMetrics) {
+        const shouldProbe = (blockIndex % this.PROBE_INTERVAL) === 0;
+        if (shouldProbe) {
+            const isGood = this.checkRecoveryCriteria(currentRatio);
+            if (isGood) {
+                this.recoveryCounter++;
+                if (this.currentSegment) {
+                    this.currentSegment.probe_successes = (this.currentSegment.probe_successes || 0) + 1;
+                }
+            } else {
+                this.recoveryCounter = 0;
+            }
+            if (this.currentSegment) {
+                this.currentSegment.probe_attempts = (this.currentSegment.probe_attempts || 0) + 1;
+            }
+        }
+
+        if (this.currentSegment) {
+            this.currentSegment.min_ratio = Math.min(this.currentSegment.min_ratio, currentRatio);
+            this.currentSegment.max_unique_ratio_proxy = Math.max(this.currentSegment.max_unique_ratio_proxy, metrics.unique_ratio);
+        }
+    }
+
+    private trainBaseline(currentRatio: number, uniqueRatio: number) {
+        if (this.totalBlocks <= 1) {
+            this.baselineRatio = currentRatio;
+            this.baselineRatioDev = currentRatio * 0.1;
+            this.baselineUniqueRatioProxy = uniqueRatio;
+        } else {
+            const prevBaseline = this.baselineRatio;
+            this.baselineRatio = (this.EMA_ALPHA * currentRatio) + ((1 - this.EMA_ALPHA) * this.baselineRatio);
+            const dev = Math.abs(currentRatio - prevBaseline);
+            this.baselineRatioDev = (this.EMA_ALPHA * dev) + ((1 - this.EMA_ALPHA) * this.baselineRatioDev);
+            this.baselineUniqueRatioProxy = (this.EMA_ALPHA * uniqueRatio) + ((1 - this.EMA_ALPHA) * this.baselineUniqueRatioProxy);
+        }
     }
 
     private checkRecoveryCriteria(probeRatio: number): boolean {
@@ -340,19 +331,8 @@ export class HealthMonitor {
     private detectAnomaly(currentRatio: number, uniqueRatio: number): { isAnomaly: boolean, reason: string } {
         const expectedRatio = this.state === CHMState.NORMAL ? this.baselineRatio : (this.frozenBaselineRatio || this.baselineRatio);
 
-        // [HARDENING] Clamp Deviation to prevent negative threshold (infinite tolerance)
-        // If 3*Dev > Expected, threshold < 0.
-        // We cap effectiveDev so that 3*Dev is at most 90% of Expected?
-        // Or simply floor the threshold at 1.0 (Compression > 1.0).
-        // Let's clamp dev.
-
         let effectiveDev = this.baselineRatioDev;
-        const maxDev = expectedRatio * 0.25; // Max 25% of baseline allowed as "sigma"? 
-        // 3 * 0.25 = 0.75. Threshold = 0.25 * Baseline. Safe.
-        // But if real volatility is high, we might want to respect it.
-        // But huge dev usually means "Startup Shock" or "Regime Shift".
-        // Let's cap effectiveDev for the TRIGGER check.
-
+        // Search threshold for anomaly
         if (effectiveDev * this.K_RATIO_DEV_TRIGGER > expectedRatio * 0.9) {
             effectiveDev = (expectedRatio * 0.9) / this.K_RATIO_DEV_TRIGGER;
         }
@@ -376,9 +356,6 @@ export class HealthMonitor {
         // Close any open segment
         if (this.currentSegment) {
             this.currentSegment.end_block_index = this.lastBlockIndexSeen; // Force close
-            // Already pushed to array when created?
-            // Yes: `this.anomalies.push(this.currentSegment);` in UPDATE
-            // So we just update the reference.
             this.currentSegment = null;
         }
 

@@ -1,6 +1,6 @@
 import { GICSv2Encoder } from '../src/gics/encode.js';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 describe('GICS v1.2 Determinism', () => {
     const TEST_RUN_ID = 'test_run_fixed_123';
@@ -83,23 +83,10 @@ describe('GICS v1.2 Determinism', () => {
         // 1. Initial stable (Train Baseline)
         // 2. Sudden chaos (Trigger Anomaly -> Quarantine -> Probes)
         // 3. Recovery
-        const timestamps: number[] = [];
-        const values: number[] = [];
+
 
         // 1. Stable (Block 1-10)
-        for (let i = 0; i < 10000; i++) {
-            timestamps.push(i * 10);
-            if (i < 5000) {
-                values.push(100); // Constant
-            } else if (i < 8000) {
-                values.push(Math.random() * 10000); // Chaos
-            } else {
-                values.push(100); // Back to Constant
-            }
-        }
-        // Note: Randomness here MUST be deterministic (pseudo-random) for the TEST ITSELF to be deterministic?
-        // Wait, `Math.random()` is not seeded. 
-        // -> I used `Math.random()`. I must use a deterministic generator for the test data!
+
 
         const seededRandom = (seed: number) => {
             let x = Math.sin(seed++) * 10000;

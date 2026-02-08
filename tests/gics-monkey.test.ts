@@ -8,9 +8,8 @@
  * Si GICS sobrevive estos tests, es a prueba de tontos.
  */
 
-import { HybridReader, HybridWriter, TierClassifier } from '../src/index.js';
-import type { Snapshot } from '../src/gics-types.js';
-import { randomBytes } from 'crypto';
+import { HybridReader, HybridWriter } from '../src/index.js';
+import { randomBytes } from 'node:crypto';
 
 describe('ðŸ’ GICS Monkey Attack Tests (Anti-BebÃ©s)', () => {
 
@@ -80,8 +79,8 @@ describe('ðŸ’ GICS Monkey Attack Tests (Anti-BebÃ©s)', () => {
                             // NaN values
                             const writer = new HybridWriter();
                             writer.addSnapshot({
-                                timestamp: NaN,
-                                items: new Map([[1, { price: NaN, quantity: NaN }]])
+                                timestamp: Number.NaN,
+                                items: new Map([[1, { price: Number.NaN, quantity: Number.NaN }]])
                             });
                             await writer.finish();
                             break;
@@ -111,7 +110,7 @@ describe('ðŸ’ GICS Monkey Attack Tests (Anti-BebÃ©s)', () => {
                         }
                     }
                     operations++;
-                } catch (e) {
+                } catch {
                     // Throwing is acceptable - crashing is not
                     operations++;
                 }
@@ -223,7 +222,7 @@ describe('ðŸ’ GICS Monkey Attack Tests (Anti-BebÃ©s)', () => {
             // Query items that don't exist using the reader's API
             const result1 = await reader.queryItems({ itemIds: [99999] });
             const result2 = await reader.queryItems({ itemIds: [-1] });
-            const result3 = await reader.queryItems({ itemIds: [0] });
+            await reader.queryItems({ itemIds: [0] });
 
             // Non-existent items should return empty arrays or no data
             expect(result1.length === 0 || result1[0]?.history.length === 0).toBe(true);
@@ -457,9 +456,9 @@ describe('ðŸ’ GICS Monkey Attack Tests (Anti-BebÃ©s)', () => {
             // All these should work without crashing
             const ids = reader.getItemIds();
             const tier = reader.getItemTier(1);
-            const tierBad = reader.getItemTier(99999);
+            reader.getItemTier(99999);
             const snapshot = await reader.getSnapshotAt(1000);
-            const snapshotBad = await reader.getSnapshotAt(0);
+            await reader.getSnapshotAt(0);
 
             expect(ids).toBeDefined();
             expect(tier).toBeDefined();
@@ -511,13 +510,15 @@ describe('ðŸ’ GICS Monkey Attack Tests (Anti-BebÃ©s)', () => {
                     const writer = new HybridWriter();
                     writer.addSnapshot({ timestamp: 1000, items: new Map([[1, { price: 100, quantity: 10 }]]) });
                     const data = await writer.finish();
-                    new HybridReader(data);
+                    const reader = new HybridReader(data);
+                    reader.getItemIds();
                 });
             }
 
             for (let i = 0; i < 50; i++) {
                 operations.push(async () => {
-                    new HybridReader(randomBytes(100));
+                    const reader = new HybridReader(randomBytes(100));
+                    try { reader.getItemIds(); } catch { }
                 });
             }
 

@@ -54,7 +54,7 @@ describe('GICS v1.2 Roundtrip', () => {
 
         for (const s of snapshots) await enc.addSnapshot(s);
 
-        const encoded = await enc.flush();
+        await enc.flush();
         await enc.finalize();
         const telemetry = enc.getTelemetry();
 

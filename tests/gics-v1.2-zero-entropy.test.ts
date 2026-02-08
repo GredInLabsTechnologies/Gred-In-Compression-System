@@ -55,7 +55,7 @@ describe('GICS Zero-Entropy Verification', () => {
 
         // We also verify that GICSv2Encoder doesn't mutate dataset (it shouldn't).
         const enc = new GICSv2Encoder();
-        const inputData = [...dsOriginal.data]; // Shallow copy array
+
         const snapshot = { timestamp: 0, items: new Map() };
         await enc.addSnapshot(snapshot);
         await enc.flush();

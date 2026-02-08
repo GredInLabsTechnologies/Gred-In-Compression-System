@@ -6,9 +6,9 @@ import { Codecs } from './codecs.js';
 import { IncompleteDataError, IntegrityError } from './errors.js';
 
 export class GICSv2Decoder {
-    private data: Uint8Array;
+    private readonly data: Uint8Array;
     private pos: number = 0;
-    private context: ContextV0;
+    private readonly context: ContextV0;
 
     // NOTE(v1.3 hygiene): no shared mutable static state between instances.
     static resetSharedContext() {
@@ -43,7 +43,7 @@ export class GICSv2Decoder {
         }
 
         // 2. Validate EOS marker (fail-closed)
-        if (this.data[this.data.length - 1] !== 0xFF) {
+        if (this.data.at(-1) !== 0xFF) {
             throw new IncompleteDataError('GICS: Missing EOS marker (0xFF) - incomplete or corrupt data');
         }
 
@@ -52,7 +52,7 @@ export class GICSv2Decoder {
         const version = this.getUint8();
         if (version !== 2) throw new IntegrityError(`Unsupported version: ${version}`);
 
-        const flags = this.getUint32(); // Read flags (unused for now)
+        this.getUint32(); // Read flags (unused for now)
 
         // 4. Parse Blocks - Multi-stream support
         let timeData: number[] = [];
@@ -65,66 +65,26 @@ export class GICSv2Decoder {
         const dataEnd = this.data.length - 1;
 
         while (this.pos < dataEnd) {
-            // Read Block Header
-            if (this.pos + BLOCK_HEADER_SIZE > dataEnd) {
-                throw new IncompleteDataError('GICS: Truncated block header');
-            }
-
-            const streamId = this.getUint8();
-            const codecId = this.getUint8();
-            const nItems = this.getUint32();
-            const payloadLen = this.getUint32();
-            const blockFlags = this.getUint8();
-
-            const payloadStart = this.pos;
-            const payloadEnd = this.pos + payloadLen;
-
-            if (payloadEnd > dataEnd) {
-                throw new IncompleteDataError('GICS: Block payload exceeds file size');
-            }
-
-            const payload = this.data.subarray(payloadStart, payloadEnd);
-            this.pos = payloadEnd;
-
-            // Dispatch - decode payload
-            let values: number[] = [];
-
-            if (codecId === CodecId.VARINT_DELTA || codecId === CodecId.DOD_VARINT) {
-                values = decodeVarint(payload);
-            } else if (codecId === CodecId.BITPACK_DELTA) {
-                values = Codecs.decodeBitPack(payload, nItems);
-            } else if (codecId === CodecId.RLE_ZIGZAG || codecId === CodecId.RLE_DOD) {
-                values = Codecs.decodeRLE(payload);
-            } else if (codecId === CodecId.DICT_VARINT) {
-                values = Codecs.decodeDict(payload, this.context);
-            } else {
-                // Unknown codec, skip
-                continue;
-            }
+            const { streamId, values } = this.parseBlock(dataEnd);
 
             // Route to appropriate stream array
-            const commitable = (blockFlags & 0x10) === 0; // HEALTH_QUAR = 0x10
-
             if (streamId === StreamId.TIME) {
-                const chunkTimes = this.decodeTimeStream(values, commitable);
-                for (const t of chunkTimes) timeData.push(t);
+                timeData.push(...values);
             } else if (streamId === StreamId.SNAPSHOT_LEN) {
-                // Raw values, no delta decoding
-                for (const v of values) snapshotLengths.push(v);
+                snapshotLengths.push(...values);
             } else if (streamId === StreamId.ITEM_ID) {
-                // Raw values, no delta decoding
-                for (const v of values) itemIds.push(v);
+                itemIds.push(...values);
             } else if (streamId === StreamId.VALUE) {
-                const isDOD = (codecId === CodecId.DOD_VARINT || codecId === CodecId.RLE_DOD);
-                const chunkValues = this.decodeValueStream(values, commitable, isDOD);
-                for (const v of chunkValues) priceData.push(v);
+                priceData.push(...values);
             } else if (streamId === StreamId.QUANTITY) {
-                // Raw values, no delta decoding
-                for (const v of values) quantityData.push(v);
+                quantityData.push(...values);
             }
         }
 
-        // 5. Reconstruct Snapshots from multi-stream data
+        return this.reconstructSnapshots(timeData, snapshotLengths, itemIds, priceData, quantityData);
+    }
+
+    private reconstructSnapshots(timeData: number[], snapshotLengths: number[], itemIds: number[], priceData: number[], quantityData: number[]): Snapshot[] {
         const result: Snapshot[] = [];
 
         // If snapshotLengths is empty, fall back to legacy single-item mode
@@ -161,15 +121,63 @@ export class GICSv2Decoder {
         return result;
     }
 
+    private parseBlock(dataEnd: number) {
+        if (this.pos + BLOCK_HEADER_SIZE > dataEnd) {
+            throw new IncompleteDataError('GICS: Truncated block header');
+        }
+
+        const streamId = this.getUint8();
+        const codecId = this.getUint8();
+        const nItems = this.getUint32();
+        const payloadLen = this.getUint32();
+        const blockFlags = this.getUint8();
+
+        const payloadStart = this.pos;
+        const payloadEnd = this.pos + payloadLen;
+
+        if (payloadEnd > dataEnd) {
+            throw new IncompleteDataError('GICS: Block payload exceeds file size');
+        }
+
+        const payload = this.data.subarray(payloadStart, payloadEnd);
+        this.pos = payloadEnd;
+
+        // Decode payload
+        let values: number[] = [];
+
+        if (codecId === CodecId.VARINT_DELTA || codecId === CodecId.DOD_VARINT) {
+            values = decodeVarint(payload);
+        } else if (codecId === CodecId.BITPACK_DELTA) {
+            values = Codecs.decodeBitPack(payload, nItems);
+        } else if (codecId === CodecId.RLE_ZIGZAG || codecId === CodecId.RLE_DOD) {
+            values = Codecs.decodeRLE(payload);
+        } else if (codecId === CodecId.DICT_VARINT) {
+            values = Codecs.decodeDict(payload, this.context);
+        } else {
+            // Unknown codec, return empty
+            return { streamId, values: [] };
+        }
+
+        const commitable = (blockFlags & 0x10) === 0; // HEALTH_QUAR = 0x10
+
+        if (streamId === StreamId.TIME) {
+            return { streamId, values: this.decodeTimeStream(values, commitable) };
+        } else if (streamId === StreamId.VALUE) {
+            const isDOD = (codecId === CodecId.DOD_VARINT || codecId === CodecId.RLE_DOD);
+            return { streamId, values: this.decodeValueStream(values, commitable, isDOD) };
+        } else {
+            return { streamId, values };
+        }
+    }
+
     private decodeTimeStream(deltas: number[], shouldCommit: boolean): number[] {
         if (deltas.length === 0) return [];
         const timestamps: number[] = [];
 
-        let prev = this.context.lastTimestamp !== undefined ? this.context.lastTimestamp : 0;
-        let prevDelta = this.context.lastTimestampDelta !== undefined ? this.context.lastTimestampDelta : 0;
+        let prev = this.context.lastTimestamp ?? 0;
+        let prevDelta = this.context.lastTimestampDelta ?? 0;
 
-        for (let i = 0; i < deltas.length; i++) {
-            const deltaOfDelta = deltas[i];
+        for (const deltaOfDelta of deltas) {
             const currentDelta = prevDelta + deltaOfDelta;
             const current = prev + currentDelta;
             timestamps.push(current);
@@ -187,23 +195,18 @@ export class GICSv2Decoder {
     private decodeValueStream(deltas: number[], shouldCommit: boolean, isDOD: boolean = false): number[] {
         if (deltas.length === 0) return [];
         const values: number[] = [];
-        let prev = this.context.lastValue !== undefined ? this.context.lastValue : 0;
-        let prevDelta = this.context.lastValueDelta !== undefined ? this.context.lastValueDelta : 0;
+        let prev = this.context.lastValue ?? 0;
+        let prevDelta = this.context.lastValueDelta ?? 0;
 
-        for (let i = 0; i < deltas.length; i++) {
-            let change = deltas[i];
-
+        for (const rawChange of deltas) {
+            let change = rawChange;
             if (isDOD) {
                 // Input is DeltaOfDelta
                 const currentDelta = prevDelta + change;
                 change = currentDelta; // Change to Apply is the new Delta
                 prevDelta = currentDelta;
             } else {
-                // Input is Delta (update prevDelta for consistency if we switch modes? 
-                // Contextv0 explicitly separates lastValueDelta.
-                // If we are in Delta mode, lastValueDelta becomes the delta we just applied?
-                // Or undefined?
-                // For safety, let's track the delta we applied.
+                // Input is Delta
                 const currentDelta = change;
                 prevDelta = currentDelta;
             }
@@ -215,7 +218,6 @@ export class GICSv2Decoder {
 
         if (shouldCommit) {
             this.context.lastValue = prev;
-            // Only update delta if we tracked it
             this.context.lastValueDelta = prevDelta;
         }
         return values;

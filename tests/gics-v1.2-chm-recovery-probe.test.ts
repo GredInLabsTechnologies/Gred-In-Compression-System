@@ -95,7 +95,7 @@ describe('GICS v1.2 CHM Recovery Probe', () => {
         }
         // Feed 1 block (1000 items)
         await Promise.all(noiseData.map(val => enc.addSnapshot({ timestamp: Date.now(), items: new Map([[1, { price: val, quantity: 1 }]]) })));
-        const dataAnomaly = await enc.flush();
+        await enc.flush();
 
         // Check finding ANOMALY_START
         // We can check bits in dataAnomaly or mock CHM?
@@ -129,7 +129,7 @@ describe('GICS v1.2 CHM Recovery Probe', () => {
         // We expect to see ANOMALY_END eventually.
         // Parse blocks.
 
-        let pos = 9; // Skip file header
+
         let blockIndicesWithEnd: number[] = [];
         let valueBlockCount = 0;
 
@@ -140,7 +140,7 @@ describe('GICS v1.2 CHM Recovery Probe', () => {
 
         // We need to handle `finalData` might be empty if loop failed? No.
 
-        pos = 0; // In finalData, it starts at 0 (no file header if header already emitted in previous flush? 
+        let pos = 0; // In finalData, it starts at 0 (no file header if header already emitted in previous flush? 
         // `hasEmittedHeader` in Encode.ts prevents re-emit.
         // So `finalData` has NO file header.
 
@@ -152,13 +152,12 @@ describe('GICS v1.2 CHM Recovery Probe', () => {
             const flags = finalData[pos + 10];
             const BLOCK_HEADER_SIZE = 11;
 
-            // DEBUG
-            // console.log(`Found Block: Stream=${streamId} Len=${payloadLen} Flags=${flags}`);
+
 
             // Only evaluate recovery timing on VALUE stream blocks.
             if (streamId === 20) {
                 valueBlockCount++;
-                if (flags & BLOCK_FLAGS.ANOMALY_END) {
+                if ((flags & BLOCK_FLAGS.ANOMALY_END) !== 0) {
                     blockIndicesWithEnd.push(valueBlockCount);
                 }
             }

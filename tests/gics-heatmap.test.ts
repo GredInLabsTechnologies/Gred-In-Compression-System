@@ -108,7 +108,7 @@ describe('HeatClassifier', () => {
 
         it('should allow custom weights', () => {
             const config: HeatConfig = {
-                volatilityWeight: 1.0,
+                volatilityWeight: 1,
                 demandWeight: 0,
                 frequencyWeight: 0
             };
@@ -199,7 +199,7 @@ describe('HeatClassifier', () => {
             const classifier = new HeatClassifier();
             const heatScores = new Map<number, HeatScoreResult>([
                 [1, { itemId: 1, heatScore: 0.8, components: { volatility: 0.9, demand: 0.7, changeFrequency: 0.8 } }],
-                [2, { itemId: 2, heatScore: 0.2, components: { volatility: 0.1, demand: 0.5, changeFrequency: 0.0 } }],
+                [2, { itemId: 2, heatScore: 0.2, components: { volatility: 0.1, demand: 0.5, changeFrequency: 0 } }],
             ]);
 
             const avg = classifier.getBlockAverageHeat(heatScores);

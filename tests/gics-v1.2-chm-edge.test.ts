@@ -1,7 +1,6 @@
 import { GICSv2Encoder } from '../src/gics/encode.js';
 import { BLOCK_FLAGS } from '../src/gics/format.js';
-import * as fs from 'fs';
-import * as path from 'path';
+
 
 describe('GICS v1.2 CHM Edge Cases', () => {
 

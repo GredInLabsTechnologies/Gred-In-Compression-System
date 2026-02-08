@@ -11,11 +11,7 @@ export class Codecs {
     static encodeBitPack(values: number[]): Uint8Array {
         if (values.length === 0) return new Uint8Array(0);
 
-        // 1. Determine Min/Max to handle offset? 
-        // For Delta encoding, values can be negative.
-        // Bitpacking works best on unsigned.
-        // So allow offset shifting or ZigZag first?
-        // Let's assume input is already Delta'd. We ZigZag them to make them positive.
+        // 1. ZigZag encode to handle negative values and make them positive.
         const unsigned = values.map(v => (v >= 0 ? v * 2 : (v * -2) - 1));
 
         // Find max
@@ -29,31 +25,15 @@ export class Codecs {
         while ((1 << bits) <= max && bits < 32) {
             bits++;
         }
-        if (max === 0) bits = 1; // Minimum 1 bit for zeros? Or 0 bits if all zero?
+        if (max === 0) bits = 1;
         if (bits === 0) bits = 1;
-
-        // Header: [bits (u8), count (u32)?] 
-        // Or just [bits]. Count is known from Block Header nItems?
-        // Ideally we just emit [bits] + data.
-
-        // Packing
-        // We pack into a buffer.
-        // 8 items of 1 bit = 1 byte.
-        // Size = ceil(count * bits / 8) + 1 (header)
 
         const dataBytes = Math.ceil((unsigned.length * bits) / 8);
         const result = new Uint8Array(1 + dataBytes);
         result[0] = bits;
 
         let bitPos = 0;
-        // Optimization: bulk write if aligned? No, bitstream is generic.
-        for (let i = 0; i < unsigned.length; i++) {
-            const val = unsigned[i];
-            // Write 'bits' bits of 'val' starting at 'bitPos'
-            // We write into 'result' starting at byte 1
-
-            // Allow simplified writing: pure JS bitwise logic
-            // Supporting up to 32 bits width
+        for (const val of unsigned) {
             for (let b = 0; b < bits; b++) {
                 const bit = (val >> b) & 1;
                 if (bit) {
@@ -77,12 +57,10 @@ export class Codecs {
         let bitPos = 0;
         for (let i = 0; i < count; i++) {
             let val = 0;
-            // Read 'bits' bits
             for (let b = 0; b < bits; b++) {
                 const totalBit = bitPos + b;
                 const byteIdx = 1 + (totalBit >> 3);
                 const bitIdx = totalBit & 7;
-                // Check bounds? data usually matches count logic
                 if (byteIdx < data.length) {
                     const bit = (data[byteIdx] >> bitIdx) & 1;
                     if (bit) {
@@ -101,14 +79,7 @@ export class Codecs {
     }
 
     // --- RLE ZIGZAG ---
-    // Wraps gics-utils RLE which does RLE + Varint
-    // But GICS Utils RLE might expect raw values.
-    // If we want RLE on Deltas, we feed Deltas.
     static encodeRLE(values: number[]): Uint8Array {
-        // Utils encodeRLE does: [count, val]... then Varint encodes the stream.
-        // It does NOT ZigZag the values inside automatically? 
-        // encodeVarint DOES ZigZag.
-        // So if we pass signed deltas to encodeRLE, and it calls encodeVarint, it's fine.
         return encodeRLE(values);
     }
 
@@ -127,17 +98,15 @@ export class Codecs {
 
         const output: number[] = [];
         for (const val of values) {
-            // Check dictionary
             const idx = context.dictMap.get(val);
-            if (idx !== undefined) {
-                // Hit: (idx << 1) | 1
-                output.push((idx << 1) | 1);
-            } else {
+            if (idx === undefined) {
                 // Miss: (ZigZag(val) << 1) | 0
                 const zz = (val >= 0) ? (val * 2) : (val * -2) - 1;
                 output.push(zz << 1);
-                // Update Context
                 context.updateDictionary(val);
+            } else {
+                // Hit: (idx << 1) | 1
+                output.push((idx << 1) | 1);
             }
         }
 
@@ -156,7 +125,6 @@ export class Codecs {
                 if (idx < context.dictionary.length) {
                     result.push(context.dictionary[idx]);
                 } else {
-                    // Error state? Return 0 or last?
                     result.push(0);
                 }
             } else {
