@@ -6,10 +6,11 @@
  * RULE: No direct describe.skip in test files.
  *       Only use describeIntegration() for integration tests.
  */
-import { describe, type SuiteFactory } from 'vitest';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+
+type SuiteFactory = () => void | Promise<void>;
 
 /**
  * Whether integration tests are enabled.

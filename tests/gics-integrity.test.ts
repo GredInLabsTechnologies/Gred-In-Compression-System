@@ -3,7 +3,6 @@
  * 
  * Tests for infrastructure-grade file integrity (GICS v1.1)
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { IntegrityGuardian } from '../src/IntegrityGuardian.js';
 import { HybridWriter } from '../src/gics-hybrid.js';
 import * as fs from 'node:fs/promises';

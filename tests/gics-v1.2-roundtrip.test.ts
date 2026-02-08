@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { gics_encode, gics_decode, Snapshot } from '../src/index.js';
 import { GICSv2Encoder } from '../src/gics/v1_2/encode.js';
 import { Regime } from '../src/gics/v1_2/metrics.js';

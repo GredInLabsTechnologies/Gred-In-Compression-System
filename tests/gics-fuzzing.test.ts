@@ -7,7 +7,6 @@
  * - Common Criteria (Boundary Testing)
  * - OWASP Testing Guidelines
  */
-import { describe, it, expect } from 'vitest';
 import { HybridWriter, HybridReader } from '../src/gics-hybrid.js';
 import { IntegrityGuardian } from '../src/IntegrityGuardian.js';
 import { CryptoProvider } from '../src/CryptoProvider.js';

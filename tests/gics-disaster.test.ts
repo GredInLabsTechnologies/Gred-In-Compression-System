@@ -1,5 +1,4 @@
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
 import { HybridWriter, HybridReader } from '../src/index.js';
 import * as fs from 'fs/promises';
 import { fork } from 'child_process';

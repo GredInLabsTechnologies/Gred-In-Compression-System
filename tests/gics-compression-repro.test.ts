@@ -1,5 +1,4 @@
-﻿import { describe, it, expect } from 'vitest';
-import { HybridWriter, HybridReader, TierClassifier } from '../src/index.js';
+﻿import { HybridWriter, HybridReader, TierClassifier } from '../src/index.js';
 import type { Snapshot } from '../src/gics-types.js';
 
 describe('GICS Compression Stress Test (Reproduction)', () => {
@@ -149,5 +148,6 @@ describe('GICS Compression Stress Test (Reproduction)', () => {
 
 
 });
+
 
 

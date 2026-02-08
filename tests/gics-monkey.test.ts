@@ -8,7 +8,6 @@
  * Si GICS sobrevive estos tests, es a prueba de tontos.
  */
 
-import { describe, it, expect } from 'vitest';
 import { describeIntegration } from './helpers/test-env.js';
 import { HybridReader, HybridWriter, TierClassifier } from '../src/index.js';
 import type { Snapshot } from '../src/gics-types.js';
@@ -539,5 +538,6 @@ describe('ðŸ’ GICS Monkey Attack Tests (Anti-BebÃ©s)', () => {
         });
     });
 });
+
 
 

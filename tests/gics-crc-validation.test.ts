@@ -5,7 +5,6 @@
  * Not dependent on random offsets or guessing file structure.
  */
 
-import { describe, it, expect } from 'vitest';
 import { HybridWriter, HybridReader } from '../src/index.js';
 
 // Header layout constants (must match gics-hybrid.ts)
@@ -92,5 +91,6 @@ describe('GICS CRC Validation (Deterministic)', () => {
         expect(block.payloadStart + block.payloadLen).toBeLessThanOrEqual(bytes.length);
     });
 });
+
 
 

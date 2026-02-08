@@ -1,5 +1,4 @@
 // ... (imports remain)
-import { describe, it, expect } from 'vitest';
 import assert from 'node:assert';
 import * as fs from 'fs';
 import { GICSv2Encoder } from '../src/gics/v1_2/encode.js';
@@ -59,7 +58,7 @@ describe('GICS v1.2 CHM Regime Shift Verification', () => {
 
         while (pos < data.length) {
             const streamId = data[pos];
-            if (streamId === undefined) break;
+            if (streamId === undefined || streamId === 0xFF) break; // EOS marker
 
             const payloadLen = new DataView(data.buffer, data.byteOffset + pos + 6, 4).getUint32(0, true);
             const flags = data[pos + 10];
@@ -94,4 +93,6 @@ describe('GICS v1.2 CHM Regime Shift Verification', () => {
         assert.ok(foundEnd >= 60 && foundEnd <= 68, `ANOMALY_END should be around block 64 (Probe Latency), found ${foundEnd}`);
     });
 });
+
+
 

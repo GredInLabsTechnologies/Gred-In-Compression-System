@@ -1,4 +1,3 @@
-import { describe, it, expect, vi } from 'vitest';
 import assert from 'node:assert';
 import { GICSv2Encoder } from '../src/gics/v1_2/encode.js';
 import { BLOCK_FLAGS } from '../src/gics/v1_2/format.js';
@@ -132,7 +131,7 @@ describe('GICS v1.2 CHM Recovery Probe', () => {
 
         let pos = 9; // Skip file header
         let blockIndicesWithEnd: number[] = [];
-        let blockCount = 0;
+        let valueBlockCount = 0;
 
         // Note: previous flushes output bytes too. "finalData" only contains new blocks from last flush?
         // Yes, `flush` returns current buffer.
@@ -146,9 +145,8 @@ describe('GICS v1.2 CHM Recovery Probe', () => {
         // So `finalData` has NO file header.
 
         while (pos < finalData.length) {
-            blockCount++;
             const streamId = finalData[pos];
-            if (streamId === undefined) break;
+            if (streamId === undefined || streamId === 0xFF) break; // EOS marker
 
             const payloadLen = new DataView(finalData.buffer, finalData.byteOffset + pos + 6, 4).getUint32(0, true);
             const flags = finalData[pos + 10];
@@ -157,8 +155,12 @@ describe('GICS v1.2 CHM Recovery Probe', () => {
             // DEBUG
             // console.log(`Found Block: Stream=${streamId} Len=${payloadLen} Flags=${flags}`);
 
-            if (flags & BLOCK_FLAGS.ANOMALY_END) {
-                blockIndicesWithEnd.push(blockCount);
+            // Only evaluate recovery timing on VALUE stream blocks.
+            if (streamId === 20) {
+                valueBlockCount++;
+                if (flags & BLOCK_FLAGS.ANOMALY_END) {
+                    blockIndicesWithEnd.push(valueBlockCount);
+                }
             }
             pos += BLOCK_HEADER_SIZE + payloadLen;
         }

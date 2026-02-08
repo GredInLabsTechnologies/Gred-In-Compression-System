@@ -17,7 +17,8 @@ const SAFE_CODEC_VALUE = CodecId.VARINT_DELTA;
 export class GICSv2Encoder {
     private snapshots: Snapshot[] = [];
     private context: ContextV0;
-    private chm: HealthMonitor;
+    private chmTime: HealthMonitor;
+    private chmValue: HealthMonitor;
     private mode: string;
     private lastTelemetry: any = null;
     private isFinalized = false;
@@ -25,11 +26,13 @@ export class GICSv2Encoder {
     private runId: string;
 
     private static sharedContext: ContextV0 | null = null;
-    private static sharedCHM: HealthMonitor | null = null;
+    private static sharedCHMTime: HealthMonitor | null = null;
+    private static sharedCHMValue: HealthMonitor | null = null;
 
     static reset() {
         GICSv2Encoder.sharedContext = null;
-        GICSv2Encoder.sharedCHM = null;
+        GICSv2Encoder.sharedCHMTime = null;
+        GICSv2Encoder.sharedCHMValue = null;
     }
 
     static resetSharedContext() {
@@ -48,19 +51,26 @@ export class GICSv2Encoder {
             this.context = new ContextV0('hash_placeholder', null);
             const envProbe = process.env.GICS_PROBE_INTERVAL;
             const probeInterval = (envProbe !== undefined && envProbe !== '') ? parseInt(envProbe, 10) : 4;
-            this.chm = new HealthMonitor(this.runId, probeInterval);
+            this.chmTime = new HealthMonitor(`${this.runId}:TIME`, probeInterval);
+            this.chmValue = new HealthMonitor(`${this.runId}:VALUE`, probeInterval);
         } else {
             if (!GICSv2Encoder.sharedContext) {
                 GICSv2Encoder.sharedContext = new ContextV0('hash_placeholder');
             }
             this.context = GICSv2Encoder.sharedContext;
 
-            if (!GICSv2Encoder.sharedCHM) {
+            if (!GICSv2Encoder.sharedCHMTime || !GICSv2Encoder.sharedCHMValue) {
                 const envProbe = process.env.GICS_PROBE_INTERVAL;
                 const probeInterval = (envProbe !== undefined && envProbe !== '') ? parseInt(envProbe, 10) : 4;
-                GICSv2Encoder.sharedCHM = new HealthMonitor(this.runId, probeInterval);
+                if (!GICSv2Encoder.sharedCHMTime) {
+                    GICSv2Encoder.sharedCHMTime = new HealthMonitor(`${this.runId}:TIME`, probeInterval);
+                }
+                if (!GICSv2Encoder.sharedCHMValue) {
+                    GICSv2Encoder.sharedCHMValue = new HealthMonitor(`${this.runId}:VALUE`, probeInterval);
+                }
             }
-            this.chm = GICSv2Encoder.sharedCHM;
+            this.chmTime = GICSv2Encoder.sharedCHMTime!;
+            this.chmValue = GICSv2Encoder.sharedCHMValue!;
         }
     }
 
@@ -105,14 +115,11 @@ export class GICSv2Encoder {
         }
         this.snapshots = [];
 
-        // Helper to process a block
-        const PROBE_INTERVAL = this.chm.PROBE_INTERVAL;
-
         // Updated Signature: accepts stateSnapshot (ContextSnapshot)
-        const processBlock = (streamId: StreamId, chunk: number[], inputData: number[], stateSnapshot: ContextSnapshot) => {
+        const processBlock = (streamId: StreamId, chunk: number[], inputData: number[], stateSnapshot: ContextSnapshot, chm: HealthMonitor) => {
             const metrics = calculateBlockMetrics(chunk);
             const rawInBytes = chunk.length * 8;
-            const currentBlockIndex = this.chm.getTotalBlocks() + 1;
+            const currentBlockIndex = chm.getTotalBlocks() + 1;
 
             // --- Split-5: Router-First Optimistic Execution ---
             let candidateEncoded: Uint8Array;
@@ -148,22 +155,14 @@ export class GICSv2Encoder {
             }
             // PRIORITY 3: Bitpacking (Low Entropy Delta)
             else if (metrics.p90_abs_delta < 127) {
-                // Use BITPACK_DELTA on Deltas.
-                let deltaStream: number[];
-                if (streamId === StreamId.VALUE) {
-                    // Value inputData is Delta
-                    deltaStream = inputData;
-                } else {
-                    // Time inputData is DoD. Reconstruct Delta.
-                    deltaStream = [];
-                    let pd = stateSnapshot.lastTimestampDelta || 0;
-                    for (const dd of inputData) {
-                        pd = pd + dd;
-                        deltaStream.push(pd);
-                    }
-                }
+                // NOTE:
+                // - VALUE stream `inputData` is Delta.
+                // - TIME stream `inputData` is Delta-of-Delta.
+                // The decoder's TIME path expects Delta-of-Delta values for all codecs.
+                // So for TIME we bitpack the DoD stream directly (NOT reconstructed deltas).
+                const bitpackInput = (streamId === StreamId.TIME) ? inputData : inputData;
                 candidateCodec = CodecId.BITPACK_DELTA;
-                candidateEncoded = Codecs.encodeBitPack(deltaStream);
+                candidateEncoded = Codecs.encodeBitPack(bitpackInput);
             }
             // FALLBACK: Standard Varint
             else {
@@ -183,7 +182,7 @@ export class GICSv2Encoder {
             candidateRatio = rawInBytes / safeCoreOut;
 
             // 2. CHM Routing Decision (Quality Gate)
-            const route = this.chm.decideRoute(metrics, candidateRatio);
+            const route = chm.decideRoute(metrics, candidateRatio, currentBlockIndex);
 
             // 3. Execution based on Route
             let finalEncoded: Uint8Array;
@@ -253,7 +252,7 @@ export class GICSv2Encoder {
             }
 
             // 4. Update CHM (Stat Tracking & State Transitions)
-            const chmResult = this.chm.update(
+            const chmResult = chm.update(
                 route.decision,
                 metrics,
                 rawInBytes,
@@ -292,7 +291,7 @@ export class GICSv2Encoder {
             const chunk = timestamps.slice(i, i + BLOCK_SIZE);
             const snapshot = this.context.snapshot(); // Capture START state (before TS update)
             const deltas = this.computeTimeDeltas(chunk, true); // Updates Context TS to END
-            processBlock(StreamId.TIME, chunk, deltas, snapshot);
+            processBlock(StreamId.TIME, chunk, deltas, snapshot, this.chmTime);
         }
         // Create SNAPSHOT_LEN Blocks (items per snapshot - 1:1 with timestamps)
         for (let i = 0; i < snapshotLengths.length; i += BLOCK_SIZE) {
@@ -348,7 +347,7 @@ export class GICSv2Encoder {
             const chunk = prices.slice(i, i + BLOCK_SIZE);
             const snapshot = this.context.snapshot(); // Capture START state
             const deltas = this.computeValueDeltas(chunk, true); // Updates Context to END
-            processBlock(StreamId.VALUE, chunk, deltas, snapshot);
+            processBlock(StreamId.VALUE, chunk, deltas, snapshot, this.chmValue);
         }
 
         // Create QUANTITY Blocks (all quantities flattened)
@@ -410,14 +409,24 @@ export class GICSv2Encoder {
         // Write EOS marker (0xFF) for fail-closed validation
         result[pos] = 0xFF;
 
-        const chmStats = this.chm.getStats();
+        const timeStats = this.chmTime.getStats();
+        const valueStats = this.chmValue.getStats();
+        const chmStats = {
+            core_blocks: timeStats.core_blocks + valueStats.core_blocks,
+            core_input_bytes: timeStats.core_input_bytes + valueStats.core_input_bytes,
+            core_output_bytes: timeStats.core_output_bytes + valueStats.core_output_bytes,
+            quar_blocks: timeStats.quar_blocks + valueStats.quar_blocks,
+            quar_input_bytes: timeStats.quar_input_bytes + valueStats.quar_input_bytes,
+            quar_output_bytes: timeStats.quar_output_bytes + valueStats.quar_output_bytes,
+        };
 
+        const totalChmBlocks = this.chmTime.getTotalBlocks() + this.chmValue.getTotalBlocks();
         const coreRatio = chmStats.core_output_bytes > 0 ? (chmStats.core_input_bytes / chmStats.core_output_bytes) : 0;
-        const quarRate = this.chm.getTotalBlocks() > 0 ? (chmStats.quar_blocks / this.chm.getTotalBlocks()) : 0;
+        const quarRate = totalChmBlocks > 0 ? (chmStats.quar_blocks / totalChmBlocks) : 0;
 
         this.lastTelemetry = {
             blocks: blockStats,
-            total_blocks: this.chm.getTotalBlocks(),
+            total_blocks: totalChmBlocks,
             core_input_bytes: chmStats.core_input_bytes,
             core_output_bytes: chmStats.core_output_bytes,
             core_ratio: coreRatio,
@@ -436,7 +445,10 @@ export class GICSv2Encoder {
     async finalize(): Promise<void> {
         if (this.isFinalized) throw new Error("GICSv2Encoder: Finalize called twice!");
 
-        const report = this.chm.getReport();
+        const report = {
+            time: this.chmTime.getReport(),
+            value: this.chmValue.getReport(),
+        };
         const filename = `gics-anomalies.${this.runId}.json`;
 
         // Only write sidecar if GICS_SIDECAR_PATH is set (avoid CWD pollution)

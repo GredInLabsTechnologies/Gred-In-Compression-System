@@ -1,5 +1,4 @@
-﻿import { describe, it, expect } from 'vitest';
-import { HybridReader, HybridWriter, VersionMismatchError } from '../src/index.js';
+﻿import { HybridReader, HybridWriter, VersionMismatchError } from '../src/index.js';
 
 describe('GICS Versioning & Security', () => {
     it('should write the correct magic bytes (GICS)', async () => {
@@ -43,5 +42,6 @@ describe('GICS Versioning & Security', () => {
         expect(() => new HybridReader(data)).toThrow(/Invalid GICS Magic Bytes/);
     });
 });
+
 
 

@@ -3,32 +3,24 @@ import { decodeVarint } from '../../gics-utils.js';
 import { GICS_MAGIC_V2, StreamId, CodecId, BLOCK_HEADER_SIZE } from './format.js';
 import { ContextV0 } from './context.js';
 import { Codecs } from './codecs.js';
+import { IncompleteDataError, IntegrityError } from './errors.js';
 
 export class GICSv2Decoder {
     private data: Uint8Array;
     private pos: number = 0;
     private context: ContextV0;
 
-    private static sharedContext: ContextV0 | null = null;
-
+    // NOTE(v1.3 hygiene): no shared mutable static state between instances.
     static resetSharedContext() {
-        GICSv2Decoder.sharedContext = null;
+        // kept for backward-compat in tests; no-op now
     }
-
-
 
     constructor(data: Uint8Array) {
         this.data = data;
 
-        const mode = process.env.GICS_CONTEXT_MODE || 'on';
-        if (mode === 'off') {
-            this.context = new ContextV0('hash_placeholder');
-        } else {
-            if (!GICSv2Decoder.sharedContext) {
-                GICSv2Decoder.sharedContext = new ContextV0('hash_placeholder');
-            }
-            this.context = GICSv2Decoder.sharedContext;
-        }
+        // v1.2 decoder must be deterministic and instance-isolated.
+        // (Previous sharedContext caused cross-test contamination.)
+        this.context = new ContextV0('hash_placeholder');
     }
 
     async getAllSnapshots(): Promise<Snapshot[]> {
@@ -47,18 +39,18 @@ export class GICSv2Decoder {
         }
 
         if (!isV2) {
-            throw new Error("GICS v1.2 Decoder: Legacy v1.1 format not supported in this build.");
+            throw new IntegrityError("GICS v1.2 Decoder: Legacy v1.1 format not supported in this build.");
         }
 
         // 2. Validate EOS marker (fail-closed)
         if (this.data[this.data.length - 1] !== 0xFF) {
-            throw new Error('GICS: Missing EOS marker (0xFF) - incomplete or corrupt data');
+            throw new IncompleteDataError('GICS: Missing EOS marker (0xFF) - incomplete or corrupt data');
         }
 
         // 3. Parse V2 Header
         this.pos = GICS_MAGIC_V2.length;
         const version = this.getUint8();
-        if (version !== 2) throw new Error(`Unsupported version: ${version}`);
+        if (version !== 2) throw new IntegrityError(`Unsupported version: ${version}`);
 
         const flags = this.getUint32(); // Read flags (unused for now)
 
@@ -75,7 +67,7 @@ export class GICSv2Decoder {
         while (this.pos < dataEnd) {
             // Read Block Header
             if (this.pos + BLOCK_HEADER_SIZE > dataEnd) {
-                break; // Incomplete block header
+                throw new IncompleteDataError('GICS: Truncated block header');
             }
 
             const streamId = this.getUint8();
@@ -88,7 +80,7 @@ export class GICSv2Decoder {
             const payloadEnd = this.pos + payloadLen;
 
             if (payloadEnd > dataEnd) {
-                throw new Error('Block payload exceeds file size');
+                throw new IncompleteDataError('GICS: Block payload exceeds file size');
             }
 
             const payload = this.data.subarray(payloadStart, payloadEnd);

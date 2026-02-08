@@ -1,4 +1,3 @@
-import { describe, it, assert } from 'vitest';
 import { GICSv2Encoder } from '../src/gics/v1_2/encode.js';
 import { BLOCK_FLAGS } from '../src/gics/v1_2/format.js';
 import * as fs from 'fs';

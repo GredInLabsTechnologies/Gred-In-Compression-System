@@ -7,7 +7,6 @@
  * 3. Compression algorithm detection
  */
 
-import { describe, it, expect } from 'vitest';
 import {
     HybridWriter,
     HybridReader,

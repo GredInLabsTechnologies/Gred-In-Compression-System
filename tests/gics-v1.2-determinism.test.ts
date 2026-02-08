@@ -1,4 +1,3 @@
-import { describe, it, assert, beforeEach, afterEach } from 'vitest';
 import { GICSv2Encoder } from '../src/gics/v1_2/encode.js';
 import * as fs from 'fs';
 import * as path from 'path';

@@ -1,4 +1,7 @@
-﻿import { beforeAll, afterAll, vi } from 'vitest';
+﻿// NOTE: Do not import from "vitest" in setup files.
+// Vitest provides globals (beforeAll/afterAll/vi/...) when `globals: true`.
+// Importing from "vitest" here can run before the test runner is initialized
+// and cause: "Vitest failed to find the runner".
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';

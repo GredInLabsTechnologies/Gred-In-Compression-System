@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { GICSv2Encoder, GICSv2Decoder } from '../../src/index.js';
 
 describe('Regression: EOS Trailing Bytes', () => {

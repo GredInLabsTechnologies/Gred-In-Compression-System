@@ -101,7 +101,7 @@ export class HealthMonitor {
      * Does NOT update state (stateless check).
      * @param probeRatio - Ratio from a dry-run encode (Normal Attempt). Required if in Normal or Probing.
      */
-    decideRoute(metrics: BlockMetrics, probeRatio: number): { decision: RoutingDecision, reason: string | null } {
+    decideRoute(metrics: BlockMetrics, probeRatio: number, blockIndex: number): { decision: RoutingDecision, reason: string | null } {
 
 
         // 0. ENTROPY GATE (Hard Guard)
@@ -122,35 +122,22 @@ export class HealthMonitor {
 
         // 2. If currently QUARANTINE (Active), check for Recovery (Exit Condition)
         if (this.state === CHMState.QUARANTINE_ACTIVE) {
-            // Check if we are probing (Encoder decides WHEN to probe and passes probeRatio)
-            // If probeRatio is valid (passed in), we check recovery.
-            // But wait, `probeRecovery` logic relies on `recoveryCounter` state.
-            // If we want `decideRoute` to be pure, we can't update counter here.
-            // However, the previous logic had `probeRecovery` update counter.
-            // Let's assume we check the condition: Is this block "Good Enough"?
+            // Recovery is evaluated only on probe blocks to avoid short-circuit recovery.
+            // (See PROBE_INTERVAL + M_RECOVERY_BLOCKS contract.)
+            const shouldProbe = (blockIndex % this.PROBE_INTERVAL) === 0;
+            if (!shouldProbe) {
+                return { decision: RoutingDecision.QUARANTINE, reason: 'QUARANTINE_ACTIVE' };
+            }
 
             const isGood = this.checkRecoveryCriteria(probeRatio);
-
-            // If isGood, does it meet the sequential threshold?
-            // Depending on how many times we've been good BEFORE this?
-            // We need to know if this block is the "Final Straw" to recover.
-
-            // Critical: If we route CORE strategies, we MUST be consistent.
-            // If we are in Quarantine, we route QUARANTINE by default.
-            // UNLESS this block triggers the transition to NORMAL?
-            // If we return CORE here, Encoder will use CORE logic (commit context).
-            // That implies we ARE recovering.
-
             if (isGood) {
-                // Check if `recoveryCounter + 1 >= M`
                 if (this.recoveryCounter + 1 >= this.M_RECOVERY_BLOCKS) {
                     return { decision: RoutingDecision.CORE, reason: 'RECOVERY_MATCH' };
                 }
-                // Else, it's good but not enough yet. Still Quarantine.
                 return { decision: RoutingDecision.QUARANTINE, reason: 'RECOVERY_PENDING' };
             }
 
-            return { decision: RoutingDecision.QUARANTINE, reason: 'QUARANTINE_ACTIVE' };
+            return { decision: RoutingDecision.QUARANTINE, reason: 'RECOVERY_PROBE_FAIL' };
         }
 
         return { decision: RoutingDecision.CORE, reason: null };
@@ -245,20 +232,21 @@ export class HealthMonitor {
                 this.recoveryCounter = 0;
             } else {
                 // REMAIN QUARANTINE
-                const isGood = this.checkRecoveryCriteria(currentRatio);
+                const shouldProbe = (blockIndex % this.PROBE_INTERVAL) === 0;
+                const isGood = shouldProbe && this.checkRecoveryCriteria(currentRatio);
 
-                // Update Recovery Counter
-                // Note: decideRoute peeked at this, but we must update state now.
-                // If isGood, increment.
-                if (isGood) {
-                    this.recoveryCounter++;
-                    if (this.currentSegment) this.currentSegment.probe_successes = (this.currentSegment.probe_successes || 0) + 1;
-                } else {
-                    this.recoveryCounter = 0; // Reset on failure? Strict Sequential Requirement.
-                }
+                // Update Recovery Counter ONLY on probes.
+                if (shouldProbe) {
+                    if (isGood) {
+                        this.recoveryCounter++;
+                        if (this.currentSegment) this.currentSegment.probe_successes = (this.currentSegment.probe_successes || 0) + 1;
+                    } else {
+                        this.recoveryCounter = 0;
+                    }
 
-                if (this.currentSegment) {
-                    this.currentSegment.probe_attempts = (this.currentSegment.probe_attempts || 0) + 1;
+                    if (this.currentSegment) {
+                        this.currentSegment.probe_attempts = (this.currentSegment.probe_attempts || 0) + 1;
+                    }
                 }
 
                 flags |= BLOCK_FLAGS.ANOMALY_MID;

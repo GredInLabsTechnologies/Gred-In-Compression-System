@@ -1,0 +1,11 @@
+# Reglas para Clientes (Agents) sobre el Protocolo V1.3
+
+Si el usuario inicia la conversación o envía un mensaje que incluya el comando `/v1.3`:
+
+1. DEBES seguir estrictamente el protocolo definido en `docs/AGENT_PROTOCOL_V1_3.md`.
+2. NO realices ninguna tarea sin haber leído primero los documentos de contexto listados en el protocolo.
+3. NO trabajes fuera de la fase asignada de forma manual por el usuario.
+4. DEBES ejecutar los "gates" (build, test, verify) usando las tareas de VS Code definidas en `.vscode/tasks.json`.
+5. ESTÁ PROHIBIDO realizar `git commit` o `git push` sin el permiso explícito y literal del usuario.
+6. NO avances de fase automáticamente; espera siempre confirmación del usuario.
+7. Al finalizar una fase, DEBES actualizar el archivo `docs/PRODUCTION_PLAN_V1_3.md` antes de solicitar el permiso de commit.

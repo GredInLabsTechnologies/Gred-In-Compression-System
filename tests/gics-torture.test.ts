@@ -1,5 +1,4 @@
 
-import { describe, it, expect, vi } from 'vitest';
 import { HybridWriter } from '../src/gics-hybrid.js';
 // import { RangeReader } from '../src/gics-range-reader.js'; // Assuming reader API
 import { generateTrendInt } from '../bench/scripts/datasets.js';

@@ -3,7 +3,6 @@
  * 
  * Tests for Market Heatmap (GICS v1.1)
  */
-import { describe, it, expect } from 'vitest';
 import { HeatClassifier, HeatConfig } from '../src/HeatClassifier.js';
 import type { Snapshot, HeatScoreResult } from '../src/gics-types.js';
 

@@ -10,7 +10,6 @@
  * 
  * @see https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/shs/shabytetestvectors.zip
  */
-import { describe, it, expect } from 'vitest';
 import { CryptoProvider } from '../src/CryptoProvider.js';
 
 // ============================================================================
