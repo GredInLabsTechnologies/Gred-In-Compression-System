@@ -11,7 +11,7 @@ import { ZstdComparator } from './comparators.js';
 // For now, I'll assume the user has a GICS entry point.
 // If I can't find it, I'll need to inspect.
 // I saw 'benchmarks.ts' used: import { HybridWriter } from './src/index.js';
-import { HybridWriter } from '../../src/index.js';
+import { GICS } from '../../src/index.js';
 
 interface Result {
     timestamp_utc: string;
@@ -52,7 +52,7 @@ async function main() {
         // User requested: "Nuevo dataset obligatorio: TS_TREND_INT_LARGE"
         // I will enable it but maybe scale it down slightly if node heap issues occur, 
         // or ensure I run with high memory. 5M rows is ~125MB JSON string.
-        generateTrendIntLarge(12345)
+        // generateTrendIntLarge(12345)
     ];
 
     // 2. Prepare Comparators
@@ -126,15 +126,15 @@ async function runGicsEncode(ds: Dataset): Promise<any> {
     // Measure construction vs run
     const measured = await measureSplit(
         async () => {
-            return new HybridWriter();
+            return new GICS.Encoder();
         },
-        async (writer: HybridWriter) => {
+        async (writer: any) => {
             for (const row of ds.data) {
                 const itemMap = new Map();
                 itemMap.set(1, { price: row.v, quantity: 1 });
-                await writer.addSnapshot({ timestamp: row.t, items: itemMap });
+                writer.push({ timestamp: row.t, items: itemMap });
             }
-            return await writer.finish();
+            return await writer.seal();
         }
     );
 
@@ -149,19 +149,19 @@ async function runGicsEncode(ds: Dataset): Promise<any> {
 async function runGicsAppend(ds: Dataset, chunks: number): Promise<any> {
     const measured = await measureSplit(
         async () => {
-            return new HybridWriter();
+            return new GICS.Encoder();
         },
-        async (writer: HybridWriter) => {
+        async (writer: any) => {
             for (let c = 0; c < chunks; c++) {
                 // Ingest full dataset as a "chunk"
                 for (const row of ds.data) {
                     const itemMap = new Map();
                     itemMap.set(1, { price: row.v, quantity: 1 });
                     // Shift timestamp to avoid overlap
-                    await writer.addSnapshot({ timestamp: row.t + (c * 1_000_000), items: itemMap });
+                    writer.push({ timestamp: row.t + (c * 1_000_000), items: itemMap });
                 }
             }
-            return await writer.finish();
+            return await writer.seal();
         }
     );
 

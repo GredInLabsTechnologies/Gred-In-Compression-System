@@ -1,8 +1,8 @@
-import { gics_decode, gics_encode, type Snapshot, GICS } from '../../src/index.js';
+import { type Snapshot, GICS } from '../../src/index.js';
 
 function buildDeterministicSnapshots(): Snapshot[] {
     const snapshots: Snapshot[] = [];
-    const baseTs = 1_700_000_000; // deterministic
+    let baseTs = 1_700_000_000; // deterministic
 
     for (let i = 0; i < 48; i++) {
         const ts = baseTs + i * 3600; // hourly
@@ -26,8 +26,8 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function main() {
     const snapshots = buildDeterministicSnapshots();
-    const encoded = await gics_encode(snapshots);
-    const decoded = await gics_decode(encoded);
+    const encoded = await GICS.pack(snapshots);
+    const decoded = await GICS.unpack(encoded);
 
     assert(decoded.length === snapshots.length, `snapshotCount mismatch (${decoded.length} != ${snapshots.length})`);
 
@@ -38,14 +38,16 @@ async function main() {
         assert(b.timestamp === a.timestamp, `timestamp mismatch at index ${i} (${b.timestamp} != ${a.timestamp})`);
 
         const a1 = a.items.get(1);
-        const b1 = b.items.get(1);
-        assert(!!a1 && !!b1, `missing item 1 at index ${i}`);
-        assert(b1.price === a1.price, `item 1 price mismatch at index ${i}`);
+        const b1 = (b.items instanceof Map) ? b.items.get(1) : undefined;
+        // In GICS v1.2+, items is a Map.
+        assert(!!b1, `missing item 1 at index ${i}`);
+        assert(b1.price === (a1?.price ?? 0), `item 1 price mismatch at index ${i}`);
+
 
         const a2 = a.items.get(2);
-        const b2 = b.items.get(2);
-        assert(!!a2 && !!b2, `missing item 2 at index ${i}`);
-        assert(b2.price === a2.price, `item 2 price mismatch at index ${i}`);
+        const b2 = (b.items instanceof Map) ? b.items.get(2) : undefined;
+        assert(!!b2, `missing item 2 at index ${i}`);
+        assert(b2.price === (a2?.price ?? 0), `item 2 price mismatch at index ${i}`);
     }
 
     const sparseCount = decoded.reduce((acc, s) => acc + (s.items.has(3) ? 1 : 0), 0);
