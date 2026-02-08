@@ -4,21 +4,15 @@ import * as path from 'path';
 
 describe('GICS v1.2 Determinism', () => {
     const TEST_RUN_ID = 'test_run_fixed_123';
-    let originalRunIdEnv: string | undefined;
-    let originalSidecarPathEnv: string | undefined;
 
-    beforeEach(() => {
-        // Enforce Determinism
-        originalRunIdEnv = process.env.GICS_TEST_RUN_ID;
-        originalSidecarPathEnv = process.env.GICS_SIDECAR_PATH;
-        process.env.GICS_TEST_RUN_ID = TEST_RUN_ID;
-        process.env.GICS_SIDECAR_PATH = process.cwd(); // Enable sidecar writing for this test
-        GICSv2Encoder.reset();
-    });
+    const createSidecarWriter = () => {
+        return async ({ filename, report }: { filename: string; report: unknown }) => {
+            const sidecarPath = path.join(process.cwd(), filename);
+            await fs.promises.writeFile(sidecarPath, JSON.stringify(report, null, 2), 'utf-8');
+        };
+    };
 
     afterEach(() => {
-        process.env.GICS_TEST_RUN_ID = originalRunIdEnv;
-        process.env.GICS_SIDECAR_PATH = originalSidecarPathEnv;
         GICSv2Encoder.reset();
         // Cleanup sidecars
         const cwd = process.cwd();
@@ -41,7 +35,10 @@ describe('GICS v1.2 Determinism', () => {
 
         // Run 1
         GICSv2Encoder.reset();
-        const encoder1 = new GICSv2Encoder();
+        const encoder1 = new GICSv2Encoder({
+            runId: TEST_RUN_ID,
+            sidecarWriter: createSidecarWriter()
+        });
         for (let i = 0; i < timestamps.length; i++) {
             await encoder1.addSnapshot({
                 timestamp: timestamps[i],
@@ -56,7 +53,10 @@ describe('GICS v1.2 Determinism', () => {
 
         // Run 2
         GICSv2Encoder.reset(); // CRITICAL: Reset shared context
-        const encoder2 = new GICSv2Encoder();
+        const encoder2 = new GICSv2Encoder({
+            runId: TEST_RUN_ID,
+            sidecarWriter: createSidecarWriter()
+        });
         for (let i = 0; i < timestamps.length; i++) {
             await encoder2.addSnapshot({
                 timestamp: timestamps[i],
@@ -119,7 +119,10 @@ describe('GICS v1.2 Determinism', () => {
 
         const runTest = async () => {
             GICSv2Encoder.reset();
-            const enc = new GICSv2Encoder();
+            const enc = new GICSv2Encoder({
+                runId: TEST_RUN_ID,
+                sidecarWriter: createSidecarWriter()
+            });
             for (let i = 0; i < valuesDet.length; i++) {
                 await enc.addSnapshot({
                     timestamp: i * 10,

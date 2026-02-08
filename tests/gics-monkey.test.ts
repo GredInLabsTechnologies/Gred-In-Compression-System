@@ -8,7 +8,6 @@
  * Si GICS sobrevive estos tests, es a prueba de tontos.
  */
 
-import { describeIntegration } from './helpers/test-env.js';
 import { HybridReader, HybridWriter, TierClassifier } from '../src/index.js';
 import type { Snapshot } from '../src/gics-types.js';
 import { randomBytes } from 'crypto';
@@ -318,9 +317,10 @@ describe('ðŸ’ GICS Monkey Attack Tests (Anti-BebÃ©s)', () => {
     // DATA CORRUPTION SIMULATION
     // ============================================================================
 
-    describeIntegration('Corruption Attacks', () => {
-        // INTEGRATION: These tests involve heavy async operations and may cause
-        // DataView offset errors during parallel execution. Gated for stability.
+    describe('Corruption Attacks', () => {
+        // These tests involve heavy async operations and may cause
+        // DataView offset errors during parallel execution. 
+        // Previously gated as integration tests, now mandatory for quality.
 
         it('should detect random byte modifications', async () => {
             const writer = new HybridWriter();

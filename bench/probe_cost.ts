@@ -1,4 +1,4 @@
-import { GICSv2Encoder } from '../src/gics/v1_2/encode.js';
+import { GICSv2Encoder } from '../src/gics/encode.js';
 
 // Benchmark Probe Overhead
 // Compare:

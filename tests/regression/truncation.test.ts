@@ -1,5 +1,5 @@
 import { GICSv2Encoder, GICSv2Decoder } from '../../src/index.js';
-import { IncompleteDataError } from '../../src/gics/v1_2/errors.js';
+import { IncompleteDataError } from '../../src/gics/errors.js';
 
 describe('Regression: Truncation Silent Success', () => {
     it('should throw IncompleteDataError for truncated streams', async () => {
