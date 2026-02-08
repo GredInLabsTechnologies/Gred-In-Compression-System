@@ -31,12 +31,31 @@ export enum HealthTag {
     QUAR = 2,
 }
 
-export interface HeaderV2 {
+export interface HeaderV3 {
     magic: Uint8Array; // "GICS"
-    version: number;   // 2
+    version: number;   // 3
     flags: number;
-    contextId?: string;
+    streamCount: number;
 }
+
+export const GICS_HEADER_SIZE_V3 = 14; // magic(4) + version(1) + flags(4) + streamCount(1) + reserved(4)
+
+export enum GICS_FLAGS_V3 {
+    NONE = 0,
+    ENCRYPTED = 0x80,
+}
+
+export interface EncryptionHeaderV3 {
+    encMode: number;      // 1: AES-256-GCM
+    salt: Uint8Array;    // 16 bytes
+    authVerify: Uint8Array; // 32 bytes (HMAC of a known constant to verify password)
+    kdfId: number;       // 1: PBKDF2
+    iterations: number;  // e.g. 100000
+    digestId: number;    // 1: SHA-256
+    fileNonce: Uint8Array; // 8 bytes
+}
+
+export const GICS_ENC_HEADER_SIZE_V3 = 1 + 16 + 32 + 1 + 4 + 1 + 8; // 63 bytes
 
 // Block Header layout:
 // [stream_id (u8)] [codec_id (u8)] [n_items (u32)] [payload_len (u32)] [flags_low (u8)]
@@ -77,3 +96,7 @@ export enum RecoveryAction {
 }
 
 export const GICS_EOS_MARKER = 0xFF;
+
+export const SEGMENT_MAGIC = new Uint8Array([0x53, 0x47]); // "SG"
+export const SEGMENT_FOOTER_SIZE = 36; // 32 (hash) + 4 (crc32)
+export const FILE_EOS_SIZE = 37; // 1 (marker) + 32 (hash) + 4 (crc32)

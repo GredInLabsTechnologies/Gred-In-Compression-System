@@ -191,10 +191,10 @@ await enc.sealToFile();
 | 1 | Foundation / hygiene | ✅ |  |  | 2026-02-08 | Gates OK: `npm run build` + `npm test` (131 passed, 2 skipped). Fixes de determinismo/robustez en v1.2 + CHM. |
 | 2 | Bug fixes (133/133) | ✅ |  |  | 2026-02-08 | Gates OK: `npm run build` + `npm test` (**133 passed, 0 skipped**). Fixed import paths + determinism test + **enabled corruption tests**. EXCELENCIA: cero mediocridad. |
 | 3 | Formato v1.3 (stream sections + outer + chain) | ✅ |  |  | 2026-02-08 | Gates OK: `npm run build` + `npm test` (**145/145 passed**). StreamSections + Zstd outer + SHA-256 hash chain + strict/warn modes + 12 nuevos tests v1.3. |
-| 3.1 | Segmentación + index + append FileHandle | ⬜ |  |  |  |  |
-| 4 | Trial-based codec (todos los streams) | ⬜ |  |  |  |  |
-| 5 | AES-256-GCM per section | ⬜ |  |  |  |  |
-| 6 | Validación cruzada + forensics verify() | ⬜ |  |  |  |  |
+| 3.1 | Segmentación + index + append FileHandle | ✅ |  |  | 2026-02-08 | Gates OK: `npm run build` + `npm test` (**149/149 passed**). SegmentHeader/Footer + Bloom Index + Append logic + FileAccess. Independent segments. |
+| 4 | Trial-based codec (todos los streams) | ✅ |  |  | 2026-02-08 | Gates OK: `npm run build` + `npm test` (**149/149 passed**). Full trial selection for all streams. Improved ratios. |
+| 5 | AES-256-GCM per section | ✅ |  |  | 2026-02-08 | AES-256-GCM with PBKDF2 + Deterministic IVs + GCM Auth Tag. Verified with integration tests. |
+| 6 | Validación cruzada + forensics verify() | ✅ |  |  | 2026-02-08 | Gates OK: `npm run build` + `npm test` (**161/161 passed**). `GICS.verify()` verifies integrity without decompression. Cross-stream validation checks consistency. |
 | 7 | API polish | ⬜ |  |  |  |  |
 | 8 | Adversarial suite | ⬜ |  |  |  |  |
 
@@ -387,29 +387,41 @@ npm test
 ### Fase 3.1 — Segmentación + Index + Append (FileHandle)
 
 Checklist:
-- [ ] Definir `SegmentHeader/SegmentFooter/FileEOS`.
-- [ ] `SegmentBuilder`: auto-seal por tamaño (~1MB uncompressed).
-- [ ] `SegmentIndex`: bloom + sorted array.
-- [ ] Decoder: iterar segmentos; query descarta con index; descomprime solo segmentos necesarios.
-- [ ] Implementar append en disco (leer tail, localizar EOS, truncar, escribir segmento, escribir nuevo EOS).
+- [x] Definir `SegmentHeader/SegmentFooter/FileEOS`.
+- [x] `SegmentBuilder`: auto-seal por tamaño (~1MB uncompressed).
+- [x] `SegmentIndex`: bloom + sorted array.
+- [x] Decoder: iterar segmentos; query descarta con index; descomprime solo segmentos necesarios.
+- [x] Implementar append en disco (leer tail, localizar EOS, truncar, escribir segmento, escribir nuevo EOS).
 
 Tests mínimos:
-- [ ] Append 2 segmentos → decode = concatenación.
-- [ ] Query item exclusivo del segmento 2 → solo descomprime segmento 2 (instrumentación / mock).
-- [ ] Bloom false positive → sorted array evita descompresión.
+- [x] Append 2 segmentos → decode = concatenación.
+- [x] Query item exclusivo del segmento 2 → solo descomprime segmento 2 (instrumentación / mock).
+- [x] Bloom false positive → sorted array evita descompresión.
 
 ---
 
 ### Fase 4 — Trial-based codec selection (todos los streams)
 
 Checklist:
-- [ ] TIME y VALUE: por bloque, probar top 2–3 inner codecs y elegir mínimo.
-- [ ] SNAPSHOT_LEN: probar VARINT/RLE/BITPACK.
-- [ ] ITEM_ID: probar VARINT/DICT/BITPACK.
-- [ ] QUANTITY: probar VARINT/RLE/DICT.
+- [x] TIME y VALUE: por bloque, probar top 2–3 inner codecs y elegir mínimo.
+- [x] SNAPSHOT_LEN: probar VARINT/RLE/BITPACK.
+- [x] ITEM_ID: probar VARINT/DICT/BITPACK.
+- [x] QUANTITY: probar VARINT/RLE/DICT.
+- [x] Refactor selectBestCodec for trial.
+- [x] Restore/Commit context properly (Fixed clone issues in ContextV0).
 
 Verificación:
-- [ ] `npm run bench` mejora ratio vs baseline.
+- [x] `npm run build`: ✅
+- [x] `npm test`: ✅ (**149/149 passed**)
+- [x] `npm run bench`: ✅ (TS_TREND_INT ratio improved to **23.17x** (local) vs before)
+
+Estado (2026-02-08 15:40):
+- ✅ Todos los streams ahora usan selección por prueba (trial).
+- ✅ SNAPSHOT_LEN ahora usa BITPACK o RLE si es más eficiente.
+- ✅ ITEM_ID usa DICT o BITPACK frecuentemente.
+- ✅ QUANTITY usa DICT o RLE frecuentemente.
+- ✅ ContextV0 corregido: `restore(snapshot)` ahora clona arrays para evitar contaminación entre pruebas.
+- ✅ Decoder robusto: Agregado bounds checking contra `RangeError` en bytes corruptos.
 
 ---
 
@@ -419,22 +431,22 @@ Nuevos archivos:
 - `src/gics/encryption.ts`
 
 Checklist:
-- [ ] PBKDF2 deriveKey(password, salt).
-- [ ] Encrypt/decrypt por sección con IV determinista (HMAC(fileNonce||streamId) → 12 bytes).
-- [ ] AAD = bytes del FileHeader.
-- [ ] Wrong password → error limpio.
-- [ ] Tampered ciphertext → `IntegrityError` (GCM auth).
+- [x] PBKDF2 deriveKey(password, salt).
+- [x] Encrypt/decrypt por sección con IV determinista (HMAC(fileNonce||streamId) → 12 bytes).
+- [x] AAD = bytes del FileHeader.
+- [x] Wrong password → error limpio.
+- [x] Tampered ciphertext → `IntegrityError` (GCM auth).
 
 ---
 
 ### Fase 6 — Validación cruzada + forensics (`GICS.verify`)
 
 Checklist:
-- [ ] Cross-stream validation:
-  - [ ] `time.length === snapshotLen.length`
-  - [ ] `sum(snapshotLen) === itemIds.length`
-  - [ ] `itemIds.length === values.length === qty.length`
-- [ ] `GICS.verify(bytes)` verifica chain+CRC sin descompresión.
+- [x] Cross-stream validation:
+  - [x] `time.length === snapshotLen.length`
+  - [x] `sum(snapshotLen) === itemIds.length`
+  - [x] `itemIds.length === values.length === qty.length`
+- [x] `GICS.verify(bytes)` verifica chain+CRC sin descompresión.
 
 ---
 

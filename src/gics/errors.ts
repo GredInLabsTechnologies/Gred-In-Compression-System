@@ -1,5 +1,5 @@
 export class GicsError extends Error {
-    constructor(message: string, public originalError?: any) {
+    constructor(message: string, public originalError?: unknown) {
         super(message);
         this.name = 'GicsError';
     }
@@ -12,7 +12,7 @@ export class IntegrityError extends GicsError {
     }
 }
 
-export class IncompleteDataError extends GicsError {
+export class IncompleteDataError extends IntegrityError {
     constructor(message: string) {
         super(message);
         this.name = 'IncompleteDataError';

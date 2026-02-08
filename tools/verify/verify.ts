@@ -1,4 +1,4 @@
-import { gics_decode, gics_encode, type Snapshot } from '../../src/index.js';
+import { gics_decode, gics_encode, type Snapshot, GICS } from '../../src/index.js';
 
 function buildDeterministicSnapshots(): Snapshot[] {
     const snapshots: Snapshot[] = [];
@@ -50,6 +50,12 @@ async function main() {
 
     const sparseCount = decoded.reduce((acc, s) => acc + (s.items.has(3) ? 1 : 0), 0);
     assert(sparseCount > 0, 'sparse item (3) never appeared after decode');
+
+
+    // New Phase 6 check: Forensics without decompression
+    const integrityOk = await GICS.verify(encoded);
+    assert(integrityOk, 'GICS.verify() failed on valid data');
+    console.log(`[verify] GICS.verify() integrity check passed.`);
 
     console.log(`[verify] OK. snapshots=${snapshots.length}, encodedBytes=${encoded.length}`);
 }

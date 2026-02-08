@@ -1,5 +1,6 @@
 
 import { encodeVarint, decodeVarint, encodeRLE, decodeRLE } from '../gics-utils.js';
+import { ContextV0 } from './context.js';
 
 export class Codecs {
 
@@ -93,7 +94,7 @@ export class Codecs {
     // LSB=1 -> Dictionary Hit. Value >> 1 is Index.
     // LSB=0 -> Literal. Value >> 1 is ZigZag(Delta). Update Dict.
 
-    static encodeDict(values: number[], context: any): Uint8Array {
+    static encodeDict(values: number[], context: ContextV0): Uint8Array {
         if (values.length === 0) return new Uint8Array(0);
 
         const output: number[] = [];
@@ -113,7 +114,7 @@ export class Codecs {
         return encodeVarint(output);
     }
 
-    static decodeDict(data: Uint8Array, context: any): number[] {
+    static decodeDict(data: Uint8Array, context: ContextV0): number[] {
         if (data.length === 0) return [];
         const raw = decodeVarint(data);
         const result: number[] = [];

@@ -57,6 +57,7 @@ describe('GICS v1.2 Roundtrip', () => {
         await enc.flush();
         await enc.finalize();
         const telemetry = enc.getTelemetry();
+        if (!telemetry) throw new Error("Telemetry missing");
 
         expect(telemetry).toBeDefined();
         expect(telemetry.blocks).toBeDefined();

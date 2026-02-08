@@ -26,9 +26,7 @@ export * from './gics-range-reader.js';
 export async function gics_encode(snapshots: Snapshot[], config?: HybridConfig): Promise<Uint8Array> {
     const encoder = new GICSv2Encoder();
     for (const s of snapshots) await encoder.addSnapshot(s);
-    const data = await encoder.flush();
-    await encoder.finalize();
-    return data;
+    return await encoder.finish();
 }
 
 /**
@@ -38,3 +36,18 @@ export async function gics_decode(data: Uint8Array): Promise<Snapshot[]> {
     const decoder = new GICSv2Decoder(data);
     return await decoder.getAllSnapshots();
 }
+
+/**
+ * GICS v1.3 Standard API
+ */
+export const GICS = {
+    pack: gics_encode,
+    unpack: gics_decode,
+    /**
+     * Verifies the entire file integrity (Hash Chain, CRCs) WITHOUT decompressing payloads.
+     */
+    verify: async (data: Uint8Array): Promise<boolean> => {
+        const decoder = new GICSv2Decoder(data);
+        return await decoder.verifyIntegrityOnly();
+    }
+};

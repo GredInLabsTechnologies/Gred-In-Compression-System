@@ -8,6 +8,8 @@ export interface BlockManifestEntry {
 }
 
 export class StreamSection {
+    private _deserializedSize: number | null = null;
+
     constructor(
         public readonly streamId: StreamId,
         public readonly outerCodecId: OuterCodecId,
@@ -16,7 +18,8 @@ export class StreamSection {
         public readonly compressedLen: number,
         public readonly sectionHash: Uint8Array,
         public readonly manifest: BlockManifestEntry[],
-        public readonly payload: Uint8Array
+        public readonly payload: Uint8Array,
+        public readonly authTag: Uint8Array | null = null
     ) { }
 
     static serializeManifest(manifest: BlockManifestEntry[]): Uint8Array {
@@ -37,7 +40,8 @@ export class StreamSection {
      */
     serialize(): Uint8Array {
         const manifestSize = this.manifest.length * 10;
-        const totalSize = 1 + 1 + 2 + 4 + 4 + 32 + manifestSize + this.payload.length;
+        const tagSize = this.authTag ? 16 : 0;
+        const totalSize = 1 + 1 + 2 + 4 + 4 + 32 + tagSize + manifestSize + this.payload.length;
         const buffer = new Uint8Array(totalSize);
         const view = new DataView(buffer.buffer);
 
@@ -48,6 +52,11 @@ export class StreamSection {
         view.setUint32(pos, this.uncompressedLen, true); pos += 4;
         view.setUint32(pos, this.compressedLen, true); pos += 4;
         buffer.set(this.sectionHash, pos); pos += 32;
+
+        if (this.authTag) {
+            buffer.set(this.authTag, pos);
+            pos += 16;
+        }
 
         for (const entry of this.manifest) {
             view.setUint8(pos++, entry.innerCodecId);
@@ -60,7 +69,8 @@ export class StreamSection {
         return buffer;
     }
 
-    static deserialize(data: Uint8Array, offset: number): StreamSection {
+    static deserialize(data: Uint8Array, offset: number, isEncrypted: boolean = false): StreamSection {
+        if (offset + 12 > data.length) throw new Error("Truncated Section Header");
         const view = new DataView(data.buffer, data.byteOffset + offset);
         let pos = 0;
 
@@ -69,19 +79,28 @@ export class StreamSection {
         const blockCount = view.getUint16(pos, true); pos += 2;
         const uncompressedLen = view.getUint32(pos, true); pos += 4;
         const compressedLen = view.getUint32(pos, true); pos += 4;
+
+        if (offset + pos + 32 > data.length) throw new Error("Truncated Section Hash");
         const sectionHash = data.slice(offset + pos, offset + pos + 32); pos += 32;
+
+        let authTag: Uint8Array | null = null;
+        if (isEncrypted) {
+            if (offset + pos + 16 > data.length) throw new Error("Truncated Section Auth Tag");
+            authTag = data.slice(offset + pos, offset + pos + 16);
+            pos += 16;
+        }
 
         const manifest: BlockManifestEntry[] = [];
         for (let i = 0; i < blockCount; i++) {
-            manifest.push({
-                innerCodecId: view.getUint8(pos++),
-                nItems: view.getUint32(pos, true),
-                payloadLen: view.getUint32(pos + 4, true), // Corrected offset for payloadLen
-                flags: view.getUint8(pos + 8) // Corrected offset for flags
-            });
-            pos += 4 + 4 + 1; // nItems (4 bytes) + payloadLen (4 bytes) + flags (1 byte)
+            if (offset + pos + 10 > data.length) throw new Error("Truncated Section Manifest");
+            const innerCodecId = view.getUint8(pos++);
+            const nItems = view.getUint32(pos, true); pos += 4;
+            const payloadLen = view.getUint32(pos, true); pos += 4;
+            const flags = view.getUint8(pos++);
+            manifest.push({ innerCodecId, nItems, payloadLen, flags });
         }
 
+        if (offset + pos + compressedLen > data.length) throw new Error("Truncated Section Payload");
         const payload = data.slice(offset + pos, offset + pos + compressedLen);
 
         const section = new StreamSection(
@@ -92,13 +111,14 @@ export class StreamSection {
             compressedLen,
             sectionHash,
             manifest,
-            payload
+            payload,
+            authTag
         );
-        (section as any)._totalSize = pos + compressedLen;
+        section._deserializedSize = pos + compressedLen;
         return section;
     }
 
     get totalSize(): number {
-        return (this as any)._totalSize ?? (1 + 1 + 2 + 4 + 4 + 32 + this.manifest.length * 10 + this.payload.length);
+        return this._deserializedSize ?? (1 + 1 + 2 + 4 + 4 + 32 + (this.authTag ? 16 : 0) + this.manifest.length * 10 + this.payload.length);
     }
 }

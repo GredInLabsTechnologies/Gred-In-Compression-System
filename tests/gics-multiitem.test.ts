@@ -1,15 +1,6 @@
 import { gics_encode, gics_decode, Snapshot } from '../src/index.js';
-import { GICSv2Encoder } from '../src/gics/encode.js';
-import { GICSv2Decoder } from '../src/gics/decode.js';
 
-describe('GICS v1.2 Multi-Item Roundtrip', () => {
-    beforeEach(() => {
-        process.env.GICS_VERSION = '1.2';
-        process.env.GICS_CONTEXT_MODE = 'off';
-        GICSv2Encoder.resetSharedContext();
-        GICSv2Decoder.resetSharedContext();
-    });
-
+describe('GICS Multi-Item Roundtrip', () => {
     it('should roundtrip multi-item snapshots exactly', async () => {
         const snapshots: Snapshot[] = [];
         const baseTime = 1700000000;
@@ -27,8 +18,8 @@ describe('GICS v1.2 Multi-Item Roundtrip', () => {
 
         const encoded = await gics_encode(snapshots);
 
-        // Validate EOS marker
-        expect(encoded[encoded.length - 1]).toBe(0xFF);
+        // Validate EOS marker (v1.3: 0xFF at -37)
+        expect(encoded.at(-37)).toBe(0xFF);
 
         const decoded = await gics_decode(encoded);
 
@@ -156,10 +147,7 @@ describe('GICS v1.2 Multi-Item Roundtrip', () => {
         const snapshots1: Snapshot[] = [{ timestamp: 1000, items: map1 }];
         const snapshots2: Snapshot[] = [{ timestamp: 1000, items: map2 }];
 
-        GICSv2Encoder.resetSharedContext();
         const encoded1 = await gics_encode(snapshots1);
-
-        GICSv2Encoder.resetSharedContext();
         const encoded2 = await gics_encode(snapshots2);
 
         // Same bytes regardless of insertion order
@@ -176,8 +164,8 @@ describe('GICS v1.2 Multi-Item Roundtrip', () => {
         const snapshots: Snapshot[] = [{ timestamp: 1000, items: map }];
         const encoded = await gics_encode(snapshots);
 
-        // Corrupt: remove EOS marker
-        const corrupted = encoded.slice(0, -1);
+        // Corrupt: remove whole 37-byte footer
+        const corrupted = encoded.slice(0, -37);
 
         await expect(gics_decode(corrupted)).rejects.toThrow('EOS marker');
     });

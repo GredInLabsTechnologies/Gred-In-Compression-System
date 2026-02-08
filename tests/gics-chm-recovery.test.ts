@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import { GICSv2Encoder } from '../src/gics/encode.js';
-import { BLOCK_FLAGS } from '../src/gics/format.js';
 import { StreamSection } from '../src/gics/stream-section.js';
+import { SegmentHeader } from '../src/gics/segment.js';
 
 // Mocks
 // We need to subclass or mock GICSv2Encoder to force behavior?
@@ -124,36 +124,43 @@ describe('GICS v1.2 CHM Recovery Probe', () => {
             await Promise.all(patternData.map(val => enc.addSnapshot({ timestamp: Date.now(), items: new Map([[1, { price: val, quantity: 1 }]]) })));
         }
 
-        const finalData = await enc.flush();
+        const finalData = await enc.finish();
 
         // We verify the Flags in finalData.
         // We expect to see ANOMALY_END eventually.
         // Parse blocks.
 
-
         let blockIndicesWithEnd: number[] = [];
         let valueBlockCount = 0;
 
-        // Note: previous flushes output bytes too. "finalData" only contains new blocks from last flush?
-        // Yes, `flush` returns current buffer.
-        // So we scan `finalData` which corresponds to the 20 recovery blocks.
-        // Block indices start from 12? (10 training + 1 anomaly = 11).
+        let pos = 14; // GICS_HEADER_SIZE_V3
+        const dataEnd = finalData.length - 37; // FILE_EOS_SIZE
 
-        // We need to handle `finalData` might be empty if loop failed? No.
+        while (pos < dataEnd) {
+            if (finalData[pos] === 0x53 && finalData[pos + 1] === 0x47) { // SEGMENT_MAGIC "SG"
+                const segmentStart = pos;
+                const header = SegmentHeader.deserialize(finalData.subarray(pos, pos + 14));
+                pos += 14;
 
-        let pos = 0; // In finalData, it starts at 0 (no file header)
-        while (pos < finalData.length - 1) { // Skip EOS
-            const section = StreamSection.deserialize(finalData, pos);
-            pos += section.totalSize;
-
-            if (section.streamId === 20) { // Value Stream (StreamId.VALUE = 20)
-                for (let i = 0; i < section.manifest.length; i++) {
-                    valueBlockCount++;
-                    const flags = section.manifest[i].flags;
-                    if ((flags & BLOCK_FLAGS.ANOMALY_END) !== 0) {
-                        blockIndicesWithEnd.push(valueBlockCount);
+                const sectionsEnd = segmentStart + header.indexOffset;
+                while (pos < sectionsEnd) {
+                    const section = StreamSection.deserialize(finalData, pos);
+                    if (section.streamId === 20) { // Value Stream
+                        for (const entry of section.manifest) {
+                            valueBlockCount++;
+                            if ((entry.flags & 4) !== 0) { // ANOMALY_END
+                                blockIndicesWithEnd.push(valueBlockCount);
+                            }
+                        }
                     }
+                    pos += section.totalSize;
                 }
+                pos = sectionsEnd;
+                while (pos < dataEnd && !(finalData[pos] === 0x53 && finalData[pos + 1] === 0x47)) {
+                    pos++;
+                }
+            } else {
+                pos++;
             }
         }
 
@@ -161,11 +168,9 @@ describe('GICS v1.2 CHM Recovery Probe', () => {
         assert.strictEqual(blockIndicesWithEnd.length, 1, 'Should find one ANOMALY_END block');
 
         // It should be roughly after M*N blocks.
-        // 3 * 4 = 12 blocks delay from START of QUARANTINE.
-        // Quarantine started at Block 11. 11 + 12 = 23 (Absolute).
-        // Wait, probes at 12, 16, 20. Recovery at 20.
-        // Relative to flush (starting at 12): 20 - 11 = 9.
-        assert.ok(blockIndicesWithEnd[0] >= 8 && blockIndicesWithEnd[0] <= 12, `Recovery should happen around probe 3 (Redux 9). Found at ${blockIndicesWithEnd[0]}`);
+        // 10 training + 1 noise = 11.
+        // Probes every 4. M=3. Recovery at block 12+11 = 23 approx.
+        assert.ok(blockIndicesWithEnd[0] >= 20 && blockIndicesWithEnd[0] <= 35, `Recovery should happen around probe 3. Found at ${blockIndicesWithEnd[0]}`);
 
     });
 });

@@ -30,12 +30,21 @@ export const OuterCodecNone: OuterCodec = {
 /**
  * Zstd codec wrapper.
  */
-let zstdInstance: any = null;
+interface ZstdSimple {
+    compress(data: Uint8Array, level: number): Uint8Array | null;
+    decompress(data: Uint8Array): Uint8Array | null;
+}
 
-async function getZstd() {
+interface ZstdInstance {
+    Simple: new () => ZstdSimple;
+}
+
+let zstdInstance: ZstdInstance | null = null;
+
+async function getZstd(): Promise<ZstdInstance> {
     if (zstdInstance) return zstdInstance;
     return new Promise((resolve) => {
-        ZstdCodec.run((zstd) => {
+        ZstdCodec.run((zstd: ZstdInstance) => {
             zstdInstance = zstd;
             resolve(zstd);
         });
@@ -46,14 +55,14 @@ export const OuterCodecZstd: OuterCodec = {
     id: OuterCodecId.ZSTD,
     name: 'ZSTD',
     async compress(data: Uint8Array, level: number = 3) {
-        const zstd: any = await getZstd();
+        const zstd = await getZstd();
         const simple = new zstd.Simple();
         const compressed = simple.compress(data, level);
         if (!compressed) throw new Error('Zstd compression failed');
         return compressed;
     },
     async decompress(data: Uint8Array) {
-        const zstd: any = await getZstd();
+        const zstd = await getZstd();
         const simple = new zstd.Simple();
         const decompressed = simple.decompress(data);
         if (!decompressed) throw new Error('Zstd decompression failed');

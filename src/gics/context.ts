@@ -199,9 +199,9 @@ export class ContextV0 implements ContextStore {
         this.lastValue = s.lastValue;
         this.lastValueDelta = s.lastValueDelta;
 
-        // Restore Dictionary
-        this.dictionary = s.dictionary;
-        this.dictMap = s.dictMap;
+        // Restore Dictionary (MUST CLONE to avoid mutating the snapshot if used multiple times)
+        this.dictionary = [...s.dictionary];
+        this.dictMap = new Map(s.dictMap);
         this.dictPos = s.dictPos;
     }
 }

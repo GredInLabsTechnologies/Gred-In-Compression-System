@@ -15,7 +15,7 @@ describe('GICS v1.3 Format', () => {
             const encoder = new GICSv2Encoder();
             const snapshot = createSnapshot(1000, 1, 100, 1);
             await encoder.addSnapshot(snapshot);
-            const bytes = await encoder.flush();
+            const bytes = await encoder.finish();
 
             // Verify GICS magic + version
             expect(bytes[0]).toBe(0x47); // G
@@ -29,7 +29,7 @@ describe('GICS v1.3 Format', () => {
             const encoder = new GICSv2Encoder();
             const snapshot = createSnapshot(1000, 42, 1500, 10);
             await encoder.addSnapshot(snapshot);
-            const bytes = await encoder.flush();
+            const bytes = await encoder.finish();
 
             const decoder = new GICSv2Decoder(bytes);
             const snapshots = await decoder.getAllSnapshots();
@@ -45,7 +45,7 @@ describe('GICS v1.3 Format', () => {
             const encoder = new GICSv2Encoder();
             const snapshot = createSnapshot(1000, 1, 100, 1);
             await encoder.addSnapshot(snapshot);
-            const bytes = await encoder.flush();
+            const bytes = await encoder.finish();
 
             // Tamper with 1 byte in the middle of the payload
             // Skip header (9 bytes: magic 4 + version 1 + flags 4) and corrupt somewhere in the stream sections
@@ -62,13 +62,13 @@ describe('GICS v1.3 Format', () => {
             const encoder = new GICSv2Encoder();
             const snapshot = createSnapshot(2000, 5, 200, 2);
             await encoder.addSnapshot(snapshot);
-            const bytes = await encoder.flush();
+            const bytes = await encoder.finish();
 
             // Find and corrupt a hash field (32 bytes after section header)
             // Section starts after file header (9 bytes)
             // Section header: streamId(1) + outerCodecId(1) + blockCount(2) + uncompressedLen(4) + compressedLen(4) = 12 bytes
             // Then comes sectionHash (32 bytes)
-            const hashOffset = 9 + 12 + 5; // File header + section header start + offset into hash
+            const hashOffset = 50; // Guaranteed to be within the first section hash (starts at 40)
             if (hashOffset < bytes.length - 1) {
                 bytes[hashOffset] ^= 0xFF; // Corrupt hash
             }
@@ -84,7 +84,7 @@ describe('GICS v1.3 Format', () => {
                 const snapshot = createSnapshot(1000 + i * 1000, i + 1, 100 + i * 10, i + 1);
                 await encoder.addSnapshot(snapshot);
             }
-            const bytes = await encoder.flush();
+            const bytes = await encoder.finish();
 
             const decoder = new GICSv2Decoder(bytes);
             const snapshots = await decoder.getAllSnapshots();
@@ -101,7 +101,7 @@ describe('GICS v1.3 Format', () => {
 
             const encoder = new GICSv2Encoder();
             await encoder.addSnapshot(original);
-            const bytes = await encoder.flush();
+            const bytes = await encoder.finish();
 
             const decoder = new GICSv2Decoder(bytes);
             const snapshots = await decoder.getAllSnapshots();
@@ -122,7 +122,7 @@ describe('GICS v1.3 Format', () => {
                 ])
             };
             await encoder.addSnapshot(snapshot);
-            const bytes = await encoder.flush();
+            const bytes = await encoder.finish();
 
             const decoder = new GICSv2Decoder(bytes);
             const snapshots = await decoder.getAllSnapshots();
@@ -149,7 +149,7 @@ describe('GICS v1.3 Format', () => {
                 await encoder.addSnapshot(snapshot);
             }
 
-            const bytes = await encoder.flush();
+            const bytes = await encoder.finish();
             const decoder = new GICSv2Decoder(bytes);
             const snapshots = await decoder.getAllSnapshots();
 
@@ -191,7 +191,7 @@ describe('GICS v1.3 Format', () => {
             const encoder = new GICSv2Encoder();
             const snapshot = createSnapshot(4000, 7, 777, 7);
             await encoder.addSnapshot(snapshot);
-            const bytes = await encoder.flush();
+            const bytes = await encoder.finish();
 
             // Decode and verify all streams are present
             const decoder = new GICSv2Decoder(bytes);
@@ -217,7 +217,7 @@ describe('GICS v1.3 Format', () => {
                 await encoder.addSnapshot(snapshot);
             }
 
-            const bytes = await encoder.flush();
+            const bytes = await encoder.finish();
 
             // With Zstd outer compression, the output should be significantly smaller
             // than uncompressed (rough estimate: 50 snapshots × minimal size)

@@ -21,6 +21,10 @@ export type GICSv2EncoderOptions = {
     sidecarWriter?: GICSv2SidecarWriter | null;
     /** Optional logger hook to surface CHM / debug messages without console.* in src/. */
     logger?: GICSv2Logger | null;
+    /** Segment size limit in bytes (uncompressed estimation). Default 1MB. */
+    segmentSizeLimit?: number;
+    /** Optional password for AES-256-GCM encryption (v1.3+). */
+    password?: string;
 };
 
 export type GICSv2DecoderOptions = {
@@ -32,4 +36,6 @@ export type GICSv2DecoderOptions = {
     integrityMode?: 'strict' | 'warn';
     /** Optional logger for warnings in 'warn' mode */
     logger?: GICSv2Logger | null;
+    /** Password for AES-256-GCM encryption (v1.3+). */
+    password?: string;
 };

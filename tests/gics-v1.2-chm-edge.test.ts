@@ -49,6 +49,7 @@ describe('GICS v1.2 CHM Edge Cases', () => {
 
         const output = await encoder.flush();
         const telemetry = encoder.getTelemetry();
+        if (!telemetry) throw new Error("Telemetry missing");
 
         // Analyze Blocks
         // Analyze Blocks

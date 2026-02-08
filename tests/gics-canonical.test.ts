@@ -1,5 +1,4 @@
 import { gics_encode } from '../src/index.js';
-import { GICSv2Encoder } from '../src/gics/encode.js';
 import { Snapshot } from '../src/gics-types.js';
 import crypto from 'node:crypto';
 
@@ -19,16 +18,10 @@ class LGC {
     }
 }
 
-describe('GICS v1.2 Canonical Reference', () => {
+describe('GICS v1.3 Canonical Reference', () => {
     // THIS HASH MUST NEVER CHANGE ONCE LOCKED
     // BASELINE HASH for v1.3 (Sections + Zstd + Hash Chain)
-    const BASELINE_HASH = '15d1cc4d5ec48718c781f52f300f2fdf363dca44e0dfea4d5ebebe793559c448';
-
-    beforeEach(() => {
-        process.env.GICS_VERSION = '1.2';
-        process.env.GICS_CONTEXT_MODE = 'off';
-        GICSv2Encoder.resetSharedContext();
-    });
+    const BASELINE_HASH = '60c70058a6e78cfc5fda763989ff497e92d90138ce1a1eaefef2125a50a06490';
 
     it('should match the BASELINE SHA-256 hash for deterministic dataset', async () => {
         const rng = new LGC(123456789); // Fixed seed
