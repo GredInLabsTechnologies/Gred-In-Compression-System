@@ -1,0 +1,46 @@
+name: SonarCloud Analysis
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sonarcloud:
+    name: SonarCloud Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Optional. This repo does not currently pin a Vitest coverage provider dependency,
+      # so coverage may fail depending on your setup. Keep it non-blocking.
+      - name: Run tests (optional)
+        run: npm test
+        continue-on-error: true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Default expects a repo secret named SONAR_TOKEN.
+          # If you created it with a different name (e.g. "sonarqube"), change it here.
+          SONAR_TOKEN: ${{ secrets.sonarqube }}

@@ -13,7 +13,7 @@ Al recibir `/v1.3`, el agente DEBE:
 2. `docs/REPO_LAYOUT.md`
 3. `docs/FORMAT.md`
 4. `docs/SECURITY_MODEL.md`
-5. `GICS_v1.3_IMPLEMENTATION_REPORT.md`
+5. `docs/reports/GICS_v1.3_IMPLEMENTATION_REPORT.md`
 
 ## 3. Declaración Inicial (Plantilla)
 El primer mensaje del agente tras `/v1.3` debe incluir:

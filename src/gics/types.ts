@@ -25,6 +25,8 @@ export type GICSv2EncoderOptions = {
     segmentSizeLimit?: number;
     /** Optional password for AES-256-GCM encryption (v1.3+). */
     password?: string;
+    /** Optional schema profile for generic field encoding. If omitted, legacy price/quantity mode. */
+    schema?: import('../gics-types.js').SchemaProfile;
 };
 
 export type GICSv2DecoderOptions = {

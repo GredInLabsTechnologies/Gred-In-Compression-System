@@ -1,9 +1,8 @@
-import { describe, it, expect } from 'vitest';
+// NOTE: Vitest globals are enabled (see vitest.config.ts). Avoid importing from
+// 'vitest' in test files to prevent "No test suite found" issues.
 import { GICSv2Encoder } from '../src/gics/encode.js';
 import { GICSv2Decoder } from '../src/gics/decode.js';
-import { StreamId, InnerCodecId, OuterCodecId } from '../src/gics/format.js';
-import { StreamSection } from '../src/gics/stream-section.js';
-import { IncompleteDataError, IntegrityError, LimitExceededError } from '../src/gics/errors.js';
+import { LimitExceededError } from '../src/gics/errors.js';
 import { calculateCRC32 } from '../src/gics/integrity.js';
 import type { Snapshot } from '../src/gics-types.js';
 
@@ -72,9 +71,7 @@ describe('Advorsarial Suite (Fase 8)', () => {
                     const decoder = new GICSv2Decoder(truncated);
                     await decoder.getAllSnapshots();
                 } catch (err) {
-                    if (err instanceof IncompleteDataError || (err instanceof Error && err.message.toLocaleLowerCase().includes('too short'))) {
-                        caught++;
-                    } else if (err instanceof Error) {
+                    if (err instanceof Error) {
                         caught++;
                     }
                 }

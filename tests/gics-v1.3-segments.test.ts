@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+// NOTE: Vitest globals are enabled (see vitest.config.ts). Avoid importing from
+// 'vitest' in test files to prevent "No test suite found" issues.
 import { GICSv2Encoder } from '../src/gics/encode.js';
 import { GICSv2Decoder } from '../src/gics/decode.js';
 import { Snapshot } from '../src/gics-types.js';
@@ -98,9 +99,28 @@ describe('GICS v1.3 Segments & Append', () => {
         for (const s of createSnapshots(5, 1600000000000, 101)) await encoder.push(s);
         const data = await encoder.seal();
 
-        // Tamper with data segment
+        // Tamper with 1 byte inside the *first stream section payload*.
+        // Important: don't corrupt SegmentHeader fields (e.g. totalLength) because the decoder
+        // may fail earlier with a parse/truncation error instead of an integrity failure.
+        //
+        // Layout (v1.3): [FileHeader(14)] [SegmentHeader(14)] [StreamSection...] [SegmentIndex] [SegmentFooter(36)] [FileEOS(37)]
         const tampered = new Uint8Array(data);
-        tampered[20] ^= 0xFF;
+
+        const fileHeaderSize = 14;
+        const segmentHeaderSize = 14;
+        const sectionOffset = fileHeaderSize + segmentHeaderSize;
+        // StreamSection header is 12 bytes up to compressedLen (see StreamSection.deserialize)
+        const view = new DataView(tampered.buffer, tampered.byteOffset + sectionOffset);
+        const blockCount = view.getUint16(2, true);
+        const compressedLen = view.getUint32(8, true);
+        const sectionHeaderTotal = 44 + blockCount * 10; // 12 + hash(32) + manifest
+        const payloadStart = sectionOffset + sectionHeaderTotal;
+
+        const corruptAt = payloadStart + Math.floor(compressedLen / 2);
+        if (corruptAt >= tampered.length - 37) {
+            throw new Error('Test invariant failed: corruptAt outside data region');
+        }
+        tampered[corruptAt] ^= 0x01;
 
         const decoder = new GICSv2Decoder(tampered);
         await expect(decoder.getAllSnapshots()).rejects.toThrow(/CRC|Hash mismatch/);

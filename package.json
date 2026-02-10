@@ -13,15 +13,28 @@
         "build": "tsc",
         "test": "vitest run",
         "bench": "tsx bench/scripts/harness.ts && tsx bench/scripts/gen-report.ts",
-        "verify": "tsx tools/verify/verify.ts"
+        "bench:forensics": "tsx bench/forensics/postfreeze/harness.postfreeze.ts",
+        "bench:forensics:verify": "tsx bench/forensics/postfreeze/verifier.postfreeze.ts",
+        "bench:forensics:summary": "tsx bench/forensics/postfreeze/summary.postfreeze.ts",
+        "verify": "tsx tools/verify/verify.ts",
+        "sonar": "sonar-scanner",
+        "lint": "eslint src/**/*.ts"
     },
     "dependencies": {
         "zstd-codec": "^0.1.5"
     },
     "devDependencies": {
+        "@eslint/js": "^10.0.1",
         "@types/node": "^20.10.0",
+        "@typescript-eslint/eslint-plugin": "^8.55.0",
+        "@typescript-eslint/parser": "^8.55.0",
+        "eslint": "^9.39.2",
+        "eslint-plugin-sonarjs": "^3.0.6",
+        "globals": "^17.3.0",
+        "sonarqube-scanner": "^4.3.4",
         "tsx": "^4.19.2",
         "typescript": "^5.3.3",
+        "typescript-eslint": "^8.55.0",
         "vitest": "^4.0.18"
     },
     "engines": {

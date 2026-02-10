@@ -4,7 +4,7 @@
 >
 
 **Operativa / ejecución por agentes:** ver **`docs/AGENT_PROTOCOL_V1_3.md`** (SOP del comando `/v1.3 fase N`, gates de verificación, revisión, commit/push).
-> Estado: **En Progreso** (Fase 10: SonarQube/Cleanup).
+> Estado: **Release Candidate listo** (Fase 11 completada; Fase 12 naming pendiente por decisión).
 
 **Operativa / ejecución por agentes:** ver **`docs/AGENT_PROTOCOL_V1_3.md`** (SOP del comando `/v1.3 fase N`, gates de verificación, revisión, commit/push).
 
@@ -82,7 +82,7 @@ magic(4:"GICS") + version(1:0x03) + flags(4) + streamCount(1) + reserved(4)
 Si `encryption flag`:
 
 ```
-encMode(1) + salt(16) + authVerify(32) + kdfId(1) + iterations(4) + digestId(1) + fileNonce(8)
+encMode(1) + salt(16) + authVerify(32) + kdfId(1) + iterations(4) + digestId(1) + fileNonce(12)
 ```
 
 ### 4.4 StreamSection
@@ -201,6 +201,33 @@ await enc.sealToFile();
 | 9 | Verificación final (Release Candidate) | ✅ |  |  | 2026-02-08 | Verificación completa: Build, Test (166/166), Bench (50.18x), Verify OK. Ready for release. |
 
 | 10 | SonarQube & Code Cleanup | ✅ |  |  | 2026-02-08 | Target: 0 lint issues, <5% duplication. Cleaned up unused imports and refactored test complexity. |
+
+| 11 | Bench forensics (future-proof) + KPI CORE/QUARANTINE + "anti-monstruo" en QUARANTINE | ✅ |  |  | 2026-02-10 | Implementado codec no-expansivo en QUARANTINE (`FIXED64_LE`) + harness forense. Contract: `Structured_TrendNoise core_ratio=186.13 (min=50)` + determinismo OK. |
+
+| 12 | Renombrado profesional (de-marketing) — nomenclatura de funciones/APIs | ⬜ |  |  |  | Eliminar términos “marketing / cachondeo” y estandarizar naming con calidad ingenieril. |
+
+### Re-verificación factual (2026-02-09)
+
+Tras auditoría /v1.3 (fase 9) se re-ejecutaron gates y métricas en este workspace:
+
+- `npm run build`: ✅ (tsc)
+- `npm test`: ✅ **31 test files**, **166 tests passed**
+  - Nota: se corrigió un problema de runner en Vitest causado por `import { describe,it,expect } from 'vitest'` en varios tests; con `globals: true` puede provocar `No test suite found`.
+- `npm run verify`: ✅ (`[verify] GICS.verify() integrity check passed.`)
+- `npm run bench`: ✅ (`TS_TREND_INT 50.18x`, `TS_VOLATILE_INT 20.89x`)
+
+### Re-verificación factual (2026-02-10)
+
+Tras continuar el trabajo de schema/generic decoder y ajustes de tests en este workspace:
+
+- `npm run build`: ✅
+- `npm test`: ✅ (Vitest)
+  - Nota: `tests/gics-quarantine-cap.test.ts` se ajustó para usar APIs globales de Vitest (evita `No test suite found` con `globals: true`).
+  - Nota: el ruido del test anti-monstruo se hizo determinista (PRNG) para evitar flakes.
+- `npm run verify`: ✅ (`[verify] GICS.verify() integrity check passed.`)
+- `npm run bench`: ✅ (harness + reporte generado)
+- `npm run bench:forensics`: ✅ (6/6 roundtrip OK, determinismo OK)
+- `npm run bench:forensics:verify`: ✅ (`Structured_TrendNoise core_ratio: 186.13 (min=50)`)
 
 Leyenda de Estado: ⬜ pendiente / 🟨 en progreso / ✅ completada / ❌ bloqueada
 
@@ -492,6 +519,124 @@ Checklist:
 
 ---
 
+### Fase 11 — Bench Forensics (future-proof) + KPI CORE/QUARANTINE + “anti-monstruo”
+
+**Motivación**
+
+- El bench actual (`npm run bench`) reporta un ratio “storage” (inputBytes/fileBytes) útil pero **no suficiente** para contratos de producto donde:
+  - el cliente evalúa el “histórico sano” (CORE) por separado,
+  - y los bytes en QUARANTINE (ataque/ruido/corrupción) deben **aislarse** sin contaminar el KPI principal.
+- Además se requiere un harness empírico reutilizable “para versiones futuras” que produzca **datos crudos** y artefactos verificables (no solo tests que miran métricas seleccionadas).
+
+**Fuente / referencia histórica**
+
+En `GICS-ARCHIVE` ya existe un sistema “postfreeze” que genera:
+- `*_raw.json`, `*_encoded.bin`, `*_encoded.sha256`
+- `*_trace.json` (por bloque: routing_decision, codec, entropía)
+- `*_kpi.json` (core_ratio/global_ratio)
+- `*_impact.json` (quarantine rates)
+- `*_decoded.json` + hash (evidencia roundtrip)
+
+Y un verificador con “contract thresholds” por dataset.
+
+**Objetivo (DoD de Fase 11)**
+
+1) **Bench Forensics portable** dentro de este repo:
+   - Portar el harness postfreeze a `bench/forensics/`.
+   - Mantener datasets representativos:
+     - `Structured_TrendNoise`
+     - `Mixed_RegimeSwitch`
+     - `HighEntropy_Random`
+   - Generar artefactos + verificador determinista (A/B si procede).
+
+2) **KPI dual obligatorio** (evitar discusiones futuras):
+   - `core_ratio` (CORE-only): `core_input_bytes/core_output_bytes`
+   - `global_ratio` (storage): `total_input_bytes/total_output_bytes`
+   - `quarantine_block_rate` y `quarantine_byte_rate`
+
+3) **Contrato de producto propuesto (mínimos)**
+   - `Structured_TrendNoise`: **core_ratio >= 50×** (mínimo producto), 100× aspiracional.
+   - `HighEntropy_Random`: no se exige 50×; se exige **degradación controlada** y límites anti-expansión.
+
+4) **“Anti-monstruo” en QUARANTINE (degradación controlada)**
+   - Problema: el fallback actual de QUARANTINE (varints) puede inflar tamaño en alta entropía.
+   - Solución propuesta: añadir un codec QUARANTINE no-expansivo (p.ej. `FIXED32_LE` o `FIXED64_LE`) para acotar crecimiento.
+   - Resultado esperado:
+     - cota explícita de bytes en QUARANTINE por ítem,
+     - ratio global bajo ataque no se degrada de forma patológica.
+
+**Gates**
+
+- `npm run build`
+- `npm test`
+- `npm run bench` (añadir reporte dual o reporte separado de forensics)
+- `npm run verify`
+
+
+---
+
+### Fase 12 — Renombrado profesional (de-marketing) — nomenclatura de funciones/APIs
+
+**Motivación**
+
+- El repo ha acumulado términos internos “de marketing”, metáforas y jerga poco profesional que:
+  - dificulta revisión y mantenimiento,
+  - introduce ambigüedad sobre responsabilidades,
+  - afecta la percepción de calidad (ingeniería).
+
+**Objetivo**
+
+Aplicar un renombrado coherente y sistemático para que:
+- los nombres describan **qué hace** el código (no “narrativa”),
+- las APIs públicas sean claras y estables,
+- el código sea más legible para agentes futuros.
+
+**Alcance (scope)**
+
+- Renombrado de:
+  - funciones/métodos internos,
+  - tipos/interfaces,
+  - variables/constantes de dominio,
+  - nombres de ficheros/módulos cuando sea necesario.
+- Atención especial a:
+  - paths/imports TypeScript,
+  - nombres de errores (Error types) y mensajes,
+  - documentación (`README.md`, `docs/*.md`),
+  - tests (nombres y descripciones).
+
+**Política de compatibilidad (API pública)**
+
+- Mantener la API pública actual (`GICS.pack/unpack/verify`, `GICS.Encoder/Decoder`) salvo decisión explícita.
+- Si se renombra algo público:
+  - introducir alias de compatibilidad con deprecación documentada (cuando aplique),
+  - actualizar `docs/VERSIONING.md` si cambia superficie pública.
+
+**Guías de naming (mínimo obligatorio)**
+
+- Nombres descriptivos, “boring engineering”. Sin metáforas, sin “bromas”, sin términos de marketing.
+- Funciones: verbo + objeto (`encodeStreamSection`, `selectInnerCodec`, `verifyIntegrityChain`).
+- Tipos/clases: sustantivo (`SegmentIndex`, `IntegrityChain`, `StreamSection`).
+- Evitar abreviaturas no estándar; acrónimos consistentes en mayúsculas (CRC, KDF, IV).
+- QUARANTINE/CORE: se mantienen como términos técnicos del modelo de seguridad.
+
+**DoD de Fase 12 (checklist)**
+
+- [ ] Inventario de términos a sustituir (lista en el reporte de fase) + mapping old→new.
+- [ ] Renombrado aplicado de forma consistente (código + tests + docs).
+- [ ] Sin cambios de comportamiento (refactor semántico): bit-exact donde aplique.
+- [ ] No quedan referencias “huérfanas” (search/grep limpio para los términos eliminados).
+- [ ] Si hay cambios en API pública: aliases/deprecations documentadas.
+
+**Gates**
+
+- `npm run build`
+- `npm test`
+- `npm run verify`
+- (opcional) `npm run bench` si el refactor toca paths críticos de bench/harness
+
+
+---
+
 ## 9) Verificación (comandos oficiales)
 
 ```bash
@@ -507,8 +652,14 @@ npm run verify
 
 - [x] `npm run build` sin errores.
 - [x] `npm test` pasa completo.
-- [x] `npm run bench`: TS_TREND_INT ratio **>= 23×** (Verified 50x in Phase 8).
-  - *Note*: Ambitious goal was 100x. Current best on small datasets is ~50x. Ultra-compression repro shows >100x possible on larger datasets.
+- [x] `npm run bench`: ratio “storage” (bytes reales en disco) reportado y trazable.
+- [x] **Contrato de producto (KPI CORE-only)**: `core_ratio >= 50×` en dataset forense `Structured_TrendNoise`.
+  - Este KPI se calcula como: `core_input_bytes/core_output_bytes`.
+  - **100×** queda como objetivo aspiracional (no gate de release).
+- [x] **Damage cap QUARANTINE (anti-monstruo)**: bajo ataque/ruido (p.ej. `HighEntropy_Random`), QUARANTINE debe ser **no-expansivo** y con degradación controlada.
+  - Mínimo (no-expansivo): `quarantine_output_bytes <= quarantine_input_bytes` (⇒ `quarantine_ratio >= 1.0×`).
+  - Objetivo recomendado (cota fuerte): `quarantine_ratio >= 2.0×` cuando sea viable (ej. fallback tipo `FIXED32_LE`).
+  - Además reportar obligatoriamente: `quarantine_block_rate` y `quarantine_byte_rate`.
 - [x] 0 `any` en `src/`.
 - [x] 0 `console.log` en `src/`.
 - [x] 0 `process.env` en `src/`.

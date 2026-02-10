@@ -1,10 +1,12 @@
-import { Snapshot } from '../gics-types.js';
+import { Snapshot, GenericSnapshot } from '../gics-types.js';
 import { encodeVarint } from '../gics-utils.js';
 import {
     GICS_MAGIC_V2, V12_FLAGS, StreamId, InnerCodecId, OuterCodecId,
     GICS_VERSION_BYTE, HealthTag, GICS_HEADER_SIZE_V3, FILE_EOS_SIZE,
-    GICS_EOS_MARKER, SEGMENT_FOOTER_SIZE, GICS_FLAGS_V3, GICS_ENC_HEADER_SIZE_V3
+    GICS_EOS_MARKER, SEGMENT_FOOTER_SIZE, GICS_FLAGS_V3, GICS_ENC_HEADER_SIZE_V3,
+    SCHEMA_STREAM_BASE
 } from './format.js';
+import type { SchemaProfile } from '../gics-types.js';
 import { ContextV0, ContextSnapshot } from './context.js';
 import { calculateBlockMetrics, classifyRegime, BlockMetrics } from './metrics.js';
 import { Codecs } from './codecs.js';
@@ -14,6 +16,7 @@ import { StreamSection, BlockManifestEntry } from './stream-section.js';
 import { getOuterCodec } from './outer-codecs.js';
 import { IntegrityChain, calculateCRC32 } from './integrity.js';
 import { SegmentBuilder, Segment, SegmentHeader, SegmentFooter, SegmentIndex, BloomFilter } from './segment.js';
+import { StringDictionary, StringDictionaryData } from './string-dict.js';
 import { FileAccess } from './file-access.js';
 import type { FileHandle } from 'node:fs/promises';
 import { BlockStats } from './telemetry-types.js';
@@ -35,10 +38,19 @@ interface DataFeatures {
     quantities: number[];
 }
 
+/** Extended features for schema-based encoding */
+interface SchemaDataFeatures {
+    timestamps: number[];
+    snapshotLengths: number[];
+    itemIds: number[]; // numeric IDs (mapped from strings if needed)
+    fieldArrays: Map<string, number[]>; // fieldName → values
+    stringDict?: StringDictionaryData; // only for string itemIds
+}
+
 type BlockProcessor = (streamId: StreamId, chunk: number[], inputData: number[], stateSnapshot: ContextSnapshot, chm: HealthMonitor) => void;
 
 export class GICSv2Encoder {
-    private snapshots: Snapshot[] = [];
+    private snapshots: Array<Snapshot | GenericSnapshot<Record<string, number | string>>> = [];
     private context: ContextV0 | null;
     private readonly chmTime: HealthMonitor;
     private readonly chmValue: HealthMonitor;
@@ -95,6 +107,7 @@ export class GICSv2Encoder {
             logger: null,
             segmentSizeLimit: 1024 * 1024, // 1MB
             password: '',
+            schema: undefined as any,
         };
         this.options = { ...defaults, ...options };
 
@@ -119,12 +132,12 @@ export class GICSv2Encoder {
         this.integrity = new IntegrityChain();
     }
 
-    async addSnapshot(snapshot: Snapshot): Promise<void> {
+    async addSnapshot(snapshot: Snapshot | GenericSnapshot<Record<string, number | string>>): Promise<void> {
         if (this.isFinalized) throw new Error("GICSv2Encoder: Cannot append after finalize()");
         this.snapshots.push(snapshot);
     }
 
-    async push(snapshot: Snapshot): Promise<void> {
+    async push(snapshot: Snapshot | GenericSnapshot<Record<string, number | string>>): Promise<void> {
         await this.addSnapshot(snapshot);
     }
 
@@ -134,6 +147,7 @@ export class GICSv2Encoder {
 
     private emitFileHeader(): Uint8Array {
         const isEncrypted = this.encryptionKey !== null;
+        const hasSchema = !!this.options.schema;
         const totalSize = GICS_HEADER_SIZE_V3 + (isEncrypted ? GICS_ENC_HEADER_SIZE_V3 : 0);
         const headerBytes = new Uint8Array(totalSize);
         const view = new DataView(headerBytes.buffer);
@@ -141,10 +155,15 @@ export class GICSv2Encoder {
         headerBytes[4] = GICS_VERSION_BYTE;
 
         let flags = V12_FLAGS.FIELDWISE_TS;
+        if (hasSchema) flags |= GICS_FLAGS_V3.HAS_SCHEMA;
         if (isEncrypted) flags |= GICS_FLAGS_V3.ENCRYPTED;
         view.setUint32(5, flags, true);
 
-        headerBytes[9] = 5; // streamCount: TIME, SNAP_LEN, ITEM_ID, VALUE, QUANTITY
+        // streamCount: 3 fixed streams + N schema fields (or legacy 5)
+        const streamCount = hasSchema
+            ? 3 + this.options.schema!.fields.length  // TIME + SNAP_LEN + ITEM_ID + N fields
+            : 5; // TIME + SNAP_LEN + ITEM_ID + VALUE + QUANTITY
+        headerBytes[9] = streamCount;
 
         if (isEncrypted) {
             let pos = GICS_HEADER_SIZE_V3;
@@ -161,6 +180,26 @@ export class GICSv2Encoder {
     }
 
     /**
+     * Emit schema section: [schemaLength: uint32][schemaPayload: zstd-compressed JSON]
+     * Only called when HAS_SCHEMA flag is set.
+     */
+    private async emitSchemaSection(): Promise<Uint8Array> {
+        const schema = this.options.schema;
+        if (!schema) return new Uint8Array(0);
+
+        const jsonStr = JSON.stringify(schema);
+        const jsonBytes = new TextEncoder().encode(jsonStr);
+        const outerCodec = getOuterCodec(OuterCodecId.ZSTD);
+        const compressed = await outerCodec.compress(jsonBytes);
+
+        const result = new Uint8Array(4 + compressed.length);
+        const view = new DataView(result.buffer);
+        view.setUint32(0, compressed.length, true);
+        result.set(compressed, 4);
+        return result;
+    }
+
+    /**
      * FLUSH: Process buffered snapshots, emit segments, maintain state.
      */
     async flush(): Promise<Uint8Array> {
@@ -168,10 +207,11 @@ export class GICSv2Encoder {
         if (this.snapshots.length === 0) return new Uint8Array(0);
 
         const builder = new SegmentBuilder(this.options.segmentSizeLimit);
-        const groups: Snapshot[][] = [];
+        type AnySnapshot = Snapshot | GenericSnapshot<Record<string, number | string>>;
+        const groups: AnySnapshot[][] = [];
 
         for (const s of this.snapshots) {
-            if (builder.push(s)) {
+            if (builder.push(s as Snapshot)) {
                 groups.push(builder.seal());
             }
         }
@@ -185,6 +225,14 @@ export class GICSv2Encoder {
             const header = this.emitFileHeader();
             allBytes.push(header);
             if (this.fileHandle) await FileAccess.appendData(this.fileHandle, header);
+
+            // Emit schema section after header if HAS_SCHEMA
+            if (this.options.schema) {
+                const schemaSection = await this.emitSchemaSection();
+                allBytes.push(schemaSection);
+                if (this.fileHandle) await FileAccess.appendData(this.fileHandle, schemaSection);
+            }
+
             this.hasEmittedHeader = true;
         }
 
@@ -203,12 +251,11 @@ export class GICSv2Encoder {
         return finalBytes;
     }
 
-    private async encodeSegment(snapshots: Snapshot[]): Promise<{ segment: Segment, stats: BlockStats[] }> {
-        const features = this.collectDataFeatures(snapshots);
-        const streamBlocks: Map<StreamId, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }> = new Map();
+    private async encodeSegment(snapshots: Array<Snapshot | GenericSnapshot<Record<string, number | string>>>): Promise<{ segment: Segment, stats: BlockStats[] }> {
+        const streamBlocks: Map<number, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }> = new Map();
         const blockStats: BlockStats[] = [];
 
-        const addToStream = (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => {
+        const addToStream = (streamId: number, manifest: BlockManifestEntry, payload: Uint8Array) => {
             if (!streamBlocks.has(streamId)) {
                 streamBlocks.set(streamId, { manifest: [], payloads: [] });
             }
@@ -222,16 +269,32 @@ export class GICSv2Encoder {
         const segmentCtx = new ContextV0(this.options.runId, this.mode === 'on' ? 'segment_ctx' : null);
         this.context = segmentCtx;
 
+        let segmentIndex: SegmentIndex;
+        let useSchemaPath = false;
+
         try {
-            this.processCoreComponents(segmentCtx, features, addToStream, blockStats);
+            if (this.options.schema) {
+                // ── Schema-based generic path ──
+                useSchemaPath = true;
+                const features = this.collectSchemaFeatures(snapshots);
+                this.processSchemaComponents(segmentCtx, features, addToStream, blockStats);
+                segmentIndex = this.createSegmentIndexFromSchema(features);
+            } else {
+                // ── Legacy path (byte-identical to v1.3) ──
+                const features = this.collectDataFeatures(snapshots as Snapshot[]);
+                this.processCoreComponents(segmentCtx, features, addToStream, blockStats);
+                segmentIndex = this.createSegmentIndex(features.itemIds);
+            }
         } finally {
             this.context = globalCtx;
         }
 
-        const sections = await this.wrapSections(streamBlocks);
-        const index = this.createSegmentIndex(features.itemIds);
-
-        return this.assembleSegment(sections, index, blockStats);
+        // Legacy path uses fixed stream order for byte-identical output;
+        // schema path sorts by stream ID for deterministic dynamic ordering.
+        const sections = useSchemaPath
+            ? await this.wrapSectionsGeneric(streamBlocks)
+            : await this.wrapSections(streamBlocks as Map<StreamId, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>);
+        return this.assembleSegment(sections, segmentIndex, blockStats);
     }
 
     private processCoreComponents(
@@ -264,6 +327,27 @@ export class GICSv2Encoder {
             const data = streamBlocks.get(streamId);
             if (!data) continue;
 
+            const section = await this.wrapSingleSection(streamId, data, outerCodec);
+            sections.push(section);
+        }
+        return sections;
+    }
+
+    /**
+     * Generic version of wrapSections that handles dynamic stream IDs.
+     * Iterates all stream blocks in deterministic order (sorted by stream ID).
+     */
+    private async wrapSectionsGeneric(
+        streamBlocks: Map<number, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>
+    ): Promise<StreamSection[]> {
+        const sections: StreamSection[] = [];
+        const outerCodec = getOuterCodec(OuterCodecId.ZSTD);
+
+        // Sort by stream ID for deterministic output
+        const sortedIds = Array.from(streamBlocks.keys()).sort((a, b) => a - b);
+
+        for (const streamId of sortedIds) {
+            const data = streamBlocks.get(streamId)!;
             const section = await this.wrapSingleSection(streamId, data, outerCodec);
             sections.push(section);
         }
@@ -363,6 +447,152 @@ export class GICSv2Encoder {
             }
         }
         return { timestamps, snapshotLengths, itemIds, prices, quantities };
+    }
+
+    // ── Schema-aware feature extraction ─────────────────────────────────────
+
+    private collectSchemaFeatures(snapshots: Array<Snapshot | GenericSnapshot<Record<string, number | string>>>): SchemaDataFeatures {
+        const schema = this.options.schema!;
+        const timestamps: number[] = [];
+        const snapshotLengths: number[] = [];
+        const rawItemKeys: (number | string)[] = [];
+        const fieldArrays = new Map<string, number[]>();
+
+        for (const field of schema.fields) {
+            fieldArrays.set(field.name, []);
+        }
+
+        for (const s of snapshots) {
+            timestamps.push(s.timestamp);
+            // Sort items by key for determinism
+            const entries = [...s.items.entries()].sort((a, b) => {
+                const ka = String(a[0]), kb = String(b[0]);
+                return ka < kb ? -1 : ka > kb ? 1 : 0;
+            });
+            snapshotLengths.push(entries.length);
+
+            for (const [key, data] of entries) {
+                rawItemKeys.push(key);
+                for (const field of schema.fields) {
+                    const arr = fieldArrays.get(field.name)!;
+                    const rawVal = (data as any)[field.name];
+
+                    if (field.type === 'categorical' && field.enumMap) {
+                        // Convert string to numeric via enum map
+                        const numVal = typeof rawVal === 'string' ? (field.enumMap[rawVal] ?? 0) : (rawVal ?? 0);
+                        arr.push(numVal);
+                    } else {
+                        arr.push(typeof rawVal === 'number' ? rawVal : 0);
+                    }
+                }
+            }
+        }
+
+        // Build string dictionary if needed
+        let stringDict: StringDictionaryData | undefined;
+        let numericItemIds: number[];
+
+        if (schema.itemIdType === 'string') {
+            const stringKeys = rawItemKeys.map(k => String(k));
+            stringDict = StringDictionary.build(stringKeys);
+            numericItemIds = stringKeys.map(k => stringDict!.map.get(k)!);
+        } else {
+            numericItemIds = rawItemKeys.map(k => typeof k === 'number' ? k : parseInt(k, 10));
+        }
+
+        return { timestamps, snapshotLengths, itemIds: numericItemIds, fieldArrays, stringDict };
+    }
+
+    private processSchemaComponents(
+        ctx: ContextV0,
+        features: SchemaDataFeatures,
+        addToStream: (streamId: number, manifest: BlockManifestEntry, payload: Uint8Array) => void,
+        blockStats: BlockStats[]
+    ) {
+        const schema = this.options.schema!;
+
+        const processBlockWrapper = (streamId: number, chunk: number[], inputData: number[], stateSnapshot: ContextSnapshot, chm: HealthMonitor) => {
+            const result = this.processStreamBlock(ctx, streamId as StreamId, chunk, inputData, stateSnapshot, chm);
+            addToStream(streamId, result.manifest, result.payload);
+            blockStats.push(result.stats as BlockStats);
+        };
+
+        // Fixed streams (same as legacy)
+        this.processTimeBlocks(ctx, features.timestamps, processBlockWrapper);
+        this.processSnapshotLenBlocks(features.snapshotLengths, addToStream, blockStats);
+        this.processItemIdBlocks(features.itemIds, addToStream, blockStats);
+
+        // Schema fields: each gets its own stream with ID = SCHEMA_STREAM_BASE + index
+        for (let i = 0; i < schema.fields.length; i++) {
+            const field = schema.fields[i];
+            const streamId = SCHEMA_STREAM_BASE + i;
+            const data = features.fieldArrays.get(field.name)!;
+            this.processFieldBlocks(streamId, data, field.codecStrategy, addToStream, blockStats, ctx);
+        }
+    }
+
+    /**
+     * Generic field block processor that selects candidates based on codecStrategy hint.
+     */
+    private processFieldBlocks(
+        streamId: number,
+        data: number[],
+        codecStrategy: string | undefined,
+        addToStream: (streamId: number, manifest: BlockManifestEntry, payload: Uint8Array) => void,
+        blockStats: BlockStats[],
+        ctx: ContextV0
+    ) {
+        const candidates = this.getCandidatesForStrategy(codecStrategy, ctx);
+
+        for (let i = 0; i < data.length; i += BLOCK_SIZE) {
+            const chunk = data.slice(i, i + BLOCK_SIZE);
+            this.processStructuralBlock(streamId as StreamId, chunk, candidates, addToStream, blockStats);
+        }
+    }
+
+    /**
+     * Returns codec candidates based on codecStrategy hint.
+     */
+    private getCandidatesForStrategy(
+        codecStrategy: string | undefined,
+        ctx: ContextV0
+    ): { id: InnerCodecId, encode: (data: number[]) => Uint8Array }[] {
+        switch (codecStrategy) {
+            case 'time':
+                return [
+                    { id: InnerCodecId.DOD_VARINT, encode: (data) => encodeVarint(data) },
+                    { id: InnerCodecId.RLE_DOD, encode: (data) => Codecs.encodeRLE(data) },
+                    { id: InnerCodecId.BITPACK_DELTA, encode: (data) => Codecs.encodeBitPack(data) },
+                ];
+            case 'value':
+                return [
+                    { id: InnerCodecId.VARINT_DELTA, encode: (data) => encodeVarint(data) },
+                    { id: InnerCodecId.BITPACK_DELTA, encode: (data) => Codecs.encodeBitPack(data) },
+                    { id: InnerCodecId.RLE_ZIGZAG, encode: (data) => Codecs.encodeRLE(data) },
+                    { id: InnerCodecId.DICT_VARINT, encode: (data) => Codecs.encodeDict(data, ctx) },
+                ];
+            case 'structural':
+                return [
+                    { id: InnerCodecId.VARINT_DELTA, encode: (data) => encodeVarint(data) },
+                    { id: InnerCodecId.RLE_ZIGZAG, encode: (data) => Codecs.encodeRLE(data) },
+                    { id: InnerCodecId.BITPACK_DELTA, encode: (data) => Codecs.encodeBitPack(data) },
+                ];
+            default:
+                // Auto-detect: try all candidates
+                return [
+                    { id: InnerCodecId.VARINT_DELTA, encode: (data) => encodeVarint(data) },
+                    { id: InnerCodecId.BITPACK_DELTA, encode: (data) => Codecs.encodeBitPack(data) },
+                    { id: InnerCodecId.RLE_ZIGZAG, encode: (data) => Codecs.encodeRLE(data) },
+                    { id: InnerCodecId.DICT_VARINT, encode: (data) => Codecs.encodeDict(data, ctx) },
+                ];
+        }
+    }
+
+    private createSegmentIndexFromSchema(features: SchemaDataFeatures): SegmentIndex {
+        const bf = new BloomFilter();
+        const uniqueIds = Array.from(new Set(features.itemIds)).sort((a, b) => a - b);
+        for (const id of uniqueIds) bf.add(id);
+        return new SegmentIndex(bf, uniqueIds, features.stringDict);
     }
 
     private processTimeBlocks(ctx: ContextV0, timestamps: number[], processBlock: BlockProcessor) {
@@ -487,8 +717,8 @@ export class GICSv2Encoder {
 
         if (route.decision === RoutingDecision.QUARANTINE) {
             ctx.restore(stateSnapshot);
-            finalEncoded = encodeVarint(inputData);
-            finalCodec = (streamId === StreamId.TIME) ? InnerCodecId.DOD_VARINT : InnerCodecId.VARINT_DELTA;
+            finalEncoded = Codecs.encodeFixed64(inputData);
+            finalCodec = InnerCodecId.FIXED64_LE;
         } else {
             // Re-encode to commit state correctly (trial only restored)
             ctx.restore(stateSnapshot);

@@ -1,0 +1,1058 @@
+{
+  "name": "legacy_encrypted",
+  "sha256": "cb5aa3f422f4ba7311c3439b3c51711057310a62a37b4d7e15895c9068a11fe4",
+  "expected": [
+    {
+      "timestamp": 1700000000,
+      "items": [
+        [
+          1,
+          {
+            "price": 10000,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19950,
+            "quantity": 2
+          }
+        ],
+        [
+          3,
+          {
+            "price": 99000,
+            "quantity": 1
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700003600,
+      "items": [
+        [
+          1,
+          {
+            "price": 10003,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19967,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700007200,
+      "items": [
+        [
+          1,
+          {
+            "price": 10006,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19984,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700010800,
+      "items": [
+        [
+          1,
+          {
+            "price": 10009,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20001,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700014400,
+      "items": [
+        [
+          1,
+          {
+            "price": 10012,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20018,
+            "quantity": 2
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700018000,
+      "items": [
+        [
+          1,
+          {
+            "price": 10015,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20035,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700021600,
+      "items": [
+        [
+          1,
+          {
+            "price": 10018,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19951,
+            "quantity": 2
+          }
+        ],
+        [
+          3,
+          {
+            "price": 99000,
+            "quantity": 1
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700025200,
+      "items": [
+        [
+          1,
+          {
+            "price": 10021,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19968,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700028800,
+      "items": [
+        [
+          1,
+          {
+            "price": 10024,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19985,
+            "quantity": 2
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700032400,
+      "items": [
+        [
+          1,
+          {
+            "price": 10027,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20002,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700036000,
+      "items": [
+        [
+          1,
+          {
+            "price": 10030,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20019,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700039600,
+      "items": [
+        [
+          1,
+          {
+            "price": 10033,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20036,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700043200,
+      "items": [
+        [
+          1,
+          {
+            "price": 10036,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19952,
+            "quantity": 2
+          }
+        ],
+        [
+          3,
+          {
+            "price": 99000,
+            "quantity": 1
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700046800,
+      "items": [
+        [
+          1,
+          {
+            "price": 10039,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19969,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700050400,
+      "items": [
+        [
+          1,
+          {
+            "price": 10042,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19986,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700054000,
+      "items": [
+        [
+          1,
+          {
+            "price": 10045,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20003,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700057600,
+      "items": [
+        [
+          1,
+          {
+            "price": 10048,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20020,
+            "quantity": 2
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700061200,
+      "items": [
+        [
+          1,
+          {
+            "price": 10051,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20037,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700064800,
+      "items": [
+        [
+          1,
+          {
+            "price": 10054,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19953,
+            "quantity": 2
+          }
+        ],
+        [
+          3,
+          {
+            "price": 99000,
+            "quantity": 1
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700068400,
+      "items": [
+        [
+          1,
+          {
+            "price": 10057,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19970,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700072000,
+      "items": [
+        [
+          1,
+          {
+            "price": 10060,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19987,
+            "quantity": 2
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700075600,
+      "items": [
+        [
+          1,
+          {
+            "price": 10063,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20004,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700079200,
+      "items": [
+        [
+          1,
+          {
+            "price": 10066,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20021,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700082800,
+      "items": [
+        [
+          1,
+          {
+            "price": 10069,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20038,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700086400,
+      "items": [
+        [
+          1,
+          {
+            "price": 10072,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19954,
+            "quantity": 2
+          }
+        ],
+        [
+          3,
+          {
+            "price": 99000,
+            "quantity": 1
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700090000,
+      "items": [
+        [
+          1,
+          {
+            "price": 10075,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19971,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700093600,
+      "items": [
+        [
+          1,
+          {
+            "price": 10078,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19988,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700097200,
+      "items": [
+        [
+          1,
+          {
+            "price": 10081,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20005,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100800,
+      "items": [
+        [
+          1,
+          {
+            "price": 10084,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20022,
+            "quantity": 2
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700104400,
+      "items": [
+        [
+          1,
+          {
+            "price": 10087,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20039,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700108000,
+      "items": [
+        [
+          1,
+          {
+            "price": 10090,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19955,
+            "quantity": 2
+          }
+        ],
+        [
+          3,
+          {
+            "price": 99000,
+            "quantity": 1
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700111600,
+      "items": [
+        [
+          1,
+          {
+            "price": 10093,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19972,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700115200,
+      "items": [
+        [
+          1,
+          {
+            "price": 10096,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19989,
+            "quantity": 2
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700118800,
+      "items": [
+        [
+          1,
+          {
+            "price": 10099,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20006,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700122400,
+      "items": [
+        [
+          1,
+          {
+            "price": 10102,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20023,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700126000,
+      "items": [
+        [
+          1,
+          {
+            "price": 10105,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20040,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700129600,
+      "items": [
+        [
+          1,
+          {
+            "price": 10108,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19956,
+            "quantity": 2
+          }
+        ],
+        [
+          3,
+          {
+            "price": 99000,
+            "quantity": 1
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700133200,
+      "items": [
+        [
+          1,
+          {
+            "price": 10111,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19973,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700136800,
+      "items": [
+        [
+          1,
+          {
+            "price": 10114,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19990,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700140400,
+      "items": [
+        [
+          1,
+          {
+            "price": 10117,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20007,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700144000,
+      "items": [
+        [
+          1,
+          {
+            "price": 10120,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20024,
+            "quantity": 2
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700147600,
+      "items": [
+        [
+          1,
+          {
+            "price": 10123,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20041,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700151200,
+      "items": [
+        [
+          1,
+          {
+            "price": 10126,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19957,
+            "quantity": 2
+          }
+        ],
+        [
+          3,
+          {
+            "price": 99000,
+            "quantity": 1
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700154800,
+      "items": [
+        [
+          1,
+          {
+            "price": 10129,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19974,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700158400,
+      "items": [
+        [
+          1,
+          {
+            "price": 10132,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 19991,
+            "quantity": 2
+          }
+        ],
+        [
+          10,
+          {
+            "price": 1234,
+            "quantity": 5
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700162000,
+      "items": [
+        [
+          1,
+          {
+            "price": 10135,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20008,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700165600,
+      "items": [
+        [
+          1,
+          {
+            "price": 10138,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20025,
+            "quantity": 2
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700169200,
+      "items": [
+        [
+          1,
+          {
+            "price": 10141,
+            "quantity": 1
+          }
+        ],
+        [
+          2,
+          {
+            "price": 20042,
+            "quantity": 2
+          }
+        ]
+      ]
+    }
+  ]
+}

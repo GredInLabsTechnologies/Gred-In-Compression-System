@@ -1,0 +1,374 @@
+{
+  "name": "schema_trust_events_plain",
+  "sha256": "7a77f977a65725087859ff9c412617e5a49b749a8daeb6f73b3a66f81779222d",
+  "expected": [
+    {
+      "timestamp": 1700100000,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 100,
+            "approvals": 0,
+            "rejections": 0,
+            "failures": 0,
+            "streak": 10,
+            "outcome": "approved"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 101,
+            "approvals": 1,
+            "rejections": 1,
+            "failures": 1,
+            "streak": 10,
+            "outcome": "rejected"
+          }
+        ],
+        [
+          "charlie",
+          {
+            "score": 102,
+            "approvals": 2,
+            "rejections": 2,
+            "failures": 2,
+            "streak": 10,
+            "outcome": "timeout"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100060,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 101,
+            "approvals": 1,
+            "rejections": 2,
+            "failures": 0,
+            "streak": 0,
+            "outcome": "rejected"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 102,
+            "approvals": 2,
+            "rejections": 3,
+            "failures": 1,
+            "streak": 0,
+            "outcome": "timeout"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100120,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 102,
+            "approvals": 2,
+            "rejections": 4,
+            "failures": 0,
+            "streak": 1,
+            "outcome": "timeout"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 103,
+            "approvals": 3,
+            "rejections": 0,
+            "failures": 1,
+            "streak": 1,
+            "outcome": "auto_approved"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100180,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 103,
+            "approvals": 3,
+            "rejections": 1,
+            "failures": 0,
+            "streak": 2,
+            "outcome": "auto_approved"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 104,
+            "approvals": 4,
+            "rejections": 2,
+            "failures": 1,
+            "streak": 2,
+            "outcome": "approved"
+          }
+        ],
+        [
+          "charlie",
+          {
+            "score": 105,
+            "approvals": 5,
+            "rejections": 3,
+            "failures": 2,
+            "streak": 2,
+            "outcome": "rejected"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100240,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 104,
+            "approvals": 4,
+            "rejections": 3,
+            "failures": 0,
+            "streak": 3,
+            "outcome": "approved"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 105,
+            "approvals": 5,
+            "rejections": 4,
+            "failures": 1,
+            "streak": 3,
+            "outcome": "rejected"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100300,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 105,
+            "approvals": 5,
+            "rejections": 0,
+            "failures": 0,
+            "streak": 4,
+            "outcome": "rejected"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 106,
+            "approvals": 6,
+            "rejections": 1,
+            "failures": 1,
+            "streak": 4,
+            "outcome": "timeout"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100360,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 106,
+            "approvals": 6,
+            "rejections": 2,
+            "failures": 0,
+            "streak": 5,
+            "outcome": "timeout"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 107,
+            "approvals": 0,
+            "rejections": 3,
+            "failures": 1,
+            "streak": 5,
+            "outcome": "auto_approved"
+          }
+        ],
+        [
+          "charlie",
+          {
+            "score": 108,
+            "approvals": 1,
+            "rejections": 4,
+            "failures": 2,
+            "streak": 5,
+            "outcome": "approved"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100420,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 107,
+            "approvals": 0,
+            "rejections": 4,
+            "failures": 0,
+            "streak": 6,
+            "outcome": "auto_approved"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 108,
+            "approvals": 1,
+            "rejections": 0,
+            "failures": 1,
+            "streak": 6,
+            "outcome": "approved"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100480,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 108,
+            "approvals": 1,
+            "rejections": 1,
+            "failures": 0,
+            "streak": 7,
+            "outcome": "approved"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 109,
+            "approvals": 2,
+            "rejections": 2,
+            "failures": 1,
+            "streak": 7,
+            "outcome": "rejected"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100540,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 109,
+            "approvals": 2,
+            "rejections": 3,
+            "failures": 0,
+            "streak": 8,
+            "outcome": "rejected"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 110,
+            "approvals": 3,
+            "rejections": 4,
+            "failures": 1,
+            "streak": 8,
+            "outcome": "timeout"
+          }
+        ],
+        [
+          "charlie",
+          {
+            "score": 111,
+            "approvals": 4,
+            "rejections": 0,
+            "failures": 2,
+            "streak": 8,
+            "outcome": "auto_approved"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100600,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 110,
+            "approvals": 3,
+            "rejections": 0,
+            "failures": 0,
+            "streak": 9,
+            "outcome": "timeout"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 111,
+            "approvals": 4,
+            "rejections": 1,
+            "failures": 1,
+            "streak": 9,
+            "outcome": "auto_approved"
+          }
+        ]
+      ]
+    },
+    {
+      "timestamp": 1700100660,
+      "items": [
+        [
+          "alice",
+          {
+            "score": 111,
+            "approvals": 4,
+            "rejections": 2,
+            "failures": 0,
+            "streak": 10,
+            "outcome": "auto_approved"
+          }
+        ],
+        [
+          "bob",
+          {
+            "score": 112,
+            "approvals": 5,
+            "rejections": 3,
+            "failures": 1,
+            "streak": 10,
+            "outcome": "approved"
+          }
+        ]
+      ]
+    }
+  ]
+}

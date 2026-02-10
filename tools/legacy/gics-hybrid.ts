@@ -1,3 +1,4 @@
+/// <reference path="../../src/zstd-codec.d.ts" />
 /**
  * GICS v1.1 - Hybrid Storage Engine
  * 
@@ -28,8 +29,8 @@ import {
     EncryptionMode,
     BlockType,
     CompressionAlgorithm
-} from './gics-types.js';
-import { encodeVarint, decodeVarint } from './gics-utils.js';
+} from '../../src/gics-types.js';
+import { encodeVarint, decodeVarint } from '../../src/gics-utils.js';
 import { keyService, KDF_CONFIG, FILE_NONCE_LEN, AUTH_VERIFY_LEN } from './services/key.service.js';
 import { HeatClassifier } from './HeatClassifier.js';
 
@@ -193,7 +194,7 @@ export class HybridWriter {
     private readonly salt?: Buffer;
     private readonly fileNonce?: Buffer;  // Phase 2: For deterministic IV
     private authVerify?: Buffer;
-    private readonly initPromise: Promise<void> | null = null;
+    private initPromise: Promise<void> | null = null;
 
     constructor(config: HybridConfig = {}) {
         this.config = {
@@ -213,9 +214,18 @@ export class HybridWriter {
         if (config.password) {
             this.encryptionMode = EncryptionMode.AES_256_GCM;
             this.salt = keyService.generateSalt();
-            this.fileNonce = keyService.generateFileNonce();  // Phase 2
-            // Start async key derivation
+            this.fileNonce = keyService.generateFileNonce();
+            // We store the promise and await it in initWait() when needed
             this.initPromise = this.initEncryption(config.password);
+        }
+    }
+
+    /**
+     * Ensure encryption is initialized before use
+     */
+    private async initWait(): Promise<void> {
+        if (this.initPromise) {
+            await this.initPromise;
         }
     }
 
@@ -335,9 +345,7 @@ export class HybridWriter {
         if (this.snapshots.length === 0) return;
 
         // Ensure encryption key is ready
-        if (this.initPromise) {
-            await this.initPromise;
-        }
+        await this.initWait();
 
         const blockId = this.blocks.length;
         const startTimestamp = this.snapshots[0].timestamp;
@@ -381,47 +389,75 @@ export class HybridWriter {
      * KEY OPTIMIZATION: Separate tiers and compress each optimally
      */
     private async encodeBlock(snapshots: Snapshot[], tiers: Map<number, ItemTier>, blockId: number): Promise<Uint8Array> {
-        // Collect all unique item IDs
+        const sortedIds = this.getSortedItemIds(snapshots);
+        const { hotIds, warmIds, coldIds, ultraSparseIds, coldConstantCount, coldVariableCount } = this.groupItemsByTier(snapshots, tiers, sortedIds);
+
+        const coreIds = [...hotIds, ...warmIds, ...coldIds];
+        const timestampsEncoded = this.encodeTimestamps(snapshots);
+        const idsEncoded = this.encodeItemIdDeltas(coreIds);
+        const quantitiesEncoded = this.encodeRLE(coreIds, snapshots);
+        const ultraSparseEncoded = this.encodeUltraSparseCOO(ultraSparseIds, snapshots);
+
+        const hotEncoded = this.encodeHotTier(hotIds, snapshots);
+        const { warmBitmapCombined, warmValuesEncoded } = this.encodeWarmTier(warmIds, snapshots);
+        const { coldConstantsEncoded, coldVariableBitmapCombined, coldVariableValuesEncoded } = this.encodeColdTier(coldIds, snapshots);
+
+        this.updateItemIndices(hotIds, warmIds, coldIds, ultraSparseIds, tiers, blockId);
+
+        const header = this.buildBlockHeader({
+            snapCount: snapshots.length, hotIds, warmIds, coldIds,
+            coldConstCount: coldConstantCount, coldVarCount: coldVariableCount,
+            tLength: timestampsEncoded.length, iLength: idsEncoded.length, hLength: hotEncoded.length,
+            wBLength: warmBitmapCombined.length, wVLength: warmValuesEncoded.length,
+            cCLength: coldConstantsEncoded.length, cVBLength: coldVariableBitmapCombined.length, cVVLength: coldVariableValuesEncoded.length,
+            qLength: quantitiesEncoded.length, uLength: ultraSparseEncoded.length
+        });
+
+        return this.wrapAndEncrypt(this.concatArrays([
+            header, timestampsEncoded, idsEncoded, hotEncoded,
+            warmBitmapCombined, warmValuesEncoded, coldConstantsEncoded,
+            coldVariableBitmapCombined, coldVariableValuesEncoded,
+            quantitiesEncoded, ultraSparseEncoded
+        ]), blockId);
+    }
+
+    private getSortedItemIds(snapshots: Snapshot[]): number[] {
         const allItemIds = new Set<number>();
         for (const snap of snapshots) {
-            for (const itemId of Array.from(snap.items.keys())) {
+            for (const itemId of snap.items.keys()) {
                 allItemIds.add(itemId);
             }
         }
-        const sortedIds = Array.from(allItemIds).sort((a, b) => a - b);
+        return Array.from(allItemIds).sort((a, b) => a - b);
+    }
 
-        const { hotIds, warmIds, coldIds, ultraSparseIds, coldConstantCount, coldVariableCount } = this.groupItemsByTier(snapshots, tiers, sortedIds);
-
-        const ultraSparseEncoded = this.encodeUltraSparseCOO(ultraSparseIds, snapshots);
-
-        // Encode timestamps (DoD) - shared across all tiers
+    private encodeTimestamps(snapshots: Snapshot[]): Uint8Array {
         const timestamps = snapshots.map(s => s.timestamp);
         const timestampDeltas = this.encodeDoD(timestamps);
-        const timestampsEncoded = encodeVarint(timestampDeltas);
+        return encodeVarint(timestampDeltas);
+    }
 
-        // Encode item IDs (delta) - only store which IDs are in each tier
-        const allIdsInOrder = [...hotIds, ...warmIds, ...coldIds];
-        const idDeltas = allIdsInOrder.length > 0 ? [allIdsInOrder[0]] : [];
-        for (let i = 1; i < allIdsInOrder.length; i++) {
-            idDeltas.push(allIdsInOrder[i] - allIdsInOrder[i - 1]);
+    private encodeItemIdDeltas(allIds: number[]): Uint8Array {
+        const idDeltas = allIds.length > 0 ? [allIds[0]] : [];
+        for (let i = 1; i < allIds.length; i++) {
+            idDeltas.push(allIds[i] - allIds[i - 1]);
         }
-        const idsEncoded = encodeVarint(idDeltas);
+        return encodeVarint(idDeltas);
+    }
 
-        // TIER-SPECIFIC COMPRESSION
-
-        // HOT tier: Full DoD - these items change predictably
+    private encodeHotTier(hotIds: number[], snapshots: Snapshot[]): Uint8Array {
         const hotPricesDoD: number[] = [];
         for (const itemId of hotIds) {
             const prices: number[] = [];
             for (const snap of snapshots) {
                 prices.push(snap.items.get(itemId)?.price ?? 0);
             }
-            // DoD for each item, then flatten
             hotPricesDoD.push(...this.encodeDoD(prices));
         }
-        const hotEncoded = encodeVarint(hotPricesDoD);
+        return encodeVarint(hotPricesDoD);
+    }
 
-        // WARM tier: Sparse bitmap + deltas
+    private encodeWarmTier(warmIds: number[], snapshots: Snapshot[]) {
         const warmBitmaps: Uint8Array[] = [];
         const warmValues: number[] = [];
         for (const itemId of warmIds) {
@@ -430,10 +466,9 @@ export class HybridWriter {
                 prices.push(snap.items.get(itemId)?.price ?? 0);
             }
 
-            // Create bitmap and collect non-zero deltas
             const bitmap = new Uint8Array(Math.ceil(snapshots.length / 8));
             let prev = prices[0];
-            warmValues.push(prev); // First value absolute
+            warmValues.push(prev);
 
             for (let i = 1; i < prices.length; i++) {
                 if (prices[i] !== prev) {
@@ -444,10 +479,13 @@ export class HybridWriter {
             }
             warmBitmaps.push(bitmap);
         }
-        const warmBitmapCombined = this.concatArrays(warmBitmaps);
-        const warmValuesEncoded = encodeVarint(warmValues);
+        return {
+            warmBitmapCombined: this.concatArrays(warmBitmaps),
+            warmValuesEncoded: encodeVarint(warmValues)
+        };
+    }
 
-        // COLD tier: ULTRA AGGRESSIVE - most items are constant!
+    private encodeColdTier(coldIds: number[], snapshots: Snapshot[]) {
         const coldConstants: number[] = [];
         const coldVariableBitmaps: Uint8Array[] = [];
         const coldVariableValues: number[] = [];
@@ -476,15 +514,19 @@ export class HybridWriter {
             }
         }
 
-        const coldConstantsEncoded = encodeVarint(coldConstants);
-        const coldVariableBitmapCombined = this.concatArrays(coldVariableBitmaps);
-        const coldVariableValuesEncoded = encodeVarint(coldVariableValues);
+        return {
+            coldConstantsEncoded: encodeVarint(coldConstants),
+            coldVariableBitmapCombined: this.concatArrays(coldVariableBitmaps),
+            coldVariableValuesEncoded: encodeVarint(coldVariableValues)
+        };
+    }
 
-        // QUANTITIES: RLE for all items (quantities typically stable)
-        const quantitiesEncoded = this.encodeRLE(allIdsInOrder, snapshots);
-
-        // Update item index (includes ULTRA_SPARSE items now)
+    private updateItemIndices(
+        hotIds: number[], warmIds: number[], coldIds: number[], ultraSparseIds: number[],
+        tiers: Map<number, ItemTier>, blockId: number
+    ) {
         let itemPosition = 0;
+        const allIdsInOrder = [...hotIds, ...warmIds, ...coldIds];
         for (const itemId of allIdsInOrder) {
             let entry = this.itemIndex.get(itemId);
             if (!entry) {
@@ -502,38 +544,39 @@ export class HybridWriter {
             }
             entry.blockPositions.set(blockId, -1);
         }
+    }
 
+    private buildBlockHeader(params: {
+        snapCount: number, hotIds: number[], warmIds: number[], coldIds: number[],
+        coldConstCount: number, coldVarCount: number,
+        tLength: number, iLength: number, hLength: number, wBLength: number, wVLength: number,
+        cCLength: number, cVBLength: number, cVVLength: number, qLength: number, uLength: number
+    }): Uint8Array {
         const header = new Uint8Array(52);
         const headerView = new DataView(header.buffer);
         let hOffset = 0;
 
-        headerView.setUint16(hOffset, snapshots.length, true); hOffset += 2;
-        headerView.setUint16(hOffset, allIdsInOrder.length, true); hOffset += 2;
-        headerView.setUint16(hOffset, hotIds.length, true); hOffset += 2;
-        headerView.setUint16(hOffset, warmIds.length, true); hOffset += 2;
-        headerView.setUint16(hOffset, coldConstantCount, true); hOffset += 2;
-        headerView.setUint16(hOffset, coldVariableCount, true); hOffset += 2;
+        headerView.setUint16(hOffset, params.snapCount, true); hOffset += 2;
+        headerView.setUint16(hOffset, params.hotIds.length + params.warmIds.length + params.coldIds.length, true); hOffset += 2;
+        headerView.setUint16(hOffset, params.hotIds.length, true); hOffset += 2;
+        headerView.setUint16(hOffset, params.warmIds.length, true); hOffset += 2;
+        headerView.setUint16(hOffset, params.coldConstCount, true); hOffset += 2;
+        headerView.setUint16(hOffset, params.coldVarCount, true); hOffset += 2;
 
-        headerView.setUint32(hOffset, timestampsEncoded.length, true); hOffset += 4;
-        headerView.setUint32(hOffset, idsEncoded.length, true); hOffset += 4;
-        headerView.setUint32(hOffset, hotEncoded.length, true); hOffset += 4;
-        headerView.setUint32(hOffset, warmBitmapCombined.length, true); hOffset += 4;
-        headerView.setUint32(hOffset, warmValuesEncoded.length, true); hOffset += 4;
-        headerView.setUint32(hOffset, coldConstantsEncoded.length, true); hOffset += 4;
-        headerView.setUint32(hOffset, coldVariableBitmapCombined.length, true); hOffset += 4;
-        headerView.setUint32(hOffset, coldVariableValuesEncoded.length, true); hOffset += 4;
-        headerView.setUint32(hOffset, quantitiesEncoded.length, true); hOffset += 4;
-        headerView.setUint32(hOffset, ultraSparseEncoded.length, true);
+        headerView.setUint32(hOffset, params.tLength, true); hOffset += 4;
+        headerView.setUint32(hOffset, params.iLength, true); hOffset += 4;
+        headerView.setUint32(hOffset, params.hLength, true); hOffset += 4;
+        headerView.setUint32(hOffset, params.wBLength, true); hOffset += 4;
+        headerView.setUint32(hOffset, params.wVLength, true); hOffset += 4;
+        headerView.setUint32(hOffset, params.cCLength, true); hOffset += 4;
+        headerView.setUint32(hOffset, params.cVBLength, true); hOffset += 4;
+        headerView.setUint32(hOffset, params.cVVLength, true); hOffset += 4;
+        headerView.setUint32(hOffset, params.qLength, true); hOffset += 4;
+        headerView.setUint32(hOffset, params.uLength, true);
 
-        const combined = this.concatArrays([
-            header, timestampsEncoded, idsEncoded, hotEncoded,
-            warmBitmapCombined, warmValuesEncoded, coldConstantsEncoded,
-            coldVariableBitmapCombined, coldVariableValuesEncoded,
-            quantitiesEncoded, ultraSparseEncoded
-        ]);
-
-        return this.wrapAndEncrypt(combined, blockId);
+        return header;
     }
+
 
     private groupItemsByTier(snapshots: Snapshot[], tiers: Map<number, ItemTier>, sortedIds: number[]) {
         const hotIds: number[] = [];
@@ -550,12 +593,10 @@ export class HybridWriter {
                 hotIds.push(itemId);
             } else if (tier === 'warm') {
                 warmIds.push(itemId);
+            } else if (this.isItemConstant(itemId, snapshots)) {
+                orderedColdConstants.push(itemId);
             } else {
-                if (this.isItemConstant(itemId, snapshots)) {
-                    orderedColdConstants.push(itemId);
-                } else {
-                    orderedColdVariables.push(itemId);
-                }
+                orderedColdVariables.push(itemId);
             }
         }
         return {
@@ -734,13 +775,20 @@ export class HybridWriter {
 
         if (this.encryptionMode === EncryptionMode.AES_256_GCM) {
             buffer[offset++] = this.encryptionMode;
-            if (this.salt) buffer.set(this.salt, offset); offset += 16;
-            if (this.authVerify) buffer.set(this.authVerify, offset); offset += AUTH_VERIFY_LEN;
+            if (this.salt) {
+                buffer.set(this.salt, offset);
+                offset += 16;
+            }
+            if (this.authVerify) {
+                buffer.set(this.authVerify, offset);
+                offset += AUTH_VERIFY_LEN;
+            }
             buffer[offset++] = KDF_CONFIG.id;
             view.setUint32(offset, KDF_CONFIG.iterations, true); offset += 4;
             buffer[offset++] = KDF_CONFIG.digestId;
-            if (this.fileNonce) buffer.set(this.fileNonce, offset);
-            offset += FILE_NONCE_LEN;
+            if (this.fileNonce) {
+                buffer.set(this.fileNonce, offset);
+            }
         }
 
         buffer.set(temporalIndexData, temporalIndexOffset);
@@ -824,13 +872,20 @@ export class HybridWriter {
 
         if (this.encryptionMode === EncryptionMode.AES_256_GCM) {
             buffer[offset++] = this.encryptionMode;
-            if (this.salt) buffer.set(this.salt, offset); offset += 16;
-            if (this.authVerify) buffer.set(this.authVerify, offset); offset += AUTH_VERIFY_LEN;
+            if (this.salt) {
+                buffer.set(this.salt, offset);
+                offset += 16;
+            }
+            if (this.authVerify) {
+                buffer.set(this.authVerify, offset);
+                offset += AUTH_VERIFY_LEN;
+            }
             buffer[offset++] = KDF_CONFIG.id;
             view.setUint32(offset, KDF_CONFIG.iterations, true); offset += 4;
             buffer[offset++] = KDF_CONFIG.digestId;
-            if (this.fileNonce) buffer.set(this.fileNonce, offset);
-            offset += FILE_NONCE_LEN;
+            if (this.fileNonce) {
+                buffer.set(this.fileNonce, offset);
+            }
         }
 
         buffer.set(temporalIndexData, temporalIndexOffset);
@@ -878,7 +933,7 @@ export class HybridWriter {
 
     getStats(): GICSStats {
         return {
-            snapshotCount: this.blocks.length * this.config.snapshotsPerBlock!, // Approximation
+            snapshotCount: this.blocks.length * this.config.snapshotsPerBlock, // Approximation
             itemCount: this.itemIndex.size,
             rawSizeBytes: 0,
             compressedSizeBytes: this.blocks.reduce((a, b) => a + b.length, 0),
@@ -937,7 +992,7 @@ export class HybridReader {
         const dataOffset = this.view.getUint32(offset, true); offset += 8;
 
         // Check extensions for encryption
-        if (temporalIndexOffset > offset) {
+        if (temporalIndexOffset > offset) { // If temporalIndexOffset is greater than current offset, it means there's an extension header
             this.encryptionMode = this.buffer[offset++];
             // Skip salt/auth if present for now, handled in unlock if needed
         }
@@ -964,8 +1019,11 @@ export class HybridReader {
         while (i < values.length) {
             const itemId = values[i++];
             const tierVal = values[i++];
-            const baseTier: ItemTier = tierVal === 0 ? 'hot' : (tierVal === 1 ? 'warm' : 'cold');
-            const actualTier = tierVal === 3 ? 'ultra_sparse' : baseTier;
+            let actualTier: ItemTier;
+            if (tierVal === 0) actualTier = 'hot';
+            else if (tierVal === 1) actualTier = 'warm';
+            else if (tierVal === 2) actualTier = 'cold';
+            else actualTier = 'ultra_sparse';
 
             const count = values[i++];
             const blockPositions = new Map<number, number>();
@@ -1025,82 +1083,76 @@ export class HybridReader {
         };
     }
 
-    async queryItems(filter: QueryFilter): Promise<ItemQueryResult[]> {
-        const itemIds = filter.itemIds ?? Array.from(this.itemIndex.keys());
+    async queryItems(query: QueryFilter): Promise<ItemQueryResult[]> {
+        const itemIds = query.itemIds ?? Array.from(this.itemIndex.keys());
+        if (itemIds.length === 0) return [];
+
+        const relevantBlocks = this.findRelevantBlocks(query);
         const results = new Map<number, ItemQueryResult>();
 
-        // Initialize results
-        for (const id of itemIds) {
-            results.set(id, { itemId: id, history: [] });
-        }
-
-        // Identify relevant blocks
-        // Filter by time
-        const relevantBlocks = this.temporalIndex.filter(b => {
-            if (filter.startTime && b.startTimestamp < filter.startTime) {
-                // Block could still overlap if it ends after startTime
-                // Simpler: Just read all potentially relevant blocks
-                // Optimization: Checking end timestamp would be better
-                return true;
-            }
-            if (filter.endTime && b.startTimestamp > filter.endTime) return false;
-            return true;
-        });
-
-        const dataStart = this.view.getUint32(28, true); // Re-read data offset from header location
+        const dataStart = this.view.getUint32(28, true);
 
         for (const blockMeta of relevantBlocks) {
-            // Read Block
-            // In Hybrid format, blocks are just sequentially concatenated at DataOffset + meta.offset
-            const absOffset = dataStart + blockMeta.offset;
-
-            // blockType: Read packet type for potential future metadata tracking
-            // this.buffer[absOffset];
-            const size = this.view.getUint32(absOffset + 1, true);
-            const storedCrc = this.view.getUint32(absOffset + 5, true);
-
-            const payload = this.buffer.subarray(absOffset + 9, absOffset + 9 + size);
-
-            // CRC Validation - CRITICAL for corruption detection
-            const computedCrc = crc32(payload);
-            if (computedCrc !== storedCrc) {
-                throw new Error(`CRC_MISMATCH: Block ${blockMeta.blockId} corrupted. Expected ${storedCrc}, got ${computedCrc}`);
-            }
-
-            // Decompress using the file's compression algorithm
-            let decompressed: Uint8Array;
-            try {
-                if (this.compressionAlgorithm === CompressionAlgorithm.ZSTD) {
-                    // Zstd decompression via WebAssembly
-                    decompressed = await new Promise<Uint8Array>((resolve, reject) => {
-                        ZstdCodec.run((zstd: { Simple: new () => { decompress: (data: Uint8Array) => Uint8Array | null } }) => {
-                            try {
-                                const simple = new zstd.Simple();
-                                const result = simple.decompress(payload);
-                                if (result) {
-                                    resolve(result);
-                                } else {
-                                    reject(new Error('Zstd decompression returned null'));
-                                }
-                            } catch (err) {
-                                reject(err);
-                            }
-                        });
-                    });
-                } else {
-                    // Default: Brotli
-                    decompressed = await brotliDecompressAsync(payload);
-                }
-            } catch (e) {
-                console.error(`[HybridReader] Decompression failed for block ${blockMeta.blockId}:`, e);
-                continue;
-            }
-
-            // Parse Block Content
-            await this.parseBlockContent(decompressed, itemIds, results, blockMeta.blockId);
+            await this.processBlock(blockMeta, dataStart, itemIds, results);
         }
 
         return Array.from(results.values());
+    }
+
+    private findRelevantBlocks(query: QueryFilter): TemporalIndexEntry[] {
+        return this.temporalIndex.filter(entry => {
+            const inRange = (!query.startTime || entry.startTimestamp >= query.startTime) &&
+                (!query.endTime || entry.startTimestamp <= query.endTime);
+            if (!inRange) return false;
+
+            if (query.itemIds) {
+                // If specific IDs requested, check if at least one is in this block
+                // Approximation: if block exists, we check it. 
+                // In a real system we might have a bloom filter per block.
+                return true;
+            }
+            return true;
+        });
+    }
+
+    private async processBlock(
+        blockMeta: TemporalIndexEntry,
+        dataStart: number,
+        itemIds: number[],
+        results: Map<number, ItemQueryResult>
+    ) {
+        const absOffset = dataStart + blockMeta.offset;
+        const size = this.view.getUint32(absOffset + 1, true);
+        const storedCrc = this.view.getUint32(absOffset + 5, true);
+        const payload = this.buffer.subarray(absOffset + 9, absOffset + 9 + size);
+
+        if (crc32(payload) !== storedCrc) {
+            throw new Error(`CRC_MISMATCH: Block ${blockMeta.blockId} corrupted.`);
+        }
+
+        const decompressed = await this.decompressPayload(payload, blockMeta.blockId);
+        if (decompressed) {
+            await this.parseBlockContent(decompressed, itemIds, results, blockMeta.blockId);
+        }
+    }
+
+    private async decompressPayload(payload: Uint8Array, blockId: number): Promise<Uint8Array | null> {
+        try {
+            if (this.compressionAlgorithm === CompressionAlgorithm.ZSTD) {
+                return await new Promise<Uint8Array>((resolve, reject) => {
+                    ZstdCodec.run((zstd: any) => {
+                        try {
+                            const result = new zstd.Simple().decompress(payload);
+                            result ? resolve(result) : reject(new Error('Zstd null'));
+                        } catch (err) { reject(err); }
+                    });
+                });
+            }
+            return await brotliDecompressAsync(payload);
+        } catch (e) {
+            console.error(`[HybridReader] Decompression failed for block ${blockId}:`, e);
+            return null;
+        }
     }
 
     private async parseBlockContent(
@@ -1110,304 +1162,201 @@ export class HybridReader {
         blockId: number
     ) {
         const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-        let offset = 0;
-
-        // Parse Block Header
-        // snapshotCount(2) + itemCount(2) + counts(8) + lengths(40) = 52
         const snapshotCount = view.getUint16(0, true);
+        const offsets = this.readBlockOffsets(view);
 
-        // Read lengths
-        const offsets = {
-            timestamps: 0,
-            ids: 0,
-            hot: 0,
-            warmBitmap: 0,
-            warmVal: 0,
-            coldConst: 0,
-            coldVarBitmap: 0,
-            coldVarVal: 0,
-            qty: 0,
-            ultra: 0
-        };
-
-
-        let hOff = 12; // Start of lengths
-        offsets.timestamps = view.getUint32(hOff, true); hOff += 4;
-        offsets.ids = view.getUint32(hOff, true); hOff += 4;
-        offsets.hot = view.getUint32(hOff, true); hOff += 4;
-        offsets.warmBitmap = view.getUint32(hOff, true); hOff += 4;
-        offsets.warmVal = view.getUint32(hOff, true); hOff += 4;
-        offsets.coldConst = view.getUint32(hOff, true); hOff += 4;
-        offsets.coldVarBitmap = view.getUint32(hOff, true); hOff += 4;
-        offsets.coldVarVal = view.getUint32(hOff, true); hOff += 4;
-        offsets.qty = view.getUint32(hOff, true); hOff += 4;
-        offsets.ultra = view.getUint32(hOff, true);
-
-        // Extract Sections
         let dOff = 52; // Header size
-        const timestamps = decodeVarint(data.subarray(dOff, dOff + offsets.timestamps)); dOff += offsets.timestamps;
+        const absTimestamps = this.reconstructTimestamps(data, dOff, offsets.timestamps);
+        dOff += offsets.timestamps;
 
-        // Reconstruct absolute timestamps from DoD
-        let currentTs = timestamps[0];
-        let prevDelta = timestamps[1]; // First delta
-        const lastDelta = timestamps.length > 1 ? timestamps.at(-1)! : 0;
-        const absTimestamps = [currentTs];
-        if (timestamps.length > 1) {
-            absTimestamps.push(currentTs + prevDelta);
-            currentTs += prevDelta;
-        }
-        for (let i = 2; i < timestamps.length; i++) {
-            const deltaDelta = timestamps[i];
-            const delta = prevDelta + deltaDelta;
-            currentTs += delta;
-            absTimestamps.push(currentTs);
-            prevDelta = delta;
-        }
+        const ids = this.reconstructIds(data, dOff, offsets.ids);
+        dOff += offsets.ids;
 
-        // IDs
-        const idsDelta = decodeVarint(data.subarray(dOff, dOff + offsets.ids)); dOff += offsets.ids;
-        const ids: number[] = [];
-        let currId = 0;
-        for (const d of idsDelta) {
-            currId += d;
-            ids.push(currId);
-        }
-
-        // Pre-parse other sections if needed, or lazily based on item lookup
-        // Ideally we map targetItemIds to their position in this block
-
-        const hotSection = data.subarray(dOff, dOff + offsets.hot); dOff += offsets.hot;
-        const hotValues = decodeVarint(hotSection); // Flattened
-
-        // Map item to its data index
-        // The block stores data for `ids` in order.
-        // We know which tier each id belongs to from the random access index?
-        // OR we just iterate `ids` which are sorted and also partitioned?
-        // Wait, Writer says: "allIdsInOrder = [...hotIds, ...warmIds, ...coldIds]"
-        // So we iterate `ids` and know the first X are Hot, next Y are Warm...
-        // We can get X, Y from the header counts!
-
-        const hotCount = view.getUint16(4, true);
-        const warmCount = view.getUint16(6, true);
-        const coldConstCount = view.getUint16(8, true);
-        const coldVarCount = view.getUint16(10, true);
-
-        // Indices tracker
-        let hotIdx = 0;
-        let warmIdx = 0;
-        let coldConstIdx = 0;
-        let coldVarIdx = 0;
-
-        // Section views for random access
-        // warmBitmaps and warmValsData: Section data read but not used in current parsing logic
-        // Advance dOff past warmBitmap section
-        dOff += offsets.warmBitmap;
-        // Advance dOff past warmVal section
-        dOff += offsets.warmVal;
+        const hotValues = decodeVarint(data.subarray(dOff, dOff + offsets.hot)); dOff += offsets.hot;
+        dOff += offsets.warmBitmap + offsets.warmVal; // Skip warm for now (complex)
 
         const coldConsts = decodeVarint(data.subarray(dOff, dOff + offsets.coldConst)); dOff += offsets.coldConst;
         const coldVarBitmaps = data.subarray(dOff, dOff + offsets.coldVarBitmap); dOff += offsets.coldVarBitmap;
         const coldVarVals = decodeVarint(data.subarray(dOff, dOff + offsets.coldVarVal)); dOff += offsets.coldVarVal;
 
-        // Skip qty for now to keep it simple, or implement if needed
-        dOff += offsets.qty;
+        const ultraOffset = dOff + offsets.qty; // Skip qty
+        const ultraData = decodeVarint(data.subarray(ultraOffset, ultraOffset + offsets.ultra));
 
-        // Ultra Sparse COO
-        const ultraData = decodeVarint(data.subarray(dOff, dOff + offsets.ultra));
-        // Parse Ultra Sparse into a map: itemId -> {snapshotIdx: {price, qty}}
-        // new Map<number, Map<number, { p: number, q: number }>>(); // ultraMap - not used
-        // [count, (idDelta, snapIdx, pDelta, qDelta)...]
-        // This is complex to reconstruct without full state.
-        // Assuming we just want to hit targets.
+        this.processTierData({
+            ids, targetItemIds, results, snapshotCount, absTimestamps,
+            hotValues, coldConsts, coldVarBitmaps, coldVarVals,
+            counts: {
+                hot: view.getUint16(4, true),
+                warm: view.getUint16(6, true),
+                coldConst: view.getUint16(8, true),
+                coldVar: view.getUint16(10, true)
+            }
+        });
 
-        // Reconstruct Data for Targets
-        // Iterate all IDs in block order
-        // let processed = 0; // Not used
-        let warmValPtr = 0; // Placeholder for warm value tracking
+        this.reconstructUltraSparseCOO(ultraData, targetItemIds, results, absTimestamps);
+    }
+
+    private readBlockOffsets(view: DataView) {
+        return {
+            timestamps: view.getUint32(12, true),
+            ids: view.getUint32(16, true),
+            hot: view.getUint32(20, true),
+            warmBitmap: view.getUint32(24, true),
+            warmVal: view.getUint32(28, true),
+            coldConst: view.getUint32(32, true),
+            coldVarBitmap: view.getUint32(36, true),
+            coldVarVal: view.getUint32(40, true),
+            qty: view.getUint32(44, true),
+            ultra: view.getUint32(48, true)
+        };
+    }
+
+    private reconstructTimestamps(data: Uint8Array, offset: number, length: number): number[] {
+        const deltas = decodeVarint(data.subarray(offset, offset + length));
+        if (deltas.length === 0) return [];
+
+        let currentTs = deltas[0];
+        const absTimestamps = [currentTs];
+        if (deltas.length > 1) {
+            let prevDelta = deltas[1];
+            currentTs += prevDelta;
+            absTimestamps.push(currentTs);
+            for (let i = 2; i < deltas.length; i++) {
+                const deltaDelta = deltas[i];
+                const delta = prevDelta + deltaDelta;
+                currentTs += delta;
+                absTimestamps.push(currentTs);
+                prevDelta = delta;
+            }
+        }
+        return absTimestamps;
+    }
+
+    private reconstructIds(data: Uint8Array, offset: number, length: number): number[] {
+        const deltas = decodeVarint(data.subarray(offset, offset + length));
+        const ids: number[] = [];
+        let currId = 0;
+        for (const d of deltas) {
+            currId += d;
+            ids.push(currId);
+        }
+        return ids;
+    }
+
+    private processTierData(params: {
+        ids: number[], targetItemIds: number[], results: Map<number, ItemQueryResult>,
+        snapshotCount: number, absTimestamps: number[],
+        hotValues: number[], coldConsts: number[],
+        coldVarBitmaps: Uint8Array, coldVarVals: number[],
+        counts: { hot: number, warm: number, coldConst: number, coldVar: number }
+    }) {
+        let coldConstIdx = 0;
+        let coldVarIdx = 0;
         let coldVarValPtr = 0;
 
-        // Helper to reconstruct hot stream
-        // It's DoD encoded: [val, delta, delta-delta...]
-        // All concatenated. Since we know snapshotCount, we can slice.
-        // BUT `decodeVarint` returns one big array.
-        // We must slice `hotValues`.
+        for (let i = 0; i < params.ids.length; i++) {
+            const itemId = params.ids[i];
+            const isTarget = params.targetItemIds.includes(itemId);
 
-        for (let i = 0; i < ids.length; i++) {
-            const itemId = ids[i];
-            // Only process if target
-            const isTarget = targetItemIds.includes(itemId);
-
-            if (i < hotCount) {
-                // HOT
-                // Slice from hotValues: snapshotCount items
-                // Actually hotValues is DoD encoded stream.
-                // Writer: hotPricesDoD.push(...encodeDoD(prices))
-                // So every snapshotCount items in hotValues corresponds to one item.
-                if (isTarget) {
-                    const start = i * snapshotCount;
-                    const end = start + snapshotCount;
-                    const dod = hotValues.slice(start, end);
-                    // Decode DoD
-                    let p = dod[0];
-                    let d = dod[1];
-                    const prices = [p];
-                    if (dod.length > 1) {
-                        p += d;
-                        prices.push(p);
-                    }
-                    for (let k = 2; k < dod.length; k++) {
-                        d += dod[k];
-                        p += d;
-                        prices.push(p);
-                    }
-
-                    // Add to result
-                    const res = results.get(itemId)!;
-                    for (let s = 0; s < prices.length; s++) {
-                        res.history.push({
-                            timestamp: absTimestamps[s],
-                            price: prices[s],
-                            quantity: 1 // Default
-                        });
-                    }
-                }
-            } else if (i < hotCount + warmCount) {
-                // WARM
-                const relIdx = i - hotCount;
-                const bitmapBytes = Math.ceil(snapshotCount / 8);
-                const startByte = relIdx * bitmapBytes;
-
-                // We need to scan the bitmap to know how many values to consume from warmVals
-                // VALIDATION: We must count bits for ALL warm items preceding this one to find our offset in warmVals
-                // This is O(N) scan.
-                // For this implementation, we just scan everything to be safe.
-
-                let myVals: number[] = [];
-                for (let b = startByte; b < startByte + bitmapBytes; b++) {
-                    // ... logic to read bits and consume from warmVals
-                    // This is getting too complex for inline "append".
-                    // Simplification: Not full implementation, just placeholder to allow build to pass.
-                    // Logic: Read bits, if set, consume next val.
-                }
-            } else if (i < hotCount + warmCount + coldConstCount) {
-                // COLD CONSTANT (Optimized)
-                // Simply read one value from coldConsts array
-                if (isTarget) {
-                    // Logic: Each cold constant item consumes exactly 1 value from coldConsts
-                    // We need to know WHICH index in coldConsts corresponds to this item.
-                    // Since we iterate in order, we can track an index.
-
-                    const val = coldConsts[coldConstIdx];
-                    const res = results.get(itemId)!;
-
-                    // Fill history with constant value
-                    for (const ts of absTimestamps) {
-                        res.history.push({
-                            timestamp: ts,
-                            price: val,
-                            quantity: 1
-                        });
-                    }
-                }
+            if (i < params.counts.hot) {
+                if (isTarget) this.reconstructHotItem(itemId, i, params);
+            } else if (i < (params.counts.hot + params.counts.warm)) {
+                // WARM placeholder
+            } else if (i < (params.counts.hot + params.counts.warm + params.counts.coldConst)) {
+                if (isTarget) this.reconstructColdConstItem(itemId, params.coldConsts[coldConstIdx], params);
                 coldConstIdx++;
-            } else if (i < hotCount + warmCount + coldConstCount + coldVarCount) {
-                // COLD VARIABLE
-                // Uses sparse bitmaps + values
-                const bitmapBytes = Math.ceil(snapshotCount / 8);
-                const startByte = coldVarIdx * bitmapBytes;
-
-                // Read bitmap to find changes
-                // If bit set, read from coldVarVals
-
-                // For target item reconstruction:
-                let currentVal = 0; // Will be set by first value
-
-                // We need to consume values from coldVarVals regardless of target to keep pointer in sync
-                // BUT coldVarVals is one big stream. So we need to parse the bitmap to know how many to consume.
-
-                let valueCount = 1; // Always at least one value (initial)
-                // Scan bitmap to count additional values
-                for (let b = 0; b < bitmapBytes; b++) {
-                    const byte = coldVarBitmaps[startByte + b];
-                    // Count set bits
-                    let n = byte;
-                    while (n > 0) {
-                        if (n & 1) valueCount++;
-                        n >>= 1;
-                    }
-                }
-                // Correction: First value is "initial", changes are bits.
-                // Wait, logic in Writer:
-                // coldVariableValues.push(prev); // First value
-                // if (prices[i] !== prev) ... values.push(diff);
-                // checks loop 1..length.
-                // So count is 1 + set bits.
-                // Ah, the inner loop above counts bits correctly IF we mask properly or iterate bits.
-
-                // Actually, let's just implement the consumption:
-                const myValues: number[] = [];
-                for (let k = 0; k < valueCount; k++) {
-                    myValues.push(coldVarVals[coldVarValPtr++]);
-                }
-
-                if (isTarget) {
-                    // Reconstruct from myValues and bitmap
-                    let vPtr = 0;
-                    let val = myValues[vPtr++];
-                    const res = results.get(itemId)!;
-
-                    // First snapshot
-                    res.history.push({ timestamp: absTimestamps[0], price: val, quantity: 1 });
-
-                    let bitIdx = 1; // Bit 0 corresponds to index 1?
-                    // Writer loop: i=1 to length.
-                    // bitmap[floor(i/8)] |= (1 << (i%8))
-
-                    for (let s = 1; s < snapshotCount; s++) {
-                        const byteIdx = Math.floor(s / 8);
-                        const bitPos = s % 8;
-                        const byte = coldVarBitmaps[startByte + byteIdx];
-                        const isSet = (byte & (1 << bitPos)) !== 0;
-
-                        if (isSet) {
-                            val += myValues[vPtr++];
-                        }
-                        res.history.push({ timestamp: absTimestamps[s], price: val, quantity: 1 });
-                    }
-                }
+            } else {
+                const { valueCount } = this.getColdVarMetadata(coldVarIdx, params);
+                if (isTarget) this.reconstructColdVarItem(itemId, coldVarIdx, coldVarValPtr, valueCount, params);
+                coldVarValPtr += valueCount;
                 coldVarIdx++;
-            }
-
-            // Build valid Ultra Sparse results
-            // Just parsing the COO
-            let usIdx = 0;
-            if (ultraData && ultraData.length > 0) {
-                const count = ultraData[usIdx++];
-                let uId = 0;
-                let uP = 0;
-                let uQ = 0;
-
-                for (let k = 0; k < count; k++) {
-                    const idD = ultraData[usIdx++];
-                    const sIdx = ultraData[usIdx++];
-                    const pD = ultraData[usIdx++];
-                    const qD = ultraData[usIdx++];
-
-                    uId += idD;
-                    uP += pD;
-                    uQ += qD;
-
-                    if (targetItemIds.includes(uId)) {
-                        results.get(uId)!.history.push({
-                            timestamp: absTimestamps[sIdx],
-                            price: uP,
-                            quantity: uQ
-                        });
-                    }
-                }
             }
         }
     }
+
+    private reconstructHotItem(itemId: number, idxInTier: number, params: any) {
+        const start = idxInTier * params.snapshotCount;
+        const dod = params.hotValues.slice(start, start + params.snapshotCount);
+        let p = dod[0];
+        let d = dod[1] ?? 0;
+        const prices = [p];
+        if (dod.length > 1) {
+            p += d;
+            prices.push(p);
+        }
+        for (let k = 2; k < dod.length; k++) {
+            d += dod[k];
+            p += d;
+            prices.push(p);
+        }
+
+        const res = params.results.get(itemId)!;
+        for (let s = 0; s < prices.length; s++) {
+            res.history.push({ timestamp: params.absTimestamps[s], price: prices[s], quantity: 1 });
+        }
+    }
+
+    private reconstructColdConstItem(itemId: number, val: number, params: any) {
+        const res = params.results.get(itemId)!;
+        for (const ts of params.absTimestamps) {
+            res.history.push({ timestamp: ts, price: val, quantity: 1 });
+        }
+    }
+
+    private getColdVarMetadata(coldVarIdx: number, params: any) {
+        const bitmapBytes = Math.ceil(params.snapshotCount / 8);
+        const startByte = coldVarIdx * bitmapBytes;
+        let valueCount = 1;
+        for (let b = 0; b < bitmapBytes; b++) {
+            let n = params.coldVarBitmaps[startByte + b];
+            while (n > 0) {
+                if (n & 1) valueCount++;
+                n >>= 1;
+            }
+        }
+        return { valueCount, startByte, bitmapBytes };
+    }
+
+    private reconstructColdVarItem(itemId: number, coldVarIdx: number, valPtr: number, valCount: number, params: any) {
+        const { startByte } = this.getColdVarMetadata(coldVarIdx, params);
+        const myValues = params.coldVarVals.slice(valPtr, valPtr + valCount);
+
+        let vPtr = 0;
+        let val = myValues[vPtr++];
+        const res = params.results.get(itemId)!;
+        res.history.push({ timestamp: params.absTimestamps[0], price: val, quantity: 1 });
+
+        for (let s = 1; s < params.snapshotCount; s++) {
+            const byte = params.coldVarBitmaps[startByte + Math.floor(s / 8)];
+            if ((byte & (1 << (s % 8))) !== 0) {
+                val += myValues[vPtr++];
+            }
+            res.history.push({ timestamp: params.absTimestamps[s], price: val, quantity: 1 });
+        }
+    }
+
+    private reconstructUltraSparseCOO(ultraData: number[], targetItemIds: number[], results: Map<number, ItemQueryResult>, absTimestamps: number[]) {
+        if (!ultraData || ultraData.length === 0) return;
+        let usIdx = 0;
+        const count = ultraData[usIdx++];
+        let uId = 0, uP = 0, uQ = 0;
+
+        for (let k = 0; k < count; k++) {
+            uId += ultraData[usIdx++];
+            const sIdx = ultraData[usIdx++];
+            uP += ultraData[usIdx++];
+            uQ += ultraData[usIdx++];
+
+            if (targetItemIds.includes(uId)) {
+                results.get(uId)!.history.push({
+                    timestamp: absTimestamps[sIdx],
+                    price: uP,
+                    quantity: uQ
+                });
+            }
+        }
+    }
+
 
     async unlock(password: string): Promise<void> {
         if (this.encryptionMode !== EncryptionMode.NONE) {
@@ -1417,13 +1366,13 @@ export class HybridReader {
 
     async getLatestSnapshot(): Promise<Snapshot | null> {
         if (this.temporalIndex.length === 0) return null;
-        const lastBlock = this.temporalIndex[this.temporalIndex.length - 1];
+        const lastBlock = this.temporalIndex.at(-1)!;
         const results = await this.queryItems({ startTime: lastBlock.startTimestamp });
 
         let maxTs = 0;
         for (const res of results) {
             if (res.history.length > 0) {
-                const lastPoint = res.history[res.history.length - 1];
+                const lastPoint = res.history.at(-1)!;
                 if (lastPoint.timestamp > maxTs) maxTs = lastPoint.timestamp;
             }
         }
@@ -1491,57 +1440,37 @@ export class HybridReader {
      * OPTIMIZED: O(n) using parallel iteration instead of O(n²) .find()
      */
     async getAllSnapshots(): Promise<Snapshot[]> {
-        // Query all items to get their full history
         const results = await this.queryItems({});
-
         if (results.length === 0) return [];
 
-        // Build a map of timestamp → index for O(1) lookup
+        const allTimestamps = this.collectUniqueTimestamps(results);
         const timestampToIndex = new Map<number, number>();
-        const allTimestamps: number[] = [];
+        allTimestamps.forEach((ts, i) => timestampToIndex.set(ts, i));
 
-        // Collect all unique timestamps from the first item's history
-        // (all items should have the same timestamps due to GICS snapshot design)
-        if (results[0].history.length > 0) {
-            for (const point of results[0].history) {
-                const ts = point.timestamp;
-                if (!timestampToIndex.has(ts)) {
-                    timestampToIndex.set(ts, allTimestamps.length);
-                    allTimestamps.push(ts);
-                }
-            }
-        }
-
-        // Also check other items for any timestamps we might have missed
-        // (handles sparse items that may appear in fewer snapshots)
-        for (const result of results) {
-            for (const point of result.history) {
-                if (!timestampToIndex.has(point.timestamp)) {
-                    timestampToIndex.set(point.timestamp, allTimestamps.length);
-                    allTimestamps.push(point.timestamp);
-                }
-            }
-        }
-
-        // Sort timestamps chronologically
-        allTimestamps.sort((a, b) => a - b);
-
-        // Rebuild index after sort
-        timestampToIndex.clear();
-        for (let i = 0; i < allTimestamps.length; i++) {
-            timestampToIndex.set(allTimestamps[i], i);
-        }
-
-        // Pre-allocate snapshot array
         const snapshots: Snapshot[] = allTimestamps.map(ts => ({
             timestamp: ts,
             items: new Map<number, { price: number; quantity: number }>()
         }));
 
-        // O(n) reconstruction: iterate each item's history once
+        this.populateSnapshotsFromResults(results, snapshots, timestampToIndex);
+
+        return snapshots.filter(s => s.items.size > 0);
+    }
+
+    private collectUniqueTimestamps(results: ItemQueryResult[]): number[] {
+        const tsSet = new Set<number>();
+        for (const res of results) {
+            for (const point of res.history) {
+                tsSet.add(point.timestamp);
+            }
+        }
+        return Array.from(tsSet).sort((a, b) => a - b);
+    }
+
+    private populateSnapshotsFromResults(results: ItemQueryResult[], snapshots: Snapshot[], tsMap: Map<number, number>) {
         for (const result of results) {
             for (const point of result.history) {
-                const idx = timestampToIndex.get(point.timestamp);
+                const idx = tsMap.get(point.timestamp);
                 if (idx !== undefined) {
                     snapshots[idx].items.set(result.itemId, {
                         price: point.price,
@@ -1550,10 +1479,8 @@ export class HybridReader {
                 }
             }
         }
-
-        // Filter out empty snapshots (shouldn't happen, but safety)
-        return snapshots.filter(s => s.items.size > 0);
     }
+
 }
 
 // ============================================================================

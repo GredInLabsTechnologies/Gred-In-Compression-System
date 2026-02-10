@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+// NOTE: Vitest globals are enabled (see vitest.config.ts). Avoid importing from
+// 'vitest' in test files to prevent "No test suite found" issues.
 import { GICSv2Encoder } from '../src/gics/encode.js';
 import { GICSv2Decoder } from '../src/gics/decode.js';
 import { IntegrityError } from '../src/gics/errors.js';

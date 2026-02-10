@@ -1,10 +1,11 @@
-import { Snapshot } from '../gics-types.js';
+import { Snapshot, GenericSnapshot } from '../gics-types.js';
 import { decodeVarint } from '../gics-utils.js';
 import {
     GICS_MAGIC_V2, StreamId, InnerCodecId, GICS_HEADER_SIZE_V3,
     FILE_EOS_SIZE, GICS_EOS_MARKER, SEGMENT_FOOTER_SIZE, GICS_FLAGS_V3,
-    GICS_ENC_HEADER_SIZE_V3
+    GICS_ENC_HEADER_SIZE_V3, SCHEMA_STREAM_BASE
 } from './format.js';
+import type { SchemaProfile } from '../gics-types.js';
 import { ContextV0 } from './context.js';
 import { Codecs } from './codecs.js';
 import { IncompleteDataError, IntegrityError, LimitExceededError } from './errors.js';
@@ -28,6 +29,25 @@ interface DecompressionResult {
     quantities: number[];
 }
 
+/** Generic decompression result for schema-based files */
+interface GenericDecompressionResult {
+    time: number[];
+    lengths: number[];
+    itemIds: number[];
+    fieldArrays: Map<number, number[]>; // streamId → decoded values
+}
+
+/** Default legacy schema (implicit for v1.3 files without HAS_SCHEMA) */
+const LEGACY_SCHEMA: SchemaProfile = {
+    id: 'legacy_market_data',
+    version: 1,
+    itemIdType: 'number',
+    fields: [
+        { name: 'price', type: 'numeric', codecStrategy: 'value' },
+        { name: 'quantity', type: 'numeric', codecStrategy: 'structural' },
+    ],
+};
+
 export class GICSv2Decoder {
     private readonly data: Uint8Array;
     private pos: number = 0;
@@ -36,6 +56,8 @@ export class GICSv2Decoder {
     private encryptionKey: Buffer | null = null;
     private encryptionFileNonce: Uint8Array | null = null;
     private isEncrypted: boolean = false;
+    private hasSchema: boolean = false;
+    private schema: SchemaProfile = LEGACY_SCHEMA;
     private fileHeaderBytes: Uint8Array | null = null;
 
     static resetSharedContext() {
@@ -74,6 +96,62 @@ export class GICSv2Decoder {
         }
     }
 
+    /**
+     * Decode all snapshots as generic records (for schema-based files).
+     * For legacy files without schema, returns snapshots with { price, quantity } fields.
+     */
+    async getAllGenericSnapshots(): Promise<GenericSnapshot<Record<string, number | string>>[]> {
+        if (this.data.length < GICS_MAGIC_V2.length) {
+            throw new Error('Data too short');
+        }
+        if (!this.verifyMagic()) {
+            throw new IntegrityError("GICS Decoder: Invalid magic bytes.");
+        }
+
+        this.pos = GICS_MAGIC_V2.length;
+        const version = this.getUint8();
+        if (version !== 0x03) throw new IntegrityError(`getAllGenericSnapshots requires v1.3, got version ${version}`);
+
+        return this.handleV3Generic();
+    }
+
+    private async handleV3Generic(): Promise<GenericSnapshot<Record<string, number | string>>[]> {
+        if (this.data[this.data.length - FILE_EOS_SIZE] !== GICS_EOS_MARKER) {
+            throw new IncompleteDataError('GICS v1.3: Missing File EOS marker (0xFF)');
+        }
+
+        this.pos = 5;
+        const flags = this.getUint32();
+        this.isEncrypted = (flags & GICS_FLAGS_V3.ENCRYPTED) !== 0;
+        this.hasSchema = (flags & GICS_FLAGS_V3.HAS_SCHEMA) !== 0;
+        this.fileHeaderBytes = this.data.subarray(0, GICS_HEADER_SIZE_V3);
+
+        this.pos = GICS_HEADER_SIZE_V3;
+        if (this.isEncrypted) {
+            await this.setupEncryption();
+        }
+        if (this.hasSchema) {
+            await this.readSchemaSection();
+        }
+
+        return this.getAllGenericSnapshotsV3();
+    }
+
+    private async getAllGenericSnapshotsV3(): Promise<GenericSnapshot<Record<string, number | string>>[]> {
+        const snapshots: GenericSnapshot<Record<string, number | string>>[] = [];
+        const dataEnd = this.data.length - FILE_EOS_SIZE;
+        const integrity = new IntegrityChain();
+
+        while (this.pos < dataEnd) {
+            const { snapshots: segmentSnaps, nextPos } = await this.decodeSegmentGeneric(integrity);
+            snapshots.push(...segmentSnaps);
+            this.pos = nextPos;
+        }
+
+        this.verifyFileEOS(integrity);
+        return snapshots;
+    }
+
     private verifyMagic(): boolean {
         for (let i = 0; i < GICS_MAGIC_V2.length; i++) {
             if (this.data[i] !== GICS_MAGIC_V2[i]) return false;
@@ -91,6 +169,7 @@ export class GICSv2Decoder {
         this.pos = 5;
         const flags = this.getUint32();
         this.isEncrypted = (flags & GICS_FLAGS_V3.ENCRYPTED) !== 0;
+        this.hasSchema = (flags & GICS_FLAGS_V3.HAS_SCHEMA) !== 0;
         this.fileHeaderBytes = this.data.subarray(0, GICS_HEADER_SIZE_V3);
 
         this.pos = GICS_HEADER_SIZE_V3;
@@ -98,7 +177,67 @@ export class GICSv2Decoder {
             await this.setupEncryption();
         }
 
+        // Read schema section if present
+        if (this.hasSchema) {
+            await this.readSchemaSection();
+        }
+
         return this.getAllSnapshotsV3();
+    }
+
+    /**
+     * Read the schema section: [schemaLength: uint32][schemaPayload: zstd-compressed JSON]
+     */
+    private async readSchemaSection(): Promise<void> {
+        if (this.pos + 4 > this.data.length) {
+            throw new IncompleteDataError('GICS v1.3: Truncated schema section length');
+        }
+        const schemaLen = this.getUint32();
+        if (this.pos + schemaLen > this.data.length) {
+            throw new IncompleteDataError('GICS v1.3: Truncated schema section payload');
+        }
+        const compressed = this.data.subarray(this.pos, this.pos + schemaLen);
+        this.pos += schemaLen;
+
+        const decompressed = await getOuterCodec(1 /* ZSTD */).decompress(compressed);
+        const jsonStr = new TextDecoder().decode(decompressed);
+        this.schema = JSON.parse(jsonStr) as SchemaProfile;
+    }
+
+    /**
+     * Returns the schema profile for this file.
+     * If no schema was embedded, returns the legacy implicit schema.
+     * Can be called after parseHeader() or getAllSnapshots().
+     */
+    getSchema(): SchemaProfile {
+        return this.schema;
+    }
+
+    /**
+     * Parse the file header (magic, version, flags, encryption, schema) without decoding data.
+     * After calling this, getSchema() returns the embedded schema.
+     */
+    async parseHeader(): Promise<void> {
+        if (!this.verifyMagic()) {
+            throw new IntegrityError("GICS Decoder: Invalid magic bytes.");
+        }
+        this.pos = GICS_MAGIC_V2.length;
+        const version = this.getUint8();
+        if (version !== 0x03) throw new IntegrityError(`Unsupported version: ${version}`);
+
+        this.pos = 5;
+        const flags = this.getUint32();
+        this.isEncrypted = (flags & GICS_FLAGS_V3.ENCRYPTED) !== 0;
+        this.hasSchema = (flags & GICS_FLAGS_V3.HAS_SCHEMA) !== 0;
+        this.fileHeaderBytes = this.data.subarray(0, GICS_HEADER_SIZE_V3);
+
+        this.pos = GICS_HEADER_SIZE_V3;
+        if (this.isEncrypted) {
+            await this.setupEncryption();
+        }
+        if (this.hasSchema) {
+            await this.readSchemaSection();
+        }
     }
 
     private async setupEncryption() {
@@ -140,7 +279,26 @@ export class GICSv2Decoder {
         const version = this.getUint8();
         if (version !== 0x03) throw new Error("Query only supported on v1.3 segments");
 
+        // Read flags to detect schema
+        this.pos = 5;
+        const flags = this.getUint32();
+        const hasSchemaFlag = (flags & GICS_FLAGS_V3.HAS_SCHEMA) !== 0;
+
         this.pos = GICS_HEADER_SIZE_V3;
+
+        // Skip schema section if present (bounds-checked, fail-closed)
+        if (hasSchemaFlag) {
+            if (this.pos + 4 > this.data.length) {
+                throw new IncompleteDataError('GICS v1.3: Truncated schema section length');
+            }
+            const schemaLen = this.getUint32();
+            const dataEnd = this.data.length - FILE_EOS_SIZE;
+            if (this.pos + schemaLen > dataEnd) {
+                throw new IncompleteDataError('GICS v1.3: Truncated schema section payload');
+            }
+            this.pos += schemaLen;
+        }
+
         const dataEnd = this.data.length - FILE_EOS_SIZE;
         const result: Snapshot[] = [];
 
@@ -150,6 +308,60 @@ export class GICSv2Decoder {
             this.pos = nextPos;
         }
         return result;
+    }
+
+    /**
+     * Query by string or numeric key on schema-based files.
+     * Returns matching generic snapshots, skipping segments via bloom filter.
+     */
+    async queryGeneric(itemKey: number | string): Promise<GenericSnapshot<Record<string, number | string>>[]> {
+        await this.parseHeader();
+
+        const dataEnd = this.data.length - FILE_EOS_SIZE;
+        const result: GenericSnapshot<Record<string, number | string>>[] = [];
+
+        while (this.pos < dataEnd) {
+            const snapshots = await this.querySegmentForGeneric(itemKey);
+            if (snapshots) result.push(...snapshots);
+        }
+        return result;
+    }
+
+    private async querySegmentForGeneric(itemKey: number | string): Promise<GenericSnapshot<Record<string, number | string>>[] | null> {
+        const { sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
+        this.verifySegmentIntegrity(segmentStart, nextPos, footer);
+
+        const shouldSkip = typeof itemKey === 'string'
+            ? !index.containsString(itemKey)
+            : !index.contains(itemKey);
+
+        if (shouldSkip) {
+            this.pos = nextPos;
+            return null;
+        }
+
+        let snapshots: GenericSnapshot<Record<string, number | string>>[];
+
+        if (this.hasSchema) {
+            const data = await this.decompressAndDecodeGeneric(sections);
+            snapshots = this.reconstructGenericSnapshots(data, index);
+            snapshots = snapshots.filter(s => s.items.has(itemKey));
+        } else {
+            const data = await this.decompressAndDecode(sections);
+            const legacySnaps = this.reconstructSnapshots(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
+            const numKey = typeof itemKey === 'number' ? itemKey : Number.parseInt(itemKey, 10);
+            snapshots = legacySnaps
+                .filter(s => s.items.has(numKey))
+                .map(s => ({
+                    timestamp: s.timestamp,
+                    items: new Map(
+                        Array.from(s.items.entries()).map(([id, v]) => [id, { price: v.price, quantity: v.quantity } as Record<string, number | string>])
+                    ),
+                }));
+        }
+
+        this.pos = nextPos;
+        return snapshots;
     }
 
     /**
@@ -165,11 +377,21 @@ export class GICSv2Decoder {
             this.pos = 5;
             const flags = this.getUint32();
             this.isEncrypted = (flags & GICS_FLAGS_V3.ENCRYPTED) !== 0;
+            const hasSchemaFlag = (flags & GICS_FLAGS_V3.HAS_SCHEMA) !== 0;
+
+            const dataEnd = this.data.length - FILE_EOS_SIZE;
 
             this.pos = GICS_HEADER_SIZE_V3;
             if (this.isEncrypted) this.pos += GICS_ENC_HEADER_SIZE_V3;
 
-            const dataEnd = this.data.length - FILE_EOS_SIZE;
+            // Skip schema section if present (bounds-checked)
+            if (hasSchemaFlag) {
+                if (this.pos + 4 > this.data.length) return false;
+                const schemaLen = this.getUint32();
+                if (this.pos + schemaLen > dataEnd) return false;
+                this.pos += schemaLen;
+            }
+
             const integrity = new IntegrityChain();
 
             while (this.pos < dataEnd) {
@@ -278,6 +500,171 @@ export class GICSv2Decoder {
         return { snapshots, nextPos, index };
     }
 
+    private async decodeSegmentGeneric(chain?: IntegrityChain): Promise<{
+        snapshots: GenericSnapshot<Record<string, number | string>>[], nextPos: number, index: SegmentIndex
+    }> {
+        const { sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
+        this.verifySegmentIntegrity(segmentStart, nextPos, footer);
+
+        if (this.hasSchema) {
+            const data = await this.decompressAndDecodeGeneric(sections, chain);
+            const snapshots = this.reconstructGenericSnapshots(data, index);
+            return { snapshots, nextPos, index };
+        } else {
+            // Legacy: convert Snapshot[] to GenericSnapshot[]
+            const data = await this.decompressAndDecode(sections, chain);
+            const legacySnaps = this.reconstructSnapshots(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
+            const genericSnaps: GenericSnapshot<Record<string, number | string>>[] = legacySnaps.map(s => ({
+                timestamp: s.timestamp,
+                items: new Map(
+                    Array.from(s.items.entries()).map(([id, v]) => [id, { price: v.price, quantity: v.quantity } as Record<string, number | string>])
+                ),
+            }));
+            return { snapshots: genericSnaps, nextPos, index };
+        }
+    }
+
+    private async decompressAndDecodeGeneric(sections: StreamSection[], chain?: IntegrityChain): Promise<GenericDecompressionResult> {
+        const res: GenericDecompressionResult = { time: [], lengths: [], itemIds: [], fieldArrays: new Map() };
+        const segmentContext = new ContextV0('segment_chain_marker');
+
+        for (const section of sections) {
+            if (chain) this.verifySectionHash(section, chain);
+            this.checkDecompressionLimit(section.uncompressedLen);
+
+            let payload = section.payload;
+            if (this.isEncrypted) {
+                payload = this.decryptSectionPayload(section);
+            }
+
+            const decompressed = await getOuterCodec(section.outerCodecId).decompress(payload);
+            this.decodeGenericSectionBlocks(section, decompressed, segmentContext, res);
+        }
+        return res;
+    }
+
+    private decodeGenericSectionBlocks(section: StreamSection, decompressed: Uint8Array, context: ContextV0, res: GenericDecompressionResult) {
+        let offset = 0;
+        for (const entry of section.manifest) {
+            const blockPayload = decompressed.subarray(offset, offset + entry.payloadLen);
+            offset += entry.payloadLen;
+
+            const streamId = section.streamId;
+            const values = this.decodeGenericBlock(streamId, entry.innerCodecId, entry.nItems, blockPayload, entry.flags, context);
+
+            if (streamId === StreamId.TIME) {
+                res.time.push(...values);
+            } else if (streamId === StreamId.SNAPSHOT_LEN) {
+                res.lengths.push(...values);
+            } else if (streamId === StreamId.ITEM_ID) {
+                res.itemIds.push(...values);
+            } else if (streamId >= SCHEMA_STREAM_BASE) {
+                if (!res.fieldArrays.has(streamId)) res.fieldArrays.set(streamId, []);
+                res.fieldArrays.get(streamId)!.push(...values);
+            }
+        }
+    }
+
+    /**
+     * Decode a single block. For TIME stream, applies DOD decoding.
+     * For schema field streams (100+), just raw codec dispatch (no state tracking).
+     */
+    private decodeGenericBlock(streamId: number, codecId: InnerCodecId, nItems: number, payload: Uint8Array, blockFlags: number, context: ContextV0): number[] {
+        const values = this.dispatchCodec(codecId, payload, nItems, context);
+        if (values.length === 0) return [];
+
+        if (streamId === StreamId.TIME) {
+            return this.decodeTimeStream(values, true, context);
+        }
+        // Schema field streams and structural streams: raw values, no state tracking
+        return values;
+    }
+
+    private reconstructGenericSnapshots(
+        data: GenericDecompressionResult,
+        index: SegmentIndex
+    ): GenericSnapshot<Record<string, number | string>>[] {
+        const schema = this.schema;
+        const totalItems = data.lengths.reduce((a, b) => a + b, 0);
+
+        this.validateGenericDataLengths(data, totalItems);
+        const reverseEnumMaps = this.buildReverseEnumMaps();
+        const stringDict = index.stringDict;
+
+        const result: GenericSnapshot<Record<string, number | string>>[] = [];
+        let itemOffset = 0;
+
+        for (let s = 0; s < data.lengths.length; s++) {
+            const count = data.lengths[s];
+            const items = new Map<number | string, Record<string, number | string>>();
+
+            for (let j = 0; j < count; j++) {
+                const numericId = data.itemIds[itemOffset];
+                const key = (schema.itemIdType === 'string' && stringDict)
+                    ? (stringDict.entries[numericId] ?? numericId)
+                    : numericId;
+
+                items.set(key, this.buildItemRecord(data, itemOffset, reverseEnumMaps));
+                itemOffset++;
+            }
+
+            result.push({ timestamp: data.time[s] ?? 0, items });
+        }
+
+        return result;
+    }
+
+    private validateGenericDataLengths(data: GenericDecompressionResult, totalItems: number) {
+        if (data.time.length !== data.lengths.length) {
+            throw new IntegrityError(`Cross-stream mismatch: TIME (${data.time.length}) != SNAPSHOT_LEN (${data.lengths.length})`);
+        }
+        if (totalItems !== data.itemIds.length) {
+            throw new IntegrityError(`Cross-stream mismatch: Sum of SNAPSHOT_LEN (${totalItems}) != ITEM_ID (${data.itemIds.length})`);
+        }
+        for (let i = 0; i < this.schema.fields.length; i++) {
+            const streamId = SCHEMA_STREAM_BASE + i;
+            const fieldVals = data.fieldArrays.get(streamId) ?? [];
+            if (fieldVals.length !== totalItems) {
+                throw new IntegrityError(`Cross-stream mismatch: field '${this.schema.fields[i].name}' length (${fieldVals.length}) != ITEM_ID (${totalItems})`);
+            }
+        }
+    }
+
+    private buildReverseEnumMaps(): Map<string, Map<number, string>> {
+        const reverseEnumMaps = new Map<string, Map<number, string>>();
+        for (const field of this.schema.fields) {
+            if (field.type === 'categorical' && field.enumMap) {
+                const reverse = new Map<number, string>();
+                for (const [str, num] of Object.entries(field.enumMap)) {
+                    reverse.set(num, str);
+                }
+                reverseEnumMaps.set(field.name, reverse);
+            }
+        }
+        return reverseEnumMaps;
+    }
+
+    private buildItemRecord(
+        data: GenericDecompressionResult,
+        itemOffset: number,
+        reverseEnumMaps: Map<string, Map<number, string>>
+    ): Record<string, number | string> {
+        const record: Record<string, number | string> = {};
+        for (let f = 0; f < this.schema.fields.length; f++) {
+            const field = this.schema.fields[f];
+            const streamId = SCHEMA_STREAM_BASE + f;
+            const rawVal = data.fieldArrays.get(streamId)![itemOffset];
+
+            if (field.type === 'categorical' && reverseEnumMaps.has(field.name)) {
+                const reverseMap = reverseEnumMaps.get(field.name)!;
+                record[field.name] = reverseMap.get(rawVal) ?? rawVal;
+            } else {
+                record[field.name] = rawVal;
+            }
+        }
+        return record;
+    }
+
     private parseSegmentParts(pos: number): {
         header: SegmentHeader,
         sections: StreamSection[],
@@ -292,7 +679,10 @@ export class GICSv2Decoder {
         const absoluteIndexOffset = segmentStart + header.indexOffset;
         const sections = this.extractSections(segmentStart + 14, absoluteIndexOffset);
 
-        const nextPos = this.locateNextSegment(pos + 14);
+        // Use totalLength from header when available; fall back to magic scanning
+        const nextPos = header.totalLength > 0
+            ? segmentStart + header.totalLength
+            : this.locateNextSegment(pos + 14);
         const footerPos = nextPos - SEGMENT_FOOTER_SIZE;
         const footerBytes = this.data.subarray(footerPos, nextPos);
         if (footerBytes.length < SEGMENT_FOOTER_SIZE) throw new IncompleteDataError("Segment Footer truncated");
@@ -469,13 +859,13 @@ export class GICSv2Decoder {
         const values = this.dispatchCodec(codecId, payload, nItems, context);
         if (values.length === 0) return [];
 
-        const commitable = (blockFlags & 0x10) === 0;
-
+        // Always commit state: encoder commits unconditionally (encode.ts:512-519),
+        // so decoder must match. HEALTH_QUAR (0x10) is a health annotation, not a skip signal.
         if (streamId === StreamId.TIME) {
-            return this.decodeTimeStream(values, commitable, context);
+            return this.decodeTimeStream(values, true, context);
         } else if (streamId === StreamId.VALUE) {
             const isDOD = (codecId === InnerCodecId.DOD_VARINT || codecId === InnerCodecId.RLE_DOD);
-            return this.decodeValueStream(values, commitable, context, isDOD);
+            return this.decodeValueStream(values, true, context, isDOD);
         } else {
             return values;
         }
@@ -493,6 +883,8 @@ export class GICSv2Decoder {
                 return Codecs.decodeRLE(payload);
             case InnerCodecId.DICT_VARINT:
                 return Codecs.decodeDict(payload, context);
+            case InnerCodecId.FIXED64_LE:
+                return Codecs.decodeFixed64(payload, nItems);
             default:
                 return [];
         }

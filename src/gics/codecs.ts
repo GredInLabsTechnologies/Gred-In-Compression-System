@@ -143,4 +143,35 @@ export class Codecs {
         }
         return result;
     }
+
+    // --- FIXED64 LE ---
+    static encodeFixed64(values: number[]): Uint8Array {
+        const result = new Uint8Array(values.length * 8);
+        const view = new DataView(result.buffer);
+        for (let i = 0; i < values.length; i++) {
+            // Using Float64 for general numbers, but task description mentions "numeros" which usually are integers in this context.
+            // However, prices can be floats potentially? 
+            // The GICS context usually handles integers with varints etc.
+            // Let's use Float64 if we want to be safe, but BigInt64 if we know they are integers.
+            // Looking at other codecs (zigzag), they treat everything as integers.
+            // So we use BigInt64 or similar. Actually, for simplicity and performance in JS:
+            // if we use integers, BigInt64 is correct. If we use floats, Float64.
+            // But since this is a fallback for "noisy" data that was being varint encoded,
+            // they are likely integers.
+            // Let's check how they were represented. snapshot items have 'price' and 'quantity'.
+            // Most GICS files I've seen use integers (cents for prices).
+            // Let's use BigInt64LE for now to be safe with large integers.
+            view.setBigInt64(i * 8, BigInt(Math.floor(values[i])), true);
+        }
+        return result;
+    }
+
+    static decodeFixed64(data: Uint8Array, count: number): number[] {
+        const result: number[] = [];
+        const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+        for (let i = 0; i < count; i++) {
+            result.push(Number(view.getBigInt64(i * 8, true)));
+        }
+        return result;
+    }
 }

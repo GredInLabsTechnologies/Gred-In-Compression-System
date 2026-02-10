@@ -41,6 +41,9 @@ bench_postfreeze_artifacts/
 bench_postfreeze_report.md
 bench_postfreeze_summary.json
 
+# Forensics bench artifacts (postfreeze harness)
+bench/forensics/artifacts/
+
 # Test / coverage outputs
 coverage/
 .nyc_output/
@@ -99,3 +102,6 @@ deploy/gics-v1.2/src/gics_frozen/
 Thumbs.db
 ehthumbs.db
 .DS_Store
+
+# AI Crew
+_ai_crew/

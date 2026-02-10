@@ -2,6 +2,7 @@ import { SEGMENT_MAGIC, SEGMENT_FOOTER_SIZE } from './format.js';
 import { StreamSection } from './stream-section.js';
 import { encodeVarint, decodeVarint } from '../gics-utils.js';
 import { Snapshot } from '../gics-types.js';
+import { StringDictionary, StringDictionaryData } from './string-dict.js';
 
 /**
  * Simple Bloom Filter for ItemID existence check.
@@ -52,11 +53,13 @@ export class BloomFilter {
 
 /**
  * Segment Index: Bloom Filter + Sorted ItemIDs.
+ * Optionally includes a StringDictionary for string-keyed schemas.
  */
 export class SegmentIndex {
     constructor(
         public readonly bloom: BloomFilter,
-        public readonly sortedItemIds: number[]
+        public readonly sortedItemIds: number[],
+        public readonly stringDict?: StringDictionaryData
     ) { }
 
     serialize(): Uint8Array {
@@ -68,7 +71,15 @@ export class SegmentIndex {
         }
         const deltaBytes = encodeVarint(sortedDeltas);
 
-        const totalSize = 2 + this.bloom.bits.length + 4 + deltaBytes.length;
+        // String dict bytes: only present when schema uses string IDs
+        // IMPORTANT: When no stringDict, emit ZERO extra bytes to preserve v1.3 byte-identical output
+        const dictBytes = this.stringDict ? StringDictionary.encode(this.stringDict) : null;
+
+        const dictSection = dictBytes
+            ? 1 + 4 + dictBytes.length  // flag(1) + length(4) + payload
+            : 0;                         // nothing — legacy format
+
+        const totalSize = 2 + this.bloom.bits.length + 4 + deltaBytes.length + dictSection;
         const buffer = new Uint8Array(totalSize);
         const view = new DataView(buffer.buffer);
 
@@ -77,21 +88,34 @@ export class SegmentIndex {
         buffer.set(this.bloom.bits, pos); pos += this.bloom.bits.length;
 
         view.setUint32(pos, this.sortedItemIds.length, true); pos += 4;
-        buffer.set(deltaBytes, pos);
+        buffer.set(deltaBytes, pos); pos += deltaBytes.length;
+
+        // String dictionary section — only when present
+        if (dictBytes) {
+            buffer[pos++] = 1; // hasDict flag
+            view.setUint32(pos, dictBytes.length, true); pos += 4;
+            buffer.set(dictBytes, pos);
+        }
 
         return buffer;
     }
 
     static deserialize(data: Uint8Array): SegmentIndex {
+        if (data.length < 2) throw new Error("Truncated Segment Index (header)");
         const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
         let pos = 0;
 
         const bloomSize = view.getUint16(pos, true); pos += 2;
+        if (data.length < pos + bloomSize) throw new Error("Truncated Segment Index (bloom)");
         const bf = new BloomFilter(bloomSize);
         bf.bits.set(data.subarray(pos, pos + bloomSize)); pos += bloomSize;
 
+        if (data.length < pos + 4) throw new Error("Truncated Segment Index (count)");
         const count = view.getUint32(pos, true); pos += 4;
-        const deltas = decodeVarint(data.subarray(pos));
+
+        // Decode sorted item IDs — need to know how many varint bytes were consumed
+        const deltaData = data.subarray(pos);
+        const deltas = decodeVarint(deltaData);
 
         const itemIds: number[] = [];
         let current = 0;
@@ -100,7 +124,31 @@ export class SegmentIndex {
             itemIds.push(current);
         }
 
-        return new SegmentIndex(bf, itemIds);
+        // Calculate consumed bytes for varint section by re-encoding (needed for precise pos tracking)
+        const consumedVarintBytes = encodeVarint(deltas.slice(0, count)).length;
+        pos += consumedVarintBytes;
+
+        // String dictionary (optional, added by schema profiles)
+        let stringDict: StringDictionaryData | undefined;
+        if (pos < data.length) {
+            const hasDict = data[pos++];
+            if (hasDict === 1 && pos + 4 <= data.length) {
+                const dictLen = view.getUint32(pos, true); pos += 4;
+                if (pos + dictLen <= data.length) {
+                    const dictData = data.subarray(pos, pos + dictLen);
+                    const reverseMap = StringDictionary.decode(dictData);
+                    const entries: string[] = [];
+                    const forwardMap = new Map<string, number>();
+                    for (const [idx, str] of reverseMap) {
+                        entries[idx] = str;
+                        forwardMap.set(str, idx);
+                    }
+                    stringDict = { map: forwardMap, entries };
+                }
+            }
+        }
+
+        return new SegmentIndex(bf, itemIds, stringDict);
     }
 
     contains(itemId: number): boolean {
@@ -115,6 +163,17 @@ export class SegmentIndex {
             else high = mid - 1;
         }
         return false;
+    }
+
+    /**
+     * Query by string key. Looks up the string dict for the numeric mapping,
+     * then delegates to the standard contains() path.
+     */
+    containsString(key: string): boolean {
+        if (!this.stringDict) return false;
+        const numericId = this.stringDict.map.get(key);
+        if (numericId === undefined) return false;
+        return this.contains(numericId);
     }
 }
 

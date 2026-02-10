@@ -10,9 +10,39 @@ import type { Snapshot } from './gics-types.js';
 import type { GICSv2EncoderOptions, GICSv2DecoderOptions } from './gics/types.js';
 
 // Re-export specific types and errors
-export type { Snapshot } from './gics-types.js';
+export type { Snapshot, GenericSnapshot, SchemaProfile, FieldDef } from './gics-types.js';
 export type { GICSv2EncoderOptions as EncoderOptions, GICSv2DecoderOptions as DecoderOptions, GICSv2Logger as Logger } from './gics/types.js';
 export { IncompleteDataError, IntegrityError } from './gics/errors.js';
+
+import type { SchemaProfile } from './gics-types.js';
+
+/** Predefined schema profiles */
+const PREDEFINED_SCHEMAS: Record<string, SchemaProfile> = {
+    /** Legacy market data schema (price + quantity) — equivalent to no-schema mode */
+    MARKET_DATA: {
+        id: 'market_data_v1',
+        version: 1,
+        itemIdType: 'number',
+        fields: [
+            { name: 'price', type: 'numeric', codecStrategy: 'value' },
+            { name: 'quantity', type: 'numeric', codecStrategy: 'structural' },
+        ],
+    },
+    /** Trust events schema for GIMO integration */
+    TRUST_EVENTS: {
+        id: 'gimo_trust_v1',
+        version: 1,
+        itemIdType: 'string',
+        fields: [
+            { name: 'score', type: 'numeric', codecStrategy: 'value' },
+            { name: 'approvals', type: 'numeric', codecStrategy: 'structural' },
+            { name: 'rejections', type: 'numeric', codecStrategy: 'structural' },
+            { name: 'failures', type: 'numeric', codecStrategy: 'structural' },
+            { name: 'streak', type: 'numeric', codecStrategy: 'structural' },
+            { name: 'outcome', type: 'categorical', enumMap: { approved: 0, rejected: 1, error: 2, timeout: 3, auto_approved: 4 } },
+        ],
+    },
+};
 
 // The GICS Namespace Object
 export const GICS = {
@@ -49,7 +79,12 @@ export const GICS = {
     /**
      * GICS Decoder class for advanced reading/querying.
      */
-    Decoder: GICSv2Decoder
+    Decoder: GICSv2Decoder,
+
+    /**
+     * Predefined schema profiles for common use cases.
+     */
+    schemas: PREDEFINED_SCHEMAS,
 };
 
 export default GICS;

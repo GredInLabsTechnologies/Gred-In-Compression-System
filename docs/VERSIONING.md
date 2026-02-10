@@ -9,50 +9,31 @@
 | Version | Status | Location | Notes |
 |---------|--------|----------|-------|
 | **v1.1.0** | 🏛️ Archived | `GICS-ARCHIVE/versions/v1.1/frozen/` | Original frozen implementation |
-| **v1.2.0** | 🏛️ Archived | `GICS-ARCHIVE/versions/v1.2/` | Canonical + Distribution + Deploy |
-| **v1.3.x** | 🔧 Active | **This repository** | Current development version |
+| **v1.2.0** | 🏛️ Archived | `GICS-ARCHIVE/versions/v1.2/` | Verification suite + legacy formats |
+| **v1.3.0** | ✅ Production | **This repository** | Current stable version with Encryption + Schema |
 
 ---
 
-## v1.1.0 — Frozen
+## v1.1.0 — Frozen (Archived)
+Original GICS implementation. Immutable reference.
 
-- **Archive Path**: `../GICS-ARCHIVE/versions/v1.1/frozen/`
-- **Description**: Original GICS implementation
-- **Status**: Immutable reference
+## v1.2.0 — Legacy (Archived)
+Stable legacy version. Archived for historical reproducibility.
 
-## v1.2.0 — Archived
-
-- **Archive Path**: `../GICS-ARCHIVE/versions/v1.2/`
-- **Structure**:
-  - `canonical/` — Verified, clean source
-  - `distribution/` — Packaged for distribution
-  - `deploy/` — Full deployment bundle with `node_modules`
-- **Status**: Production-verified, archived
-
-## v1.3.x — Active Development
-
-- **Location**: This repository (`src/`)
-- **Report**: See `GICS_v1.3_IMPLEMENTATION_REPORT.md`
-- **Status**: Active development
-
----
-
-## Accessing Archived Versions
-
-```bash
-# Clone archive (if not already present)
-cd ..
-git clone <archive-remote-url> GICS-ARCHIVE
-
-# Verify integrity
-cd GICS-ARCHIVE
-# Check specific file against SHA256SUMS.txt
-```
+## v1.3.0 — Current Production
+Current active version. 
+- **Key Features**: StreamSegments, AES-256-GCM Encryption, JSON Schema profiles, SHA-256 Integrity Chain.
+- **Spec**: See [FORMAT.md](./FORMAT.md)
+- **Report**: See [docs/reports/GICS_v1.3_IMPLEMENTATION_REPORT.md](./reports/GICS_v1.3_IMPLEMENTATION_REPORT.md)
 
 ---
 
 ## Deprecation Policy
 
-- **Archived versions** (v1.1, v1.2) are **read-only**
-- **No backports** — fixes only go to active version
-- **Archive is append-only** — new versions may be added, existing content never modified
+- **Archived versions** (v1.1, v1.2) are **read-only**.
+- **v1.3.0** is the current source of truth.
+- All non-v1.3 documentation is moved to [docs/deprecated/](./deprecated/).
+
+---
+
+*Document version: 1.3 | Updated: 2026-02-10*

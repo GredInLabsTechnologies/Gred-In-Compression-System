@@ -140,26 +140,29 @@ export class IntegrityGuardian {
             try {
                 const actual = await this.hashFile(filePath);
 
-                if (actual.hash === expected.hash) {
-                    if (actual.size !== expected.size) {
-                        failed.push({
-                            path: filename,
-                            reason: `Size mismatch: expected ${expected.size}, got ${actual.size}`
-                        });
-                    } else {
-                        passed.push(filename);
-                    }
-                } else {
+                if (actual.hash !== expected.hash) {
                     failed.push({
                         path: filename,
                         reason: `Hash mismatch: expected ${expected.hash.substring(0, 16)}..., got ${actual.hash.substring(0, 16)}...`
                     });
+                    continue;
                 }
+
+                if (actual.size !== expected.size) {
+                    failed.push({
+                        path: filename,
+                        reason: `Size mismatch: expected ${expected.size}, got ${actual.size}`
+                    });
+                    continue;
+                }
+
+                passed.push(filename);
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'Unknown error';
                 failed.push({ path: filename, reason: `File read error: ${message}` });
             }
         }
+
 
         return {
             valid: failed.length === 0,

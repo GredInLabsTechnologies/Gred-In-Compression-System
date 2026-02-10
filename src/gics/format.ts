@@ -18,6 +18,7 @@ export enum InnerCodecId {
     RLE_DOD = 4,   // For Time mainly
     DOD_VARINT = 5, // For Time mainly (Delta-of-Delta + Varint)
     DICT_VARINT = 6, // Dictionary + Varint
+    FIXED64_LE = 7,  // 8 bytes per item (Little Endian)
 }
 
 export enum OuterCodecId {
@@ -42,8 +43,16 @@ export const GICS_HEADER_SIZE_V3 = 14; // magic(4) + version(1) + flags(4) + str
 
 export enum GICS_FLAGS_V3 {
     NONE = 0,
+    HAS_SCHEMA = 0x04,
     ENCRYPTED = 0x80,
 }
+
+/**
+ * Dynamic StreamId range for schema fields.
+ * Schema fields are assigned IDs starting from SCHEMA_STREAM_BASE + field index.
+ * Fixed streams (TIME=10, VALUE=20, META=30, ITEM_ID=40, QUANTITY=50, SNAPSHOT_LEN=60) are unchanged.
+ */
+export const SCHEMA_STREAM_BASE = 100;
 
 export interface EncryptionHeaderV3 {
     encMode: number;      // 1: AES-256-GCM

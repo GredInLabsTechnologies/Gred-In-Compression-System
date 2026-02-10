@@ -42,7 +42,12 @@ import { GICS } from 'gics-core';
 
 // 1. Simple API (Pack/Unpack)
 const snapshots = [
-  { itemId: 1, price: 100, quantity: 10, timestamp: Date.now() }
+  {
+    timestamp: Date.now(),
+    items: new Map([
+      [1, { price: 100, quantity: 10 }]
+    ])
+  }
 ];
 
 // Pack to Uint8Array
@@ -58,10 +63,10 @@ const isValid = await GICS.verify(bytes);
 const encoder = new GICS.Encoder();
 
 await encoder.addSnapshot({
-  itemId: 1001,
-  price: 125.50,
-  quantity: 42,
-  timestamp: Date.now()
+  timestamp: Date.now(),
+  items: new Map([
+    [1001, { price: 125.50, quantity: 42 }]
+  ])
 });
 
 const compressed = await encoder.finish();
@@ -81,23 +86,20 @@ const result = await decoder.getAllSnapshots();
 gics-core/
 ├── src/
 │   ├── index.ts                  # Main entry point & public API
-│   ├── gics-hybrid.ts            # Hybrid encoder/decoder (CORE + QUARANTINE)
 │   ├── gics-types.ts             # Core type definitions
 │   ├── gics-utils.ts             # Varint, RLE, and encoding utilities
-│   ├── gics-range-reader.ts      # Range-based binary reader
-│   ├── gics-canonical.ts         # Canonical format support
-│   ├── HeatClassifier.ts         # Entropy analysis for tier routing
-│   ├── CryptoProvider.ts         # Cryptographic abstraction layer
-│   ├── IntegrityGuardian.ts      # Integrity verification
-│   └── gics/v1_2/                # v1.2 codec implementation
-│       ├── encode.ts / decode.ts # Block-level encode/decode
+│   └── gics/                     # v1.3 codec implementation
+│       ├── encode.ts             # Section/Segment level encoding
+│       ├── decode.ts             # Section/Segment level decoding
 │       ├── format.ts             # Binary format specification
-│       ├── context.ts            # Compression context
-│       ├── chm.ts                # Compression Health Monitor
+│       ├── codecs.ts             # Internal bit-level codecs
+│       ├── string-dict.ts        # String dictionary support
+│       ├── segment.ts            # Segment-level operations
 │       └── errors.ts             # Typed error definitions
-├── tests/                        # Vitest test suites
+├── tests/                        # Vitest test suites (v1.3 only)
 ├── bench/                        # Benchmark harness & results
-├── tools/                        # Verification scripts
+├── tools/                        # Verification scripts and legacy code
+│   └── legacy/                   # Frozen v1.1/v1.2 code (archived)
 └── docs/                         # Architecture documentation
 ```
 
@@ -196,9 +198,28 @@ npm run verify
 
 ---
 
+## SonarCloud (automatic analysis)
+
+This repository contains a GitHub Actions workflow at:
+
+- `.github/workflows/sonar.yml`
+
+To enable automatic scans on push / PR:
+
+1) In GitHub, go to **Settings → Secrets and variables → Actions**
+2) Add a repository secret:
+   - `SONAR_TOKEN` (from SonarCloud: **My Account → Security → Generate Tokens**)
+3) Ensure your SonarCloud project key matches `sonar-project.properties`:
+   - `sonar.projectKey=Shiloren_Gred-In-Compression-System`
+   - and set the correct `sonar.organization` value for your SonarCloud org.
+
+After that, you should see the workflow running in **GitHub → Actions**.
+
+---
+
 ## 📚 Documentation
 
-- **[Implementation Report](./GICS_v1.3_IMPLEMENTATION_REPORT.md)**: Current architecture and implementation details
+- **[Implementation Report](./docs/reports/GICS_v1.3_IMPLEMENTATION_REPORT.md)**: Current architecture and implementation details
 - **[Security Model](./docs/SECURITY_MODEL.md)**: Safety guarantees and threat model
 - **[Format Specification](./docs/FORMAT.md)**: Binary format and encoding details
 - **[Repository Layout](./docs/REPO_LAYOUT.md)**: Project structure overview

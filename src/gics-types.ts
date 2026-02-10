@@ -1,12 +1,12 @@
 /**
  * GICS Types - Core type definitions
- * 
+ *
  * @module gics
  * @version 1.3.0
  * @status PRODUCTION
- * 
- * These types are designed to be generic for any price time-series,
- * supporting financial, sensor, and IoT data streams.
+ *
+ * These types are designed to be generic for any structured time-series,
+ * supporting financial, sensor, IoT, trust, and arbitrary data streams.
  */
 
 /**
@@ -14,6 +14,50 @@
  */
 export const GICS_VERSION = '1.3.0';
 export const GICS_VERSION_1_1 = 0x11; // Binary version byte
+
+// ============================================================================
+// Schema Profiles — Generic field definitions for arbitrary time-series
+// ============================================================================
+
+/**
+ * Defines a single field in a schema profile.
+ */
+export interface FieldDef {
+    /** Field name (used as key in snapshot items) */
+    name: string;
+    /** Data type */
+    type: 'numeric' | 'categorical';
+    /** Codec strategy hint for the encoder. If undefined, auto-detect (try all candidates). */
+    codecStrategy?: 'time' | 'value' | 'structural';
+    /** For categorical fields: mapping of string values to numeric codes */
+    enumMap?: Record<string, number>;
+}
+
+/**
+ * Schema profile describing the structure of data in a GICS file.
+ * Enables GICS to encode arbitrary structured time-series, not just price/quantity.
+ */
+export interface SchemaProfile {
+    /** Unique identifier for this schema (e.g., "gimo_trust_v1", "market_data_v1") */
+    id: string;
+    /** Schema version number */
+    version: number;
+    /** Type of item IDs: 'number' for legacy numeric IDs, 'string' for arbitrary string keys */
+    itemIdType: 'number' | 'string';
+    /** Ordered list of fields in each item */
+    fields: FieldDef[];
+}
+
+/**
+ * Generic snapshot type parameterized by item value shape.
+ * Default T = { price: number; quantity: number } for backward compatibility.
+ */
+export interface GenericSnapshot<T = { price: number; quantity: number }> {
+    /** Unix timestamp in seconds */
+    timestamp: number;
+    /** Map of itemId -> field values */
+    items: Map<number | string, T>;
+}
 
 /**
  * Snapshot type classification (v0.2+ experimental)
