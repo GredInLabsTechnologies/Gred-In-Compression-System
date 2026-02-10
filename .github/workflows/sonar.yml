@@ -1,12 +1,13 @@
 name: SonarCloud Analysis
 
+# NOTE:
+# This repo also has a `Build` workflow that runs a Sonar scan.
+# Running two independent Sonar analyses on the same branch/commit can lead to
+# SonarCloud rejecting one report with:
+#   "a newer report has already been processed"
+# To avoid duplicated analysis, keep this workflow manual-only.
 on:
-  push:
-    branches:
-      - main
-      - develop
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read

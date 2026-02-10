@@ -58,8 +58,9 @@ jobs:
           set +x
           echo "== Quality Gate (project=${SONAR_PROJECT_KEY}, branch=${SONAR_BRANCH}) =="
           QG_URL="${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}&branch=${SONAR_BRANCH}"
-          QG_RESP=$(curl -sS -u "${SONAR_TOKEN}:" -w "\nHTTP:%{http_code}\n" "$QG_URL" || true)
-          echo "$QG_RESP" | python - <<'PY'
+          QG_RESP=$(curl -sS -u "${SONAR_TOKEN}:" -w "\nHTTP:%{http_code}\n" "$QG_URL" 2>&1 || true)
+          printf "%s" "$QG_RESP" > qg_resp.txt
+          python - <<'PY' < qg_resp.txt
           import json, sys
           raw = sys.stdin.read()
           # Separate body and HTTP code footer
@@ -91,8 +92,9 @@ jobs:
           echo ""
           echo "== Top issues (first 50) =="
           ISS_URL="${SONAR_HOST_URL}/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&branch=${SONAR_BRANCH}&resolved=false&ps=50"
-          ISS_RESP=$(curl -sS -u "${SONAR_TOKEN}:" -w "\nHTTP:%{http_code}\n" "$ISS_URL" || true)
-          echo "$ISS_RESP" | python - <<'PY'
+          ISS_RESP=$(curl -sS -u "${SONAR_TOKEN}:" -w "\nHTTP:%{http_code}\n" "$ISS_URL" 2>&1 || true)
+          printf "%s" "$ISS_RESP" > iss_resp.txt
+          python - <<'PY' < iss_resp.txt
           import json, sys
           raw = sys.stdin.read()
           body, _, footer = raw.rpartition("\nHTTP:")
