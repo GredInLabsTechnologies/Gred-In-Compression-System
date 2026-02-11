@@ -17,6 +17,6 @@ jobs:
         node-version: '20.x'
     - run: npm install --legacy-peer-deps
     - name: Run Audit Runner
-      run: npx tsx bench/sensitive/audit_runner.ts
+      run: npx tsx bench/forensics/postfreeze/harness.postfreeze.ts
     - name: Run Audit Verifier
-      run: npx tsx bench/sensitive/audit_verifier.ts
+      run: npx tsx bench/forensics/postfreeze/verifier.postfreeze.ts
