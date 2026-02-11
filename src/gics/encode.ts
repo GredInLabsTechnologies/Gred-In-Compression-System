@@ -1,5 +1,5 @@
 import { Snapshot, GenericSnapshot } from '../gics-types.js';
-import { encodeVarint } from '../gics-utils.js';
+import { encodeVarint, concatArrays } from '../gics-utils.js';
 import {
     GICS_MAGIC_V2, V12_FLAGS, StreamId, InnerCodecId, OuterCodecId,
     GICS_VERSION_BYTE, HealthTag, GICS_HEADER_SIZE_V3, FILE_EOS_SIZE,
@@ -245,7 +245,7 @@ export class GICSv2Encoder {
         }
 
         this.computeTelemetry(blockStats);
-        const finalBytes = this.concatArrays(allBytes);
+        const finalBytes = concatArrays(allBytes);
         if (!this.fileHandle) this.accumulatedBytes.push(finalBytes);
         return finalBytes;
     }
@@ -358,7 +358,7 @@ export class GICSv2Encoder {
         data: { manifest: BlockManifestEntry[], payloads: Uint8Array[] },
         outerCodec: { compress(data: Uint8Array, level?: number): Promise<Uint8Array> }
     ): Promise<StreamSection> {
-        const concatenated = this.concatArrays(data.payloads);
+        const concatenated = concatArrays(data.payloads);
         const compressed = await outerCodec.compress(concatenated);
         const manifestBytes = StreamSection.serializeManifest(data.manifest);
 
@@ -391,7 +391,7 @@ export class GICSv2Encoder {
         const blockCountBytes = new Uint8Array(2);
         new DataView(blockCountBytes.buffer).setUint16(0, blockCount, true);
 
-        const dataToHash = this.concatArrays([
+        const dataToHash = concatArrays([
             new Uint8Array([streamId]),
             blockCountBytes,
             manifestBytes,
@@ -415,7 +415,7 @@ export class GICSv2Encoder {
         const totalLength = 14 + sectionsTotalLen + indexBytes.length + SEGMENT_FOOTER_SIZE;
 
         const header = new SegmentHeader(14 + sectionsTotalLen, totalLength);
-        const preFooter = this.concatArrays([
+        const preFooter = concatArrays([
             header.serialize(),
             ...tempSerializedSections,
             indexBytes
@@ -780,7 +780,7 @@ export class GICSv2Encoder {
             this.accumulatedBytes.push(eosBytes);
         }
         await this.finalize();
-        return this.fileHandle ? eosBytes : this.concatArrays(this.accumulatedBytes);
+        return this.fileHandle ? eosBytes : concatArrays(this.accumulatedBytes);
     }
 
     async sealToFile(): Promise<void> {
@@ -930,16 +930,5 @@ export class GICSv2Encoder {
             pd = d;
         }
         return dodStream;
-    }
-
-    private concatArrays(arrays: Uint8Array[]): Uint8Array {
-        const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
-        const result = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const arr of arrays) {
-            result.set(arr, offset);
-            offset += arr.length;
-        }
-        return result;
     }
 }

@@ -1,5 +1,5 @@
 import { Snapshot, GenericSnapshot } from '../gics-types.js';
-import { decodeVarint } from '../gics-utils.js';
+import { decodeVarint, concatArrays } from '../gics-utils.js';
 import {
     GICS_MAGIC_V2, StreamId, InnerCodecId, GICS_HEADER_SIZE_V3,
     FILE_EOS_SIZE, GICS_EOS_MARKER, SEGMENT_FOOTER_SIZE, GICS_FLAGS_V3,
@@ -742,7 +742,7 @@ export class GICSv2Decoder {
             const blockCountBytes = new Uint8Array(2);
             new DataView(blockCountBytes.buffer).setUint16(0, s.blockCount, true);
             const manifestBytes = StreamSection.serializeManifest(s.manifest);
-            chain.update(this.concatArrays([new Uint8Array([s.streamId]), blockCountBytes, manifestBytes, s.payload]));
+            chain.update(concatArrays([new Uint8Array([s.streamId]), blockCountBytes, manifestBytes, s.payload]));
         }
     }
 
@@ -775,7 +775,7 @@ export class GICSv2Decoder {
         const blockCountBytes = new Uint8Array(2);
         new DataView(blockCountBytes.buffer).setUint16(0, section.blockCount, true);
         const manifestBytes = StreamSection.serializeManifest(section.manifest);
-        const dataToHash = this.concatArrays([new Uint8Array([section.streamId]), blockCountBytes, manifestBytes, section.payload]);
+        const dataToHash = concatArrays([new Uint8Array([section.streamId]), blockCountBytes, manifestBytes, section.payload]);
         const calculatedHash = chain.update(dataToHash);
 
         if (!this.compareHashes(calculatedHash, section.sectionHash)) {
@@ -964,17 +964,6 @@ export class GICSv2Decoder {
         const val = new DataView(sub.buffer, sub.byteOffset, 4).getUint32(0, true);
         this.pos += 4;
         return val;
-    }
-
-    private concatArrays(arrays: Uint8Array[]): Uint8Array {
-        const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
-        const result = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const arr of arrays) {
-            result.set(arr, offset);
-            offset += arr.length;
-        }
-        return result;
     }
 
     private checkDecompressionLimit(len: number) {
