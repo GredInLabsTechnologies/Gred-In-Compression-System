@@ -20,6 +20,7 @@ import {
     verifyAuth,
     decryptSection
 } from './encryption.js';
+import { timingSafeEqual } from 'node:crypto';
 
 interface DecompressionResult {
     time: number[];
@@ -988,9 +989,6 @@ export class GICSv2Decoder {
 
     private compareHashes(h1: Uint8Array, h2: Uint8Array): boolean {
         if (h1.length !== h2.length) return false;
-        for (let i = 0; i < h1.length; i++) {
-            if (h1[i] !== h2[i]) return false;
-        }
-        return true;
+        return timingSafeEqual(h1, h2);
     }
 }

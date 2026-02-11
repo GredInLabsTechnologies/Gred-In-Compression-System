@@ -1,4 +1,4 @@
-import { pbkdf2Sync, createHmac, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { pbkdf2Sync, createHmac, createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto';
 import { IntegrityError } from './errors.js';
 
 /**
@@ -34,7 +34,10 @@ export function generateAuthVerify(key: Buffer): Buffer {
  */
 export function verifyAuth(key: Buffer, storedAuthVerify: Uint8Array): boolean {
     const currentAuth = generateAuthVerify(key);
-    return Buffer.compare(currentAuth, Buffer.from(storedAuthVerify)) === 0;
+    if (currentAuth.length !== storedAuthVerify.length) {
+        return false;
+    }
+    return timingSafeEqual(currentAuth, storedAuthVerify);
 }
 
 /**
