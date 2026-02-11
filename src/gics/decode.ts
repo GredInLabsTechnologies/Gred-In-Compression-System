@@ -540,6 +540,11 @@ export class GICSv2Decoder {
             }
 
             const decompressed = await getOuterCodec(section.outerCodecId).decompress(payload);
+
+            if (decompressed.length !== section.uncompressedLen) {
+                throw new IntegrityError(`Decompression size mismatch: expected ${section.uncompressedLen}, got ${decompressed.length}`);
+            }
+
             this.decodeGenericSectionBlocks(section, decompressed, segmentContext, res);
         }
         return res;
@@ -768,6 +773,11 @@ export class GICSv2Decoder {
         }
 
         const decompressed = await getOuterCodec(section.outerCodecId).decompress(payload);
+
+        if (decompressed.length !== section.uncompressedLen) {
+            throw new IntegrityError(`Decompression size mismatch: expected ${section.uncompressedLen}, got ${decompressed.length}`);
+        }
+
         this.decodeAndDistributeSection(section.streamId, section.manifest, decompressed, context, res);
     }
 
