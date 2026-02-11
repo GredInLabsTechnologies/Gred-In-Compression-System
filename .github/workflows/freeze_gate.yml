@@ -15,7 +15,7 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '20.x'
-    - run: npm install
+    - run: npm install --legacy-peer-deps
     - name: Run Audit Runner
       run: npx tsx bench/sensitive/audit_runner.ts
     - name: Run Audit Verifier
