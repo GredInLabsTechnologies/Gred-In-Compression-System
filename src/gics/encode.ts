@@ -464,9 +464,13 @@ export class GICSv2Encoder {
         for (const s of snapshots) {
             timestamps.push(s.timestamp);
             // Sort items by key for determinism
-            const entries = [...s.items.entries()].sort((a, b) =>
-                String(a[0]).localeCompare(String(b[0]))
-            );
+            const entries = [...s.items.entries()].sort((a, b) => {
+                const ak = typeof a[0] === 'string' ? a[0] : String(a[0]);
+                const bk = typeof b[0] === 'string' ? b[0] : String(b[0]);
+                if (ak < bk) return -1;
+                if (ak > bk) return 1;
+                return 0;
+            });
             snapshotLengths.push(entries.length);
 
             for (const [key, data] of entries) {
