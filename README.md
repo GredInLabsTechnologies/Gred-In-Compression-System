@@ -1,6 +1,6 @@
 # GICS — Deterministic Time-Series Compression
 
-![Version](https://img.shields.io/badge/version-1.3.0-blue)
+![Version](https://img.shields.io/badge/version-1.4.0-blue)
 ![Status](https://img.shields.io/badge/status-production-green)
 ![License](https://img.shields.io/badge/license-proprietary-red)
 
@@ -323,13 +323,16 @@ For technical support, integration questions, or bug reports:
 
 ## 🔖 Version History
 
-### v1.3.0 (Current) — Production Release
+### v1.4.0 (Current) — Security Release
+- ✅ **Security Hardening**: AES-256-GCM IVs now include segment ID to prevent IV reuse.
+- ✅ **Format Update**: Version 0x04. Backward compatible decoder for v1.3.
+
+### v1.3.0 — Production Release
 - ✅ **Clean Namespace**: `GICS.pack`, `GICS.unpack`, `GICS.verify`.
 - ✅ **StreamSections**: Optimized grouped streams with outer Zstd compression.
 - ✅ **Integrity Chain**: SHA-256 hash chain linking all sections and segments.
 - ✅ **Encryption**: AES-256-GCM per section with deterministic IVs.
 - ✅ **Trial-Based Codecs**: Automatic selection of best internal codec per stream.
-
 
 ### v1.2.0 — Canonical Release
 - Dual-stream architecture (CORE/QUARANTINE)

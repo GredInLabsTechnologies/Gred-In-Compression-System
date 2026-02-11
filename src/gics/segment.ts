@@ -185,7 +185,7 @@ export class SegmentHeader {
     constructor(
         public readonly indexOffset: number,
         public readonly totalLength: number,
-        public readonly reserved: number = 0
+        public readonly segmentId: number = 0
     ) { }
 
     serialize(): Uint8Array {
@@ -194,6 +194,7 @@ export class SegmentHeader {
         buffer.set(SEGMENT_MAGIC, 0);
         view.setUint32(2, this.indexOffset, true);
         view.setUint32(6, this.totalLength, true);
+        view.setUint32(10, this.segmentId, true);
         return buffer;
     }
 
@@ -205,7 +206,8 @@ export class SegmentHeader {
         }
         const indexOffset = view.getUint32(2, true);
         const totalLength = view.getUint32(6, true);
-        return new SegmentHeader(indexOffset, totalLength);
+        const segmentId = view.getUint32(10, true);
+        return new SegmentHeader(indexOffset, totalLength, segmentId);
     }
 }
 

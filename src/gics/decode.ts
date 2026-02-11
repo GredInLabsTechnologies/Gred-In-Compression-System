@@ -61,6 +61,7 @@ export class GICSv2Decoder {
     private hasSchema: boolean = false;
     private schema: SchemaProfile = LEGACY_SCHEMA;
     private fileHeaderBytes: Uint8Array | null = null;
+    private version: number = 0;
 
     static resetSharedContext() {
         // kept for backward-compat in tests; no-op now
@@ -88,8 +89,9 @@ export class GICSv2Decoder {
 
         this.pos = GICS_MAGIC_V2.length;
         const version = this.getUint8();
+        this.version = version;
 
-        if (version === 0x03) {
+        if (version === 0x03 || version === 0x04) {
             return this.handleV3();
         } else if (version === 0x02) {
             return this.handleV2();
@@ -112,7 +114,8 @@ export class GICSv2Decoder {
 
         this.pos = GICS_MAGIC_V2.length;
         const version = this.getUint8();
-        if (version !== 0x03) throw new IntegrityError(`getAllGenericSnapshots requires v1.3, got version ${version}`);
+        this.version = version;
+        if (version !== 0x03 && version !== 0x04) throw new IntegrityError(`getAllGenericSnapshots requires v1.3+, got version ${version}`);
 
         return this.handleV3Generic();
     }
@@ -225,7 +228,8 @@ export class GICSv2Decoder {
         }
         this.pos = GICS_MAGIC_V2.length;
         const version = this.getUint8();
-        if (version !== 0x03) throw new IntegrityError(`Unsupported version: ${version}`);
+        this.version = version;
+        if (version !== 0x03 && version !== 0x04) throw new IntegrityError(`Unsupported version: ${version}`);
 
         this.pos = 5;
         const flags = this.getUint32();
@@ -279,7 +283,8 @@ export class GICSv2Decoder {
         if (!magicMatch) throw new IntegrityError("Invalid Magic");
         this.pos = 4;
         const version = this.getUint8();
-        if (version !== 0x03) throw new Error("Query only supported on v1.3 segments");
+        this.version = version;
+        if (version !== 0x03 && version !== 0x04) throw new Error("Query only supported on v1.3+ segments");
 
         // Read flags to detect schema
         this.pos = 5;
@@ -330,7 +335,7 @@ export class GICSv2Decoder {
     }
 
     private async querySegmentForGeneric(itemKey: number | string): Promise<GenericSnapshot<Record<string, number | string>>[] | null> {
-        const { sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
+        const { header, sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
         this.verifySegmentIntegrity(segmentStart, nextPos, footer);
 
         const shouldSkip = typeof itemKey === 'string'
@@ -345,11 +350,11 @@ export class GICSv2Decoder {
         let snapshots: GenericSnapshot<Record<string, number | string>>[];
 
         if (this.hasSchema) {
-            const data = await this.decompressAndDecodeGeneric(sections);
+            const data = await this.decompressAndDecodeGeneric(sections, undefined, header.segmentId);
             snapshots = this.reconstructGenericSnapshots(data, index);
             snapshots = snapshots.filter(s => s.items.has(itemKey));
         } else {
-            const data = await this.decompressAndDecode(sections);
+            const data = await this.decompressAndDecode(sections, undefined, header.segmentId);
             const legacySnaps = this.reconstructSnapshots(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
             const numKey = typeof itemKey === 'number' ? itemKey : Number.parseInt(itemKey, 10);
             snapshots = legacySnaps
@@ -374,7 +379,8 @@ export class GICSv2Decoder {
             if (!this.verifyMagic()) return false;
             this.pos = 4;
             const version = this.getUint8();
-            if (version !== 0x03) return false;
+            this.version = version;
+            if (version !== 0x03 && version !== 0x04) return false;
 
             this.pos = 5;
             const flags = this.getUint32();
@@ -483,7 +489,7 @@ export class GICSv2Decoder {
     }
 
     private async decodeSegment(skipIfMissing: boolean, itemId?: number, chain?: IntegrityChain): Promise<{ snapshots: Snapshot[], nextPos: number, index: SegmentIndex }> {
-        const { sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
+        const { header, sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
 
         this.verifySegmentIntegrity(segmentStart, nextPos, footer);
 
@@ -492,7 +498,7 @@ export class GICSv2Decoder {
             return { snapshots: [], nextPos, index };
         }
 
-        const data = await this.decompressAndDecode(sections, chain);
+        const data = await this.decompressAndDecode(sections, chain, header.segmentId);
         let snapshots = this.reconstructSnapshots(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
 
         if (itemId !== undefined) {
@@ -505,16 +511,16 @@ export class GICSv2Decoder {
     private async decodeSegmentGeneric(chain?: IntegrityChain): Promise<{
         snapshots: GenericSnapshot<Record<string, number | string>>[], nextPos: number, index: SegmentIndex
     }> {
-        const { sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
+        const { header, sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
         this.verifySegmentIntegrity(segmentStart, nextPos, footer);
 
         if (this.hasSchema) {
-            const data = await this.decompressAndDecodeGeneric(sections, chain);
+            const data = await this.decompressAndDecodeGeneric(sections, chain, header.segmentId);
             const snapshots = this.reconstructGenericSnapshots(data, index);
             return { snapshots, nextPos, index };
         } else {
             // Legacy: convert Snapshot[] to GenericSnapshot[]
-            const data = await this.decompressAndDecode(sections, chain);
+            const data = await this.decompressAndDecode(sections, chain, header.segmentId);
             const legacySnaps = this.reconstructSnapshots(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
             const genericSnaps: GenericSnapshot<Record<string, number | string>>[] = legacySnaps.map(s => ({
                 timestamp: s.timestamp,
@@ -526,7 +532,7 @@ export class GICSv2Decoder {
         }
     }
 
-    private async decompressAndDecodeGeneric(sections: StreamSection[], chain?: IntegrityChain): Promise<GenericDecompressionResult> {
+    private async decompressAndDecodeGeneric(sections: StreamSection[], chain?: IntegrityChain, segmentId?: number): Promise<GenericDecompressionResult> {
         const res: GenericDecompressionResult = { time: [], lengths: [], itemIds: [], fieldArrays: new Map() };
         const segmentContext = new ContextV0('segment_chain_marker');
 
@@ -536,7 +542,7 @@ export class GICSv2Decoder {
 
             let payload = section.payload;
             if (this.isEncrypted) {
-                payload = this.decryptSectionPayload(section);
+                payload = this.decryptSectionPayload(section, segmentId);
             }
 
             const decompressed = await getOuterCodec(section.outerCodecId).decompress(payload);
@@ -746,16 +752,16 @@ export class GICSv2Decoder {
         }
     }
 
-    private async decompressAndDecode(sections: StreamSection[], chain?: IntegrityChain) {
+    private async decompressAndDecode(sections: StreamSection[], chain?: IntegrityChain, segmentId?: number) {
         const res: DecompressionResult = { time: [], lengths: [], itemIds: [], prices: [], quantities: [] };
         const segmentContext = new ContextV0('segment_chain_marker');
         for (const section of sections) {
-            await this.processSection(section, res, segmentContext, chain);
+            await this.processSection(section, res, segmentContext, chain, segmentId);
         }
         return res;
     }
 
-    private async processSection(section: StreamSection, res: DecompressionResult, context: ContextV0, chain?: IntegrityChain) {
+    private async processSection(section: StreamSection, res: DecompressionResult, context: ContextV0, chain?: IntegrityChain, segmentId?: number) {
         if (chain) {
             this.verifySectionHash(section, chain);
         }
@@ -764,7 +770,7 @@ export class GICSv2Decoder {
 
         let payload = section.payload;
         if (this.isEncrypted) {
-            payload = this.decryptSectionPayload(section);
+            payload = this.decryptSectionPayload(section, segmentId);
         }
 
         const decompressed = await getOuterCodec(section.outerCodecId).decompress(payload);
@@ -783,15 +789,17 @@ export class GICSv2Decoder {
         }
     }
 
-    private decryptSectionPayload(section: StreamSection): Uint8Array {
+    private decryptSectionPayload(section: StreamSection, segmentId?: number): Uint8Array {
         if (!this.encryptionKey || !this.encryptionFileNonce) throw new Error("Encryption key or nonce missing");
+        const effectiveSegmentId = this.version >= 4 ? segmentId : undefined;
         return decryptSection(
             section.payload,
             section.authTag!,
             this.encryptionKey,
             this.encryptionFileNonce,
             section.streamId,
-            this.fileHeaderBytes!
+            this.fileHeaderBytes!,
+            effectiveSegmentId
         );
     }
 

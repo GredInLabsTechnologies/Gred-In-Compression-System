@@ -6,9 +6,9 @@ import { IntegrityError } from '../src/gics/errors.js';
 import type { Snapshot } from '../src/gics-types.js';
 import { createSnapshot } from './helpers/test-utils.js';
 
-describe('GICS v1.3 Format', () => {
+describe('GICS v1.4 Format', () => {
     describe('Version Byte', () => {
-        it('should encode with version byte 0x03', async () => {
+        it('should encode with version byte 0x04', async () => {
             const encoder = new GICSv2Encoder();
             const snapshot = createSnapshot(1000, 1, 100, 1);
             await encoder.addSnapshot(snapshot);
@@ -19,10 +19,10 @@ describe('GICS v1.3 Format', () => {
             expect(bytes[1]).toBe(0x49); // I
             expect(bytes[2]).toBe(0x43); // C
             expect(bytes[3]).toBe(0x53); // S
-            expect(bytes[4]).toBe(0x03); // VERSION 0x03
+            expect(bytes[4]).toBe(0x04); // VERSION 0x04
         });
 
-        it('should decode v1.3 format successfully', async () => {
+        it('should decode v1.4 format successfully', async () => {
             const encoder = new GICSv2Encoder();
             const snapshot = createSnapshot(1000, 42, 1500, 10);
             await encoder.addSnapshot(snapshot);

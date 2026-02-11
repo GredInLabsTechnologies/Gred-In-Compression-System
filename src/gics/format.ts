@@ -1,5 +1,5 @@
 export const GICS_MAGIC_V2 = new Uint8Array([0x47, 0x49, 0x43, 0x53]); // "GICS"
-export const GICS_VERSION_BYTE = 0x03;
+export const GICS_VERSION_BYTE = 0x04;
 
 export enum StreamId {
     TIME = 10,         // Timestamps (1:1 with snapshots)

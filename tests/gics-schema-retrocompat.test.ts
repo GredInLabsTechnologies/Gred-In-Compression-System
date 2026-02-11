@@ -96,8 +96,8 @@ describe('Schema Profiles — Retrocompatibility', () => {
             expect(SCHEMA_STREAM_BASE).toBe(100);
         });
 
-        it('VERSION_BYTE remains 0x03', () => {
-            expect(GICS_VERSION_BYTE).toBe(0x03);
+        it('VERSION_BYTE is now 0x04', () => {
+            expect(GICS_VERSION_BYTE).toBe(0x04);
         });
     });
 
@@ -131,7 +131,7 @@ describe('Schema Profiles — Retrocompatibility', () => {
             expect(Buffer.from(bytes1).equals(Buffer.from(bytes2))).toBe(true);
         });
 
-        it('header version byte is 0x03 when no schema', async () => {
+        it('header version byte is 0x04 when no schema', async () => {
             const snapshots = makeSnapshots(5);
             const bytes = await GICS.pack(snapshots);
             // Magic: GICS (4 bytes), then version byte
@@ -139,7 +139,7 @@ describe('Schema Profiles — Retrocompatibility', () => {
             expect(bytes[1]).toBe(0x49); // I
             expect(bytes[2]).toBe(0x43); // C
             expect(bytes[3]).toBe(0x53); // S
-            expect(bytes[4]).toBe(0x03); // v1.3
+            expect(bytes[4]).toBe(0x04); // v1.4
         });
 
         it('header flags do NOT include HAS_SCHEMA when no schema given', async () => {

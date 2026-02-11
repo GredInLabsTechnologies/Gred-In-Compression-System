@@ -77,6 +77,7 @@ export class GICSv2Encoder {
     private readonly encryptionSalt: Uint8Array | null = null;
     private readonly encryptionFileNonce: Uint8Array | null = null;
     private readonly authVerify: Uint8Array | null = null;
+    private segmentCount: number = 0;
 
     static reset() {
         // Backward-compat for existing tests. No global mutable state is used anymore.
@@ -251,6 +252,7 @@ export class GICSv2Encoder {
     }
 
     private async encodeSegment(snapshots: Array<Snapshot | GenericSnapshot<Record<string, number | string>>>): Promise<{ segment: Segment, stats: BlockStats[] }> {
+        const currentSegmentId = this.segmentCount++;
         const streamBlocks: Map<number, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }> = new Map();
         const blockStats: BlockStats[] = [];
 
@@ -291,9 +293,9 @@ export class GICSv2Encoder {
         // Legacy path uses fixed stream order for byte-identical output;
         // schema path sorts by stream ID for deterministic dynamic ordering.
         const sections = useSchemaPath
-            ? await this.wrapSectionsGeneric(streamBlocks)
-            : await this.wrapSections(streamBlocks as Map<StreamId, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>);
-        return this.assembleSegment(sections, segmentIndex, blockStats);
+            ? await this.wrapSectionsGeneric(streamBlocks, currentSegmentId)
+            : await this.wrapSections(streamBlocks as Map<StreamId, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>, currentSegmentId);
+        return this.assembleSegment(sections, segmentIndex, blockStats, currentSegmentId);
     }
 
     private processCoreComponents(
@@ -316,7 +318,8 @@ export class GICSv2Encoder {
     }
 
     private async wrapSections(
-        streamBlocks: Map<StreamId, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>
+        streamBlocks: Map<StreamId, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>,
+        segmentId: number
     ): Promise<StreamSection[]> {
         const sections: StreamSection[] = [];
         const order = [StreamId.TIME, StreamId.SNAPSHOT_LEN, StreamId.ITEM_ID, StreamId.VALUE, StreamId.QUANTITY];
@@ -326,7 +329,7 @@ export class GICSv2Encoder {
             const data = streamBlocks.get(streamId);
             if (!data) continue;
 
-            const section = await this.wrapSingleSection(streamId, data, outerCodec);
+            const section = await this.wrapSingleSection(streamId, data, outerCodec, segmentId);
             sections.push(section);
         }
         return sections;
@@ -337,7 +340,8 @@ export class GICSv2Encoder {
      * Iterates all stream blocks in deterministic order (sorted by stream ID).
      */
     private async wrapSectionsGeneric(
-        streamBlocks: Map<number, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>
+        streamBlocks: Map<number, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>,
+        segmentId: number
     ): Promise<StreamSection[]> {
         const sections: StreamSection[] = [];
         const outerCodec = getOuterCodec(OuterCodecId.ZSTD);
@@ -347,7 +351,7 @@ export class GICSv2Encoder {
 
         for (const streamId of sortedIds) {
             const data = streamBlocks.get(streamId)!;
-            const section = await this.wrapSingleSection(streamId, data, outerCodec);
+            const section = await this.wrapSingleSection(streamId, data, outerCodec, segmentId);
             sections.push(section);
         }
         return sections;
@@ -356,13 +360,14 @@ export class GICSv2Encoder {
     private async wrapSingleSection(
         streamId: StreamId,
         data: { manifest: BlockManifestEntry[], payloads: Uint8Array[] },
-        outerCodec: { compress(data: Uint8Array, level?: number): Promise<Uint8Array> }
+        outerCodec: { compress(data: Uint8Array, level?: number): Promise<Uint8Array> },
+        segmentId: number
     ): Promise<StreamSection> {
         const concatenated = this.concatArrays(data.payloads);
         const compressed = await outerCodec.compress(concatenated);
         const manifestBytes = StreamSection.serializeManifest(data.manifest);
 
-        const { finalPayload, authTag } = this.encryptPayloadIfNeeded(streamId, compressed);
+        const { finalPayload, authTag } = this.encryptPayloadIfNeeded(streamId, compressed, segmentId);
         const sectionHash = this.calculateSectionHash(streamId, data.manifest.length, manifestBytes, finalPayload);
 
         return new StreamSection(
@@ -378,12 +383,12 @@ export class GICSv2Encoder {
         );
     }
 
-    private encryptPayloadIfNeeded(streamId: StreamId, compressed: Uint8Array): { finalPayload: Uint8Array, authTag: Uint8Array | null } {
+    private encryptPayloadIfNeeded(streamId: StreamId, compressed: Uint8Array, segmentId: number): { finalPayload: Uint8Array, authTag: Uint8Array | null } {
         if (!this.encryptionKey) {
             return { finalPayload: compressed, authTag: null };
         }
         const aad = this.emitFileHeader().subarray(0, GICS_HEADER_SIZE_V3);
-        const encrypted = encryptSection(compressed, this.encryptionKey, this.encryptionFileNonce!, streamId, aad);
+        const encrypted = encryptSection(compressed, this.encryptionKey, this.encryptionFileNonce!, streamId, aad, segmentId);
         return { finalPayload: encrypted.ciphertext, authTag: encrypted.tag };
     }
 
@@ -407,14 +412,14 @@ export class GICSv2Encoder {
         return new SegmentIndex(bf, uniqueIds);
     }
 
-    private assembleSegment(sections: StreamSection[], index: SegmentIndex, blockStats: BlockStats[]): { segment: Segment, stats: BlockStats[] } {
+    private assembleSegment(sections: StreamSection[], index: SegmentIndex, blockStats: BlockStats[], segmentId: number): { segment: Segment, stats: BlockStats[] } {
         const tempSerializedSections = sections.map(s => s.serialize());
         const sectionsTotalLen = tempSerializedSections.reduce((acc, b) => acc + b.length, 0);
 
         const indexBytes = index.serialize();
         const totalLength = 14 + sectionsTotalLen + indexBytes.length + SEGMENT_FOOTER_SIZE;
 
-        const header = new SegmentHeader(14 + sectionsTotalLen, totalLength);
+        const header = new SegmentHeader(14 + sectionsTotalLen, totalLength, segmentId);
         const preFooter = this.concatArrays([
             header.serialize(),
             ...tempSerializedSections,

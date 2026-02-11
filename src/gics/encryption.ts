@@ -39,12 +39,18 @@ export function verifyAuth(key: Buffer, storedAuthVerify: Uint8Array): boolean {
 
 /**
  * Derives a deterministic 12-byte IV for a specific stream.
- * IV = HMAC-SHA256(key, fileNonce || streamId).slice(0, 12)
+ * IV = HMAC-SHA256(key, fileNonce || streamId || [segmentId]).slice(0, 12)
  */
-function deriveStreamIV(key: Buffer, fileNonce: Uint8Array, streamId: number): Buffer {
+function deriveStreamIV(key: Buffer, fileNonce: Uint8Array, streamId: number, segmentId?: number): Buffer {
     const hmac = createHmac('sha256', key);
     hmac.update(Buffer.from(fileNonce));
     hmac.update(Buffer.from([streamId]));
+
+    if (segmentId !== undefined) {
+        const segBuf = Buffer.alloc(4);
+        segBuf.writeUInt32LE(segmentId);
+        hmac.update(segBuf);
+    }
     return Buffer.from(hmac.digest().subarray(0, 12));
 }
 
@@ -56,9 +62,10 @@ export function encryptSection(
     key: Buffer,
     fileNonce: Uint8Array,
     streamId: number,
-    aad: Uint8Array
+    aad: Uint8Array,
+    segmentId?: number
 ): { ciphertext: Uint8Array; tag: Uint8Array } {
-    const iv = deriveStreamIV(key, fileNonce, streamId);
+    const iv = deriveStreamIV(key, fileNonce, streamId, segmentId);
     const cipher = createCipheriv('aes-256-gcm', key, iv);
 
     cipher.setAAD(Buffer.from(aad));
@@ -85,9 +92,10 @@ export function decryptSection(
     key: Buffer,
     fileNonce: Uint8Array,
     streamId: number,
-    aad: Uint8Array
+    aad: Uint8Array,
+    segmentId?: number
 ): Uint8Array {
-    const iv = deriveStreamIV(key, fileNonce, streamId);
+    const iv = deriveStreamIV(key, fileNonce, streamId, segmentId);
     const decipher = createDecipheriv('aes-256-gcm', key, iv);
 
     decipher.setAAD(Buffer.from(aad));
