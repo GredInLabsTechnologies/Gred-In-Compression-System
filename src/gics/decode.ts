@@ -62,10 +62,6 @@ export class GICSv2Decoder {
     private schema: SchemaProfile = LEGACY_SCHEMA;
     private fileHeaderBytes: Uint8Array | null = null;
 
-    static resetSharedContext() {
-        // kept for backward-compat in tests; no-op now
-    }
-
     constructor(data: Uint8Array, options: GICSv2DecoderOptions = {}) {
         this.data = data;
         this.context = new ContextV0('hash_placeholder');
