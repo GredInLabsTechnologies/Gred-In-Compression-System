@@ -311,7 +311,7 @@ export class GICSv2Encoder {
         this.processTimeBlocks(ctx, features.timestamps, processBlockWrapper);
         this.processSnapshotLenBlocks(features.snapshotLengths, addToStream, blockStats);
         this.processItemIdBlocks(features.itemIds, addToStream, blockStats);
-        this.processValueBlocks(ctx, features.prices, processBlockWrapper);
+        this.processValueBlocks(ctx, features.prices, processBlockWrapper, addToStream, blockStats);
         this.processQuantityBlocks(features.quantities, addToStream, blockStats);
     }
 
@@ -626,9 +626,23 @@ export class GICSv2Encoder {
         }
     }
 
-    private processValueBlocks(ctx: ContextV0, prices: number[], processBlock: BlockProcessor) {
+    private processValueBlocks(
+        ctx: ContextV0,
+        prices: number[],
+        processBlock: BlockProcessor,
+        addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void,
+        stats: BlockStats[]
+    ) {
         for (let i = 0; i < prices.length; i += BLOCK_SIZE) {
             const chunk = prices.slice(i, i + BLOCK_SIZE);
+            if (this.hasNonIntegerValues(chunk)) {
+                const result = FieldMath.computeValueDeltas(chunk, ctx.lastValue ?? 0);
+                ctx.lastValue = result.nextValue;
+                const encoded = Codecs.encodeFixed64(result.deltas);
+                addToStream(StreamId.VALUE, { innerCodecId: InnerCodecId.FIXED64_LE, nItems: chunk.length, payloadLen: encoded.length, flags: 0 }, encoded);
+                this.recordSimpleBlockStats(StreamId.VALUE, chunk, encoded, stats, InnerCodecId.FIXED64_LE);
+                continue;
+            }
             const snapshot = ctx.snapshot();
             const deltas = this.computeValueDeltas(ctx, chunk, false);
             processBlock(StreamId.VALUE, chunk, deltas, snapshot, this.chmValue);
@@ -638,12 +652,27 @@ export class GICSv2Encoder {
     private processQuantityBlocks(quantities: number[], addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void, stats: BlockStats[]) {
         for (let i = 0; i < quantities.length; i += BLOCK_SIZE) {
             const chunk = quantities.slice(i, i + BLOCK_SIZE);
+            if (this.hasNonIntegerValues(chunk)) {
+                const encoded = Codecs.encodeFixed64(chunk);
+                addToStream(StreamId.QUANTITY, { innerCodecId: InnerCodecId.FIXED64_LE, nItems: chunk.length, payloadLen: encoded.length, flags: 0 }, encoded);
+                this.recordSimpleBlockStats(StreamId.QUANTITY, chunk, encoded, stats, InnerCodecId.FIXED64_LE);
+                continue;
+            }
             this.processStructuralBlock(StreamId.QUANTITY, chunk, [
                 { id: InnerCodecId.VARINT_DELTA, encode: (data) => encodeVarint(data) },
                 { id: InnerCodecId.RLE_ZIGZAG, encode: (data) => Codecs.encodeRLE(data) },
                 { id: InnerCodecId.DICT_VARINT, encode: (data) => Codecs.encodeDict(data, this.context!) }
             ], addToStream, stats);
         }
+    }
+
+    private hasNonIntegerValues(values: number[]): boolean {
+        for (const value of values) {
+            if (!Number.isFinite(value) || !Number.isInteger(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private processStructuralBlock(

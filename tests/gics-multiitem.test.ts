@@ -79,6 +79,37 @@ describe('GICS Multi-Item Roundtrip', () => {
         expect(decoded[0].items.get(3)!.quantity).toBe(9999);
     });
 
+    it('should roundtrip floating point price/quantity without precision loss in legacy mode', async () => {
+        const snapshots: Snapshot[] = [
+            {
+                timestamp: 1000,
+                items: new Map([
+                    [1, { price: 100.75, quantity: 3.5 }],
+                    [2, { price: -42.125, quantity: 0.125 }],
+                ]),
+            },
+            {
+                timestamp: 1060,
+                items: new Map([
+                    [1, { price: 100.5, quantity: 3.75 }],
+                    [2, { price: -41.875, quantity: 0.5 }],
+                ]),
+            },
+        ];
+
+        const encoded = await GICS.pack(snapshots);
+        const decoded = await GICS.unpack(encoded);
+
+        expect(decoded.length).toBe(snapshots.length);
+        for (let i = 0; i < snapshots.length; i++) {
+            for (const [id, original] of snapshots[i].items) {
+                const reconstructed = decoded[i].items.get(id)!;
+                expect(reconstructed.price).toBe(original.price);
+                expect(reconstructed.quantity).toBe(original.quantity);
+            }
+        }
+    });
+
     it('should handle variable item counts per snapshot', async () => {
         const snapshots: Snapshot[] = [];
 

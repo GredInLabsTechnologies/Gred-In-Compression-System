@@ -46,7 +46,7 @@ export class FieldMath {
 
         for (const current of values) {
             const diff = current - prev;
-            deltas.push(Math.round(diff));
+            deltas.push(diff);
             prev = current;
         }
 
