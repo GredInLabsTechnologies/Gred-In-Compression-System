@@ -117,7 +117,11 @@ for (const ds of datasets) {
 }
 
 // 4. Save
-const outFile = path.join(process.cwd(), 'bench/results', `run-${timestamp.replaceAll(':', '-')}.json`);
+const resultDir = path.join(process.cwd(), 'bench/results');
+if (!fs.existsSync(resultDir)) {
+    fs.mkdirSync(resultDir, { recursive: true });
+}
+const outFile = path.join(resultDir, `run-${timestamp.replaceAll(':', '-')}.json`);
 fs.writeFileSync(outFile, JSON.stringify(results, null, 2));
 console.log(`\nSaved ${results.length} results to ${outFile}`);
 
