@@ -31,21 +31,21 @@
 
 This package is published to **GitHub Packages** under the scope:
 
-- `@giltech/gics-core`
+- `@gredinlabstechnologies/gics-core`
 
 1) Add/ensure a token with `read:packages` scope (PAT) or use GitHub Actions `GITHUB_TOKEN`.
 
 2) In the consuming project, create a `.npmrc`:
 
 ```ini
-@giltech:registry=https://npm.pkg.github.com
+@gredinlabstechnologies:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
 3) Install:
 
 ```bash
-npm i @giltech/gics-core
+npm i @gredinlabstechnologies/gics-core
 ```
 
 #### From source
