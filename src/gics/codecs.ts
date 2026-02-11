@@ -12,45 +12,102 @@ export class Codecs {
     static encodeBitPack(values: number[]): Uint8Array {
         if (values.length === 0) return new Uint8Array(0);
 
-        // 1. ZigZag encode to handle negative values and make them positive.
-        const unsigned = values.map(v => (v >= 0 ? v * 2 : (Math.abs(v) * 2) - 1));
+        const bits = this.calculateBitWidth(values);
 
-        // Find max
-        let max = 0;
-        for (const u of unsigned) {
-            if (u > max) max = u;
-        }
-
-        // Determine bit width (support up to 53 bits for JS safe integers)
-        let bits = 0;
-        let tempMax = max;
-        while (tempMax > 0) {
-            tempMax = Math.floor(tempMax / 2);
-            bits++;
-        }
-        if (max === 0) bits = 1;
-
-        const dataBytes = Math.ceil((unsigned.length * bits) / 8);
+        const dataBytes = Math.ceil((values.length * bits) / 8);
         const result = new Uint8Array(1 + dataBytes);
         result[0] = bits;
 
-        let bitPos = 0;
-        for (const val of unsigned) {
-            let currentVal = val;
-            for (let b = 0; b < bits; b++) {
-                const bit = currentVal % 2;
-                if (bit) {
-                    const totalBit = bitPos + b;
-                    const byteIdx = 1 + Math.floor(totalBit / 8);
-                    const bitIdx = totalBit % 8;
-                    result[byteIdx] |= (1 << bitIdx);
-                }
-                currentVal = Math.floor(currentVal / 2);
-            }
-            bitPos += bits;
+        // Fast path for small bits (<= 25 to be safe with 32-bit shifts)
+        if (bits <= 25) {
+            this.encodeBitPackFast(values, bits, result);
+        } else {
+            this.encodeBitPackSafe(values, bits, result);
         }
 
         return result;
+    }
+
+    private static calculateBitWidth(values: number[]): number {
+        let max = 0;
+        for (let i = 0; i < values.length; i++) {
+            const v = values[i];
+            const zz = (v >= 0) ? (v * 2) : (Math.abs(v) * 2) - 1;
+            if (zz > max) max = zz;
+        }
+
+        if (max === 0) return 1;
+
+        let bits = 0;
+        let tempMax = max;
+        while (tempMax > 0) {
+            if (tempMax >= 0x80000000) {
+                tempMax = Math.floor(tempMax / 2);
+            } else {
+                tempMax = tempMax >>> 1;
+            }
+            bits++;
+        }
+        return bits;
+    }
+
+    private static encodeBitPackFast(values: number[], bits: number, result: Uint8Array): void {
+        let byteIdx = 1;
+        let acc = 0;
+        let accBits = 0;
+
+        for (let i = 0; i < values.length; i++) {
+            const v = values[i];
+            const val = (v >= 0) ? (v * 2) : (Math.abs(v) * 2) - 1;
+
+            acc |= (val << accBits);
+            accBits += bits;
+
+            while (accBits >= 8) {
+                result[byteIdx++] = acc & 0xFF;
+                acc >>>= 8;
+                accBits -= 8;
+            }
+        }
+        if (accBits > 0) {
+            result[byteIdx] = acc;
+        }
+    }
+
+    private static encodeBitPackSafe(values: number[], bits: number, result: Uint8Array): void {
+        let byteIdx = 1;
+        let acc = 0;
+        let accBits = 0;
+
+        for (let i = 0; i < values.length; i++) {
+            const v = values[i];
+            let currVal = (v >= 0) ? (v * 2) : (Math.abs(v) * 2) - 1;
+            let remBits = bits;
+
+            while (remBits > 0) {
+                const availableInByte = 8 - accBits;
+                const take = (remBits < availableInByte) ? remBits : availableInByte;
+                const mask = (1 << take) - 1;
+
+                // Safe extraction of LSBs even from large numbers
+                const chunk = (currVal & mask);
+
+                acc |= (chunk << accBits);
+                accBits += take;
+
+                currVal = Math.floor(currVal / Math.pow(2, take));
+                remBits -= take;
+
+                if (accBits === 8) {
+                    result[byteIdx++] = acc;
+                    acc = 0;
+                    accBits = 0;
+                }
+            }
+        }
+        if (accBits > 0) {
+            result[byteIdx] = acc;
+        }
     }
 
     static decodeBitPack(data: Uint8Array, count: number): number[] {
