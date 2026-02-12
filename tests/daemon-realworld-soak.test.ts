@@ -135,6 +135,7 @@ describe('GICSDaemon real-world soak / fault-line test', () => {
                         const msg = response.error.message ?? '';
                         const isLockContention =
                             msg.includes('Timed out acquiring') ||
+                            msg.includes('Failed to acquire') ||
                             msg.includes('exclusive.lock') ||
                             msg.includes('EPERM: operation not permitted');
 

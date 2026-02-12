@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execSync } from 'node:child_process';
-import { generateTrendInt, generateVolatileInt, Dataset } from './datasets.js';
+import { generateTrendInt, generateVolatileInt, generateMultiItemTrend, Dataset } from './datasets.js';
 import { measure, measureSplit, Metrics } from './metrics.js';
 import { ZstdComparator } from './comparators.js';
 // Import GICS - Adjust path if needed based on repo structure. 
@@ -55,6 +55,7 @@ console.log(`Env: ${JSON.stringify(env)}`);
 const datasets: Dataset[] = [
     generateTrendInt(100_000, 12345),
     generateVolatileInt(100_000, 12345),
+    generateMultiItemTrend(5_000, 20, 12345),
 ];
 
 // 2. Prepare Comparators
@@ -117,11 +118,27 @@ for (const ds of datasets) {
 }
 
 // 4. Save
-const outFile = path.join(process.cwd(), 'bench/results', `run-${timestamp.replaceAll(':', '-')}.json`);
+const resultsDir = path.join(process.cwd(), 'bench', 'results');
+fs.mkdirSync(resultsDir, { recursive: true });
+const outFile = path.join(resultsDir, `run-${timestamp.replaceAll(':', '-')}.json`);
 fs.writeFileSync(outFile, JSON.stringify(results, null, 2));
 console.log(`\nSaved ${results.length} results to ${outFile}`);
 
 
+
+function rowToSnapshot(row: any, timestampOffset: number = 0): { timestamp: number; items: Map<number, { price: number; quantity: number }> } {
+    const itemMap = new Map<number, { price: number; quantity: number }>();
+    if (row.items && Array.isArray(row.items)) {
+        // Multi-item format: { t, items: [{ id, price, quantity }] }
+        for (const item of row.items) {
+            itemMap.set(item.id, { price: item.price, quantity: item.quantity });
+        }
+    } else {
+        // Single-item format: { t, v }
+        itemMap.set(1, { price: row.v, quantity: 1 });
+    }
+    return { timestamp: row.t + timestampOffset, items: itemMap };
+}
 
 async function runGicsEncode(ds: Dataset): Promise<any> {
     // Measure construction vs run
@@ -131,9 +148,7 @@ async function runGicsEncode(ds: Dataset): Promise<any> {
         },
         async (writer: any) => {
             for (const row of ds.data) {
-                const itemMap = new Map();
-                itemMap.set(1, { price: row.v, quantity: 1 });
-                writer.push({ timestamp: row.t, items: itemMap });
+                writer.push(rowToSnapshot(row));
             }
             return await writer.seal();
         }
@@ -154,12 +169,8 @@ async function runGicsAppend(ds: Dataset, chunks: number): Promise<any> {
         },
         async (writer: any) => {
             for (let c = 0; c < chunks; c++) {
-                // Ingest full dataset as a "chunk"
                 for (const row of ds.data) {
-                    const itemMap = new Map();
-                    itemMap.set(1, { price: row.v, quantity: 1 });
-                    // Shift timestamp to avoid overlap
-                    writer.push({ timestamp: row.t + (c * 1_000_000), items: itemMap });
+                    writer.push(rowToSnapshot(row, c * 1_000_000));
                 }
             }
             return await writer.seal();
@@ -170,7 +181,6 @@ async function runGicsAppend(ds: Dataset, chunks: number): Promise<any> {
     return {
         ...measured.metrics,
         output_bytes: output.length,
-        // Approximate ratio based on input size * chunks
         ratio_x: (ds.size_bytes * chunks) / output.length
     };
 }
@@ -188,4 +198,5 @@ async function runComparatorEncode(ds: Dataset, comp: ZstdComparator): Promise<a
         ratio_x: ds.size_bytes / output.length
     };
 }
+
 

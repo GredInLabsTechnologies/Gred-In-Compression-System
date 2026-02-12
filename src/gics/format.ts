@@ -98,6 +98,8 @@ export const BLOCK_FLAGS = {
     // Bits 3-4 for HealthTag
     HEALTH_WARN: 8,
     HEALTH_QUAR: 16,
+    // Bit 5: VALUE stream payload encodes absolute FIXED64 values (not deltas)
+    VALUE_ABSOLUTE_FIXED64: 32,
 };
 
 export enum RecoveryAction {
@@ -111,3 +113,8 @@ export const GICS_EOS_MARKER = 0xFF;
 export const SEGMENT_MAGIC = new Uint8Array([0x53, 0x47]); // "SG"
 export const SEGMENT_FOOTER_SIZE = 36; // 32 (hash) + 4 (crc32)
 export const FILE_EOS_SIZE = 37; // 1 (marker) + 32 (hash) + 4 (crc32)
+
+export const SEGMENT_FLAGS = {
+    NONE: 0,
+    ITEM_MAJOR_LAYOUT: 1,  // VALUE, QUANTITY, ITEM_ID stored in item-major order
+};

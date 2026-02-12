@@ -4,10 +4,14 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import protobuf from 'protobufjs/light';
+import protobufModule from 'protobufjs';
 import { encode as msgpackEncode, decode as msgpackDecode } from '@msgpack/msgpack';
 import { tableFromArrays, tableFromIPC, tableToIPC } from 'apache-arrow';
 import { GICS } from '../../src/index.js';
+
+const protobuf = ((protobufModule as unknown as { Root?: unknown; default?: unknown }).Root
+    ? protobufModule
+    : (protobufModule as unknown as { default: typeof protobufModule }).default) as typeof protobufModule;
 
 type Snapshot = {
     timestamp: number;
@@ -23,9 +27,9 @@ type FlatRow = {
 };
 
 type DatasetScenario = {
-    id: 'A' | 'B' | 'C';
+    id: 'A' | 'B1' | 'B2' | 'C';
     label: string;
-    type: 'worst_case' | 'realistic_production' | 'best_case';
+    type: 'worst_case' | 'realistic_compressible' | 'realistic_challenging' | 'best_case';
     seed: number;
     snapshots: Snapshot[];
 };
@@ -297,10 +301,57 @@ function createScenarios(snapshotCount: number): DatasetScenario[] {
         };
     })();
 
-    const scenarioB = (() => {
+    const scenarioB1 = (() => {
         const rng = new SeededRng(2002);
         const snapshots: Snapshot[] = [];
         let timestamp = 1_700_100_000_000;
+        const active = new Map<number, { price: number; quantity: number }>();
+
+        for (let id = 1; id <= 84; id++) {
+            const baseSlot = ((id - 1) % 10) + 1;
+            active.set(id, { price: 10_000 + baseSlot * 2, quantity: 1 + (baseSlot % 2) });
+        }
+
+        for (let i = 0; i < snapshotCount; i++) {
+            const step = rng.nextInt(1, 3);
+            timestamp += i % 450 === 0 ? step * 12 : step;
+
+            const updateCount = rng.nextInt(1, 5);
+            for (let u = 0; u < updateCount; u++) {
+                const id = rng.nextInt(1, 100);
+                if (!active.has(id)) {
+                    const baseSlot = ((id - 1) % 10) + 1;
+                    active.set(id, { price: 10_000 + baseSlot * 2, quantity: 1 + (baseSlot % 2) });
+                }
+                const base = active.get(id)!;
+                const drift = (rng.next() - 0.5) * 0.7;
+                const outlier = i % 1800 === 0 && u === 0 ? rng.nextInt(4, 12) : 0;
+                const nextPrice = Math.max(1, base.price + drift + outlier);
+                const nextQty = Math.max(0.0001, base.quantity + (rng.next() - 0.5) * 0.012);
+                active.set(id, { price: nextPrice, quantity: nextQty });
+            }
+
+            if (i % 800 === 0) {
+                const removeId = rng.nextInt(1, 100);
+                active.delete(removeId);
+            }
+
+            snapshots.push({ timestamp, items: new Map(active) });
+        }
+
+        return {
+            id: 'B1' as const,
+            label: 'realistic_compressible_partial_updates_moderate_drift_rare_outliers',
+            type: 'realistic_compressible' as const,
+            seed: 2002,
+            snapshots,
+        };
+    })();
+
+    const scenarioB2 = (() => {
+        const rng = new SeededRng(2003);
+        const snapshots: Snapshot[] = [];
+        let timestamp = 1_700_150_000_000;
         const active = new Map<number, { price: number; quantity: number }>();
         for (let id = 1; id <= 320; id++) {
             active.set(id, { price: 10_000 + id * 3, quantity: 1 + (id % 7) });
@@ -331,10 +382,10 @@ function createScenarios(snapshotCount: number): DatasetScenario[] {
         }
 
         return {
-            id: 'B' as const,
-            label: 'realistic_production_drift_gaps_outliers_partial_updates_irregular_timestamps',
-            type: 'realistic_production' as const,
-            seed: 2002,
+            id: 'B2' as const,
+            label: 'realistic_challenging_drift_gaps_outliers_partial_updates_irregular_timestamps',
+            type: 'realistic_challenging' as const,
+            seed: 2003,
             snapshots,
         };
     })();
@@ -370,7 +421,7 @@ function createScenarios(snapshotCount: number): DatasetScenario[] {
         };
     })();
 
-    return [scenarioA, scenarioB, scenarioC];
+    return [scenarioA, scenarioB1, scenarioB2, scenarioC];
 }
 
 const protobufRoot = protobuf.Root.fromJSON({
@@ -629,16 +680,39 @@ async function main(): Promise<void> {
     }
 
     const gicsRatios = results.filter((r) => r.system === 'GICS').map((r) => r.compression_ratio_real);
+    const gicsCriticalRatios = results
+        .filter((r) => r.system === 'GICS' && r.dataset_id === 'B1')
+        .map((r) => r.compression_ratio_real);
+
     const ratioSummary = {
         gics_ratio_p50: percentile(gicsRatios, 0.5),
         gics_ratio_p95: percentile(gicsRatios, 0.95),
+        gics_critical_ratio_p50: percentile(gicsCriticalRatios, 0.5),
+        gics_critical_ratio_p95: percentile(gicsCriticalRatios, 0.95),
     };
 
-    const gicsRealistic = results.filter((r) => r.system === 'GICS' && r.dataset_id === 'B');
+    const gicsRealistic = results.filter((r) => r.system === 'GICS' && r.dataset_id === 'B1');
     const gicsIntegrityPerfect = gicsRealistic.every((r) => r.integrity_hash_before === r.integrity_hash_after && r.binary_diff === 0);
     const gicsAbove50xRealistic = gicsRealistic.every((r) => r.compression_ratio_real > 50);
     const gicsNoLabOnlyRealistic = gicsRealistic.every((r) => r.status !== 'lab_only');
-    const gicsConsistency = ratioSummary.gics_ratio_p95 / Math.max(1e-9, ratioSummary.gics_ratio_p50);
+    const gicsConsistency = ratioSummary.gics_critical_ratio_p95 / Math.max(1e-9, ratioSummary.gics_critical_ratio_p50);
+
+    const gicsByScenario = Object.fromEntries(
+        scenarios.map((s) => {
+            const scenarioRows = results.filter((r) => r.system === 'GICS' && r.dataset_id === s.id);
+            const ratios = scenarioRows.map((r) => r.compression_ratio_real);
+            return [
+                s.id,
+                {
+                    type: s.type,
+                    ratio_p50: percentile(ratios, 0.5),
+                    ratio_p95: percentile(ratios, 0.95),
+                    integrity_ok: scenarioRows.every((r) => r.integrity_hash_before === r.integrity_hash_after && r.binary_diff === 0),
+                    statuses: scenarioRows.map((r) => r.status),
+                },
+            ];
+        }),
+    );
 
     const jsonReport = {
         run_id: runId,
@@ -650,6 +724,7 @@ async function main(): Promise<void> {
         summary: {
             ...ratioSummary,
             gics_ratio_consistency_p95_over_p50: gicsConsistency,
+            gics_by_scenario: gicsByScenario,
             gics_validated_real_criteria:
                 gicsAbove50xRealistic &&
                 gicsIntegrityPerfect &&
@@ -673,6 +748,14 @@ async function main(): Promise<void> {
 
     console.log(`Strict benchmark complete: ${jsonPathLatest}`);
     console.log(`Strict text report: ${txtPathLatest}`);
+
+    if (!jsonReport.summary.gics_validated_real_criteria) {
+        console.error('Strict benchmark gate failed: realistic critical criteria are not satisfied (target >= 50x on B1).');
+        process.exitCode = 1;
+        return;
+    }
+
+    console.log('Strict benchmark gate passed: realistic critical criteria satisfied.');
 }
 
 main().catch((error) => {

@@ -3,7 +3,7 @@ import { decodeVarint } from '../gics-utils.js';
 import {
     GICS_MAGIC_V2, StreamId, InnerCodecId, GICS_HEADER_SIZE_V3,
     FILE_EOS_SIZE, GICS_EOS_MARKER, SEGMENT_FOOTER_SIZE, GICS_FLAGS_V3,
-    GICS_ENC_HEADER_SIZE_V3, SCHEMA_STREAM_BASE
+    GICS_ENC_HEADER_SIZE_V3, SCHEMA_STREAM_BASE, BLOCK_FLAGS, SEGMENT_FLAGS
 } from './format.js';
 import type { SchemaProfile } from '../gics-types.js';
 import { ContextV0 } from './context.js';
@@ -62,9 +62,6 @@ export class GICSv2Decoder {
     private schema: SchemaProfile = LEGACY_SCHEMA;
     private fileHeaderBytes: Uint8Array | null = null;
 
-    static resetSharedContext() {
-        // kept for backward-compat in tests; no-op now
-    }
 
     constructor(data: Uint8Array, options: GICSv2DecoderOptions = {}) {
         this.data = data;
@@ -201,7 +198,7 @@ export class GICSv2Decoder {
         const compressed = this.data.subarray(this.pos, this.pos + schemaLen);
         this.pos += schemaLen;
 
-        const decompressed = await getOuterCodec(1 /* ZSTD */).decompress(compressed);
+        const decompressed = await getOuterCodec(1 /* ZSTD */).decompress(compressed, 16 * 1024 * 1024);
         const jsonStr = new TextDecoder().decode(decompressed);
         this.schema = JSON.parse(jsonStr) as SchemaProfile;
     }
@@ -330,7 +327,7 @@ export class GICSv2Decoder {
     }
 
     private async querySegmentForGeneric(itemKey: number | string): Promise<GenericSnapshot<Record<string, number | string>>[] | null> {
-        const { sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
+        const { header, sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
         this.verifySegmentIntegrity(segmentStart, nextPos, footer);
 
         const shouldSkip = typeof itemKey === 'string'
@@ -350,6 +347,7 @@ export class GICSv2Decoder {
             snapshots = snapshots.filter(s => s.items.has(itemKey));
         } else {
             const data = await this.decompressAndDecode(sections);
+            this.reverseItemMajorIfNeeded(header, data);
             const legacySnaps = this.reconstructSnapshots(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
             const numKey = typeof itemKey === 'number' ? itemKey : Number.parseInt(itemKey, 10);
             snapshots = legacySnaps
@@ -483,7 +481,7 @@ export class GICSv2Decoder {
     }
 
     private async decodeSegment(skipIfMissing: boolean, itemId?: number, chain?: IntegrityChain): Promise<{ snapshots: Snapshot[], nextPos: number, index: SegmentIndex }> {
-        const { sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
+        const { header, sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
 
         this.verifySegmentIntegrity(segmentStart, nextPos, footer);
 
@@ -493,6 +491,7 @@ export class GICSv2Decoder {
         }
 
         const data = await this.decompressAndDecode(sections, chain);
+        this.reverseItemMajorIfNeeded(header, data);
         let snapshots = this.reconstructSnapshots(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
 
         if (itemId !== undefined) {
@@ -505,7 +504,7 @@ export class GICSv2Decoder {
     private async decodeSegmentGeneric(chain?: IntegrityChain): Promise<{
         snapshots: GenericSnapshot<Record<string, number | string>>[], nextPos: number, index: SegmentIndex
     }> {
-        const { sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
+        const { header, sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
         this.verifySegmentIntegrity(segmentStart, nextPos, footer);
 
         if (this.hasSchema) {
@@ -515,6 +514,7 @@ export class GICSv2Decoder {
         } else {
             // Legacy: convert Snapshot[] to GenericSnapshot[]
             const data = await this.decompressAndDecode(sections, chain);
+            this.reverseItemMajorIfNeeded(header, data);
             const legacySnaps = this.reconstructSnapshots(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
             const genericSnaps: GenericSnapshot<Record<string, number | string>>[] = legacySnaps.map(s => ({
                 timestamp: s.timestamp,
@@ -866,6 +866,18 @@ export class GICSv2Decoder {
         if (streamId === StreamId.TIME) {
             return this.decodeTimeStream(values, true, context);
         } else if (streamId === StreamId.VALUE) {
+            const isAbsoluteFixed64 =
+                codecId === InnerCodecId.FIXED64_LE &&
+                (blockFlags & BLOCK_FLAGS.VALUE_ABSOLUTE_FIXED64) !== 0;
+
+            if (isAbsoluteFixed64) {
+                if (values.length > 0) {
+                    context.lastValue = values[values.length - 1];
+                    context.lastValueDelta = 0;
+                }
+                return values;
+            }
+
             const isDOD = (codecId === InnerCodecId.DOD_VARINT || codecId === InnerCodecId.RLE_DOD);
             return this.decodeValueStream(values, true, context, isDOD);
         } else {
@@ -973,6 +985,26 @@ export class GICSv2Decoder {
         for (const arr of arrays) {
             result.set(arr, offset);
             offset += arr.length;
+        }
+        return result;
+    }
+
+    private reverseItemMajorIfNeeded(header: SegmentHeader, data: DecompressionResult): void {
+        if (!(header.flags & SEGMENT_FLAGS.ITEM_MAJOR_LAYOUT)) return;
+        const itemCount = header.itemsPerSnapshot;
+        if (itemCount <= 0 || data.lengths.length === 0) return;
+        const snapshotCount = data.lengths.length;
+        data.itemIds = this.fromItemMajor(data.itemIds, itemCount, snapshotCount);
+        data.prices = this.fromItemMajor(data.prices, itemCount, snapshotCount);
+        data.quantities = this.fromItemMajor(data.quantities, itemCount, snapshotCount);
+    }
+
+    private fromItemMajor(data: number[], itemCount: number, snapshotCount: number): number[] {
+        const result = new Array(data.length);
+        for (let i = 0; i < itemCount; i++) {
+            for (let s = 0; s < snapshotCount; s++) {
+                result[s * itemCount + i] = data[i * snapshotCount + s];
+            }
         }
         return result;
     }

@@ -112,18 +112,45 @@ export function decodeRLE(data: Uint8Array): number[] {
     return values;
 }
 
+export function decodeVarintAt(data: Uint8Array, start: number): { values: number[], nextPos: number } {
+    let i = start;
+    let zigzag = 0;
+    let p2d = 1;
+
+    while (true) {
+        if (i >= data.length) throw new RangeError("Truncated varint");
+        const byte = data[i++];
+        zigzag += (byte & 0x7F) * p2d;
+        if ((byte & 0x80) === 0) break;
+        p2d *= 128;
+    }
+
+    const val = (zigzag % 2 === 0) ? (zigzag / 2) : -((zigzag + 1) / 2);
+    return { values: [val], nextPos: i };
+}
+
+export function decodeVarintN(data: Uint8Array, start: number, n: number): { values: number[], nextPos: number } {
+    const values: number[] = [];
+    let i = start;
+
+    for (let count = 0; count < n; count++) { // Removed i < data.length check from loop condition to catch it inside
+        let zigzag = 0;
+        let p2d = 1;
+        while (true) {
+            if (i >= data.length) throw new RangeError("Truncated varint");
+            const byte = data[i++];
+            zigzag += (byte & 0x7F) * p2d;
+            if ((byte & 0x80) === 0) break;
+            p2d *= 128;
+        }
+        const val = (zigzag % 2 === 0) ? (zigzag / 2) : -((zigzag + 1) / 2);
+        values.push(val);
+    }
+
+    return { values, nextPos: i };
+}
+
 /**
  * Wait for N ms
  */
 export const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-/**
- * Format bytes to readable string
- */
-export function formatSize(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}

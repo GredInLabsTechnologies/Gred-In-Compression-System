@@ -1,6 +1,10 @@
 {
     "extends": "../tsconfig.json",
     "compilerOptions": {
+        "target": "ES2022",
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+        "downlevelIteration": true,
         "module": "Node16",
         "moduleResolution": "Node16",
         "outDir": "../bench/dist",

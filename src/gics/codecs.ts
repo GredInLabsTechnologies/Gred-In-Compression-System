@@ -156,10 +156,27 @@ export class Codecs {
     }
 
     static decodeFixed64(data: Uint8Array, count: number): number[] {
-        const result: number[] = [];
         const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+
+        // Try Float64 first (current encoding format).
+        const floatResult: number[] = [];
+        let hasNormalFloat = false;
         for (let i = 0; i < count; i++) {
-            result.push(view.getFloat64(i * 8, true));
+            const v = view.getFloat64(i * 8, true);
+            floatResult.push(v);
+            // A "normal" Float64: not NaN, not subnormal, not zero
+            // If at least one normal value exists, this is genuine Float64 data.
+            if (v === v && (v === 0 || Math.abs(v) >= 2.2e-308)) {
+                hasNormalFloat = true;
+            }
+        }
+        if (hasNormalFloat || count === 0) return floatResult;
+
+        // All values are NaN or subnormal → legacy BigInt64 encoding (pre-9db2b66).
+        // Small integers stored as BigInt64 produce subnormal/NaN when read as Float64.
+        const result: number[] = [];
+        for (let i = 0; i < count; i++) {
+            result.push(Number(view.getBigInt64(i * 8, true)));
         }
         return result;
     }

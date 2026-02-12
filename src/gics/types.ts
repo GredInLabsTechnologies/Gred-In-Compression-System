@@ -10,6 +10,22 @@ export type GICSv2SidecarWriter = (args: {
     encoderRunId: string;
 }) => Promise<void> | void;
 
+/**
+ * Reproducible compression presets. Each preset maps to well-tested
+ * compressionLevel + blockSize combinations.
+ *
+ * - `balanced`: Good ratio with moderate CPU (default)
+ * - `max_ratio`: Best ratio, higher CPU cost
+ * - `low_latency`: Fastest encode, lower ratio
+ */
+export type CompressionPreset = 'balanced' | 'max_ratio' | 'low_latency';
+
+export const COMPRESSION_PRESETS: Record<CompressionPreset, { compressionLevel: number; blockSize: number }> = {
+    balanced:    { compressionLevel: 3, blockSize: 1000 },
+    max_ratio:   { compressionLevel: 9, blockSize: 4000 },
+    low_latency: { compressionLevel: 1, blockSize: 512 },
+};
+
 export type GICSv2EncoderOptions = {
     /** Stable identifier for telemetry/sidecars (useful for tests). */
     runId?: string;
@@ -27,6 +43,12 @@ export type GICSv2EncoderOptions = {
     password?: string;
     /** Optional schema profile for generic field encoding. If omitted, legacy price/quantity mode. */
     schema?: import('../gics-types.js').SchemaProfile;
+    /** Compression preset. Sets compressionLevel and blockSize to well-tested defaults. */
+    preset?: CompressionPreset;
+    /** Zstd compression level (1-22). Overrides preset value if both are set. Default: 3. */
+    compressionLevel?: number;
+    /** Items per block (256-16384). Overrides preset value if both are set. Default: 1000. */
+    blockSize?: number;
 };
 
 export type GICSv2DecoderOptions = {

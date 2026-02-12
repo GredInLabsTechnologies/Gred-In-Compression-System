@@ -6,7 +6,7 @@
  *
  * Position in binary format: after SegmentHeader, before StreamSections.
  */
-import { encodeVarint } from '../gics-utils.js';
+import { encodeVarint, decodeVarintAt, decodeVarintN } from '../gics-utils.js';
 
 export interface StringDictionaryData {
     /** String → numeric index mapping */
@@ -108,9 +108,15 @@ export class StringDictionary {
         // Decode strings
         const decoder = new TextDecoder();
         for (let i = 0; i < count; i++) {
+            const nextPos = pos + lengths[i];
+            if (nextPos > data.length) {
+                throw new Error(
+                    `StringDictionary.decode: truncated payload at entry ${i} (need ${lengths[i]} bytes, have ${Math.max(0, data.length - pos)})`,
+                );
+            }
             const strBytes = data.subarray(pos, pos + lengths[i]);
             result.set(i, decoder.decode(strBytes));
-            pos += lengths[i];
+            pos = nextPos;
         }
 
         return result;
@@ -154,40 +160,4 @@ export class StringDictionary {
     }
 }
 
-// ── Internal varint helpers with position tracking ───────────────────────────
 
-function decodeVarintAt(data: Uint8Array, start: number): { values: number[], nextPos: number } {
-    let i = start;
-    let zigzag = 0;
-    let p2d = 1;
-
-    while (i < data.length) {
-        const byte = data[i++];
-        zigzag += (byte & 0x7F) * p2d;
-        if ((byte & 0x80) === 0) break;
-        p2d *= 128;
-    }
-
-    const val = (zigzag % 2 === 0) ? (zigzag / 2) : -((zigzag + 1) / 2);
-    return { values: [val], nextPos: i };
-}
-
-function decodeVarintN(data: Uint8Array, start: number, n: number): { values: number[], nextPos: number } {
-    const values: number[] = [];
-    let i = start;
-
-    for (let count = 0; count < n && i < data.length; count++) {
-        let zigzag = 0;
-        let p2d = 1;
-        while (i < data.length) {
-            const byte = data[i++];
-            zigzag += (byte & 0x7F) * p2d;
-            if ((byte & 0x80) === 0) break;
-            p2d *= 128;
-        }
-        const val = (zigzag % 2 === 0) ? (zigzag / 2) : -((zigzag + 1) / 2);
-        values.push(val);
-    }
-
-    return { values, nextPos: i };
-}

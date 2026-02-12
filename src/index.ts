@@ -11,8 +11,11 @@ import type { GICSv2EncoderOptions, GICSv2DecoderOptions } from './gics/types.js
 
 // Re-export specific types and errors
 export type { Snapshot, GenericSnapshot, SchemaProfile, FieldDef } from './gics-types.js';
-export type { GICSv2EncoderOptions as EncoderOptions, GICSv2DecoderOptions as DecoderOptions, GICSv2Logger as Logger } from './gics/types.js';
+export type { GICSv2EncoderOptions as EncoderOptions, GICSv2DecoderOptions as DecoderOptions, GICSv2Logger as Logger, CompressionPreset } from './gics/types.js';
+export { COMPRESSION_PRESETS } from './gics/types.js';
 export { IncompleteDataError, IntegrityError } from './gics/errors.js';
+export { CompressionProfiler } from './gics/profiler.js';
+export type { ProfileResult, ProfileMode, TrialResult, ProfileMeta } from './gics/profiler.js';
 
 import type { SchemaProfile } from './gics-types.js';
 

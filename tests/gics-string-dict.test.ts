@@ -108,6 +108,13 @@ describe('StringDictionary', () => {
             expect(values).toContain('naïve');
             expect(values).toContain('日本語');
         });
+
+        it('should throw when decoding truncated data', () => {
+            const dict = StringDictionary.build(['test']);
+            const encoded = StringDictionary.encode(dict);
+            const truncated = encoded.subarray(0, -1);
+            expect(() => StringDictionary.decode(truncated)).toThrow();
+        });
     });
 
     describe('compression efficiency', () => {

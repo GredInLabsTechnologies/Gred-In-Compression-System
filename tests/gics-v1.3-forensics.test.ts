@@ -33,6 +33,16 @@ describe('GICS v1.3 Forensics & Verification', () => {
         expect(isValid).toBe(false);
     });
 
+    it('verifyIntegrityOnly should return false for corrupt data (no throw)', async () => {
+        const bytes = await GICS.pack(snapshots);
+        const tampered = new Uint8Array(bytes);
+        tampered[20] ^= 0xFF;
+
+        const decoder = new GICSv2Decoder(tampered);
+        const result = await decoder.verifyIntegrityOnly();
+        expect(result).toBe(false);
+    });
+
     it('should fail if cross-stream lengths mismatch (Manual Trigger)', async () => {
         // This test requires a way to produce inconsistent streams.
         // We can mock the decoder's decompressAndDecode to return inconsistent lengths.

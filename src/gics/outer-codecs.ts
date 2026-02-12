@@ -5,7 +5,7 @@ export interface OuterCodec {
     id: OuterCodecId;
     name: string;
     compress(data: Uint8Array, level?: number): Promise<Uint8Array>;
-    decompress(data: Uint8Array): Promise<Uint8Array>;
+    decompress(data: Uint8Array, maxSize?: number): Promise<Uint8Array>;
 }
 
 /**
@@ -22,7 +22,10 @@ export const OuterCodecNone: OuterCodec = {
     async compress(data: Uint8Array) {
         return data;
     },
-    async decompress(data: Uint8Array) {
+    async decompress(data: Uint8Array, maxSize?: number) {
+        if (maxSize !== undefined && data.length > maxSize) {
+            throw new Error(`Decompressed size limit exceeded (Input: ${data.length} > Limit: ${maxSize})`);
+        }
         return data;
     },
 };
@@ -61,11 +64,15 @@ export const OuterCodecZstd: OuterCodec = {
         if (!compressed) throw new Error('Zstd compression failed');
         return compressed;
     },
-    async decompress(data: Uint8Array) {
+    async decompress(data: Uint8Array, maxSize?: number) {
         const zstd = await getZstd();
         const simple = new zstd.Simple();
         const decompressed = simple.decompress(data);
         if (!decompressed) throw new Error('Zstd decompression failed');
+
+        if (maxSize !== undefined && decompressed.length > maxSize) {
+            throw new Error(`Decompressed size limit exceeded (${decompressed.length} > ${maxSize})`);
+        }
         return decompressed;
     },
 };

@@ -179,13 +179,14 @@ export class SegmentIndex {
 
 /**
  * Segment Header (14 bytes).
- * SG(2) + indexOffset(4) + totalLength(4) + reserved(4)
+ * SG(2) + indexOffset(4) + totalLength(4) + flags(1) + reserved(1) + itemsPerSnapshot(2)
  */
 export class SegmentHeader {
     constructor(
         public readonly indexOffset: number,
         public readonly totalLength: number,
-        public readonly reserved: number = 0
+        public readonly flags: number = 0,
+        public readonly itemsPerSnapshot: number = 0
     ) { }
 
     serialize(): Uint8Array {
@@ -194,6 +195,9 @@ export class SegmentHeader {
         buffer.set(SEGMENT_MAGIC, 0);
         view.setUint32(2, this.indexOffset, true);
         view.setUint32(6, this.totalLength, true);
+        buffer[10] = this.flags;
+        // byte 11 reserved
+        view.setUint16(12, this.itemsPerSnapshot, true);
         return buffer;
     }
 
@@ -205,7 +209,9 @@ export class SegmentHeader {
         }
         const indexOffset = view.getUint32(2, true);
         const totalLength = view.getUint32(6, true);
-        return new SegmentHeader(indexOffset, totalLength);
+        const flags = data[10];
+        const itemsPerSnapshot = view.getUint16(12, true);
+        return new SegmentHeader(indexOffset, totalLength, flags, itemsPerSnapshot);
     }
 }
 

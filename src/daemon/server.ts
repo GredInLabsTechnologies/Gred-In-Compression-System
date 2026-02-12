@@ -164,20 +164,27 @@ export class GICSDaemon {
                 const trimmed = line.trim();
                 if (!trimmed) continue;
 
+                let request: any;
                 try {
-                    const request = JSON.parse(trimmed);
-                    const response = await this.handleRequest(request, socket);
-                    socket.write(JSON.stringify(response) + '\n');
+                    request = JSON.parse(trimmed);
                 } catch {
-                    const parseError = {
+                    socket.write(JSON.stringify({
                         jsonrpc: '2.0',
                         id: null,
-                        error: {
-                            code: -32700,
-                            message: 'Parse error'
-                        }
-                    };
-                    socket.write(JSON.stringify(parseError) + '\n');
+                        error: { code: -32700, message: 'Parse error' }
+                    }) + '\n');
+                    continue;
+                }
+
+                try {
+                    const response = await this.handleRequest(request, socket);
+                    socket.write(JSON.stringify(response) + '\n');
+                } catch (e: any) {
+                    socket.write(JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: request.id ?? null,
+                        error: { code: -32603, message: e?.message ?? 'Internal error' }
+                    }) + '\n');
                 }
             }
         });

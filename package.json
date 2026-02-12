@@ -28,13 +28,21 @@
         "bench": "tsx bench/scripts/harness.ts && tsx bench/scripts/gen-report.ts",
         "bench:empirical": "tsx bench/scripts/empirical.ts",
         "bench:gate": "tsx bench/scripts/empirical.ts",
+        "bench:validate-50x": "tsx bench/scripts/validate-50x-guarantee.ts",
+        "bench:security": "tsx bench/scripts/empirical-security.ts",
+        "bench:edge-cases": "tsx bench/scripts/empirical-edge-cases.ts",
+        "bench:codec-stats": "tsx bench/scripts/empirical-codec-stats.ts",
         "bench:forensics": "tsx bench/forensics/postfreeze/harness.postfreeze.ts",
         "bench:forensics:verify": "tsx bench/forensics/postfreeze/verifier.postfreeze.ts",
         "bench:forensics:summary": "tsx bench/forensics/postfreeze/summary.postfreeze.ts",
         "verify": "tsx tools/verify/verify.ts",
+        "profile": "tsx tools/profile.ts",
         "sonar": "sonar-scanner",
         "lint": "eslint src/**/*.ts",
-        "bench:strict": "tsx bench/scripts/empirical-strict.ts"
+        "bench:strict": "tsx bench/scripts/empirical-strict.ts",
+        "bench:all": "npm run bench:empirical && npm run bench:strict && npm run bench:validate-50x && npm run bench:security && npm run bench:edge-cases && npm run bench:codec-stats",
+        "quality:strict": "npm run bench:gate && npm run bench:validate-50x",
+        "quality:strict:full": "npm run quality:strict && npm run bench:strict && npm run bench:security && npm run bench:edge-cases && npm run bench:codec-stats"
     },
     "dependencies": {
         "@msgpack/msgpack": "^3.1.3",
