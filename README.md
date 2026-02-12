@@ -1,356 +1,322 @@
 # GICS — Deterministic Time-Series Compression
 
-![Version](https://img.shields.io/badge/version-1.3.0-blue)
+![Version](https://img.shields.io/badge/version-1.3.2-blue)
 ![Status](https://img.shields.io/badge/status-production-green)
 ![License](https://img.shields.io/badge/license-proprietary-red)
 
-## 🎯 What Is GICS?
+## What Is GICS?
 
 **GICS** is a **deterministic, fail-closed, agnostic time-series compression engine** designed for critical infrastructure where **data integrity and auditability are paramount**.
 
-**Key Characteristics:**
-- ✅ **Bit-exact lossless compression** for time-series data
-- ✅ **Deterministic encoding** (same input → same output bytes)
-- ✅ **Fail-closed safety** (rejects corrupted/incomplete data)
-- ✅ **Domain-agnostic** (works with any monotonic time-series)
-- ✅ **Dual-stream architecture** (CORE + QUARANTINE)
-- ✅ **Enterprise-grade auditing** (full telemetry and traceability)
-
-**What GICS is NOT:**
-- ❌ NOT AI-driven (no hallucinations or approximations)
-- ❌ NOT general-purpose (specialized for time-series)
-- ❌ NOT lossy (strictly bit-exact roundtrips)
+- **Bit-exact lossless compression** for time-series data
+- **Deterministic encoding** (same input + same config = same output bytes)
+- **Fail-closed safety** (rejects corrupted/incomplete data, never returns partial results)
+- **Domain-agnostic** (works with any monotonic time-series via Schema Profiles)
+- **22x-42x compression** on structured data (vs 5x-11x with raw Zstd)
+- **Zero ML, zero approximation** — pure algorithmic compression
 
 ---
 
-## 🚀 Quick Start
+## Installation
 
-### Installation
-
-#### GitHub Packages (private npm)
-
-This package is published to **GitHub Packages** under the scope:
-
-- `@gredinlabstechnologies/gics-core`
-
-1) Add/ensure a token with `read:packages` scope (PAT) or use GitHub Actions `GITHUB_TOKEN`.
-
-2) In the consuming project, create a `.npmrc`:
+### GitHub Packages (organization scope)
 
 ```ini
+# .npmrc in your consuming project
 @gredinlabstechnologies:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
-3) Install:
-
 ```bash
-npm i @gredinlabstechnologies/gics-core
+npm install @gredinlabstechnologies/gics-core
 ```
 
-#### From source
+### From source
+
 ```bash
-git clone <repository-url>
-cd gics-core
+git clone https://github.com/GredInLabsTechnologies/Gred-In-Compression-System.git
+cd Gred-In-Compression-System
 npm install
 npm run build
 ```
 
-### Basic Usage
+**Runtime requirements:** Node.js >= 18.0.0. Single dependency: `zstd-codec` (WASM). No native compilation. Fully offline.
+
+---
+
+## Quick Start
 
 ```typescript
-import { GICS } from 'gics-core';
+import { GICS } from '@gredinlabstechnologies/gics-core';
 
-// 1. Simple API (Pack/Unpack)
+// Create snapshots
 const snapshots = [
   {
-    timestamp: Date.now(),
+    timestamp: 1700000000,
     items: new Map([
-      [1, { price: 100, quantity: 10 }]
-    ])
-  }
+      [1, { price: 15000, quantity: 100 }],
+      [2, { price: 8500, quantity: 250 }],
+    ]),
+  },
+  {
+    timestamp: 1700000060,
+    items: new Map([
+      [1, { price: 15010, quantity: 98 }],
+      [2, { price: 8495, quantity: 260 }],
+    ]),
+  },
 ];
 
-// Pack to Uint8Array
-const bytes = await GICS.pack(snapshots);
+// Compress
+const compressed = await GICS.pack(snapshots);
 
-// Unpack
-const decoded = await GICS.unpack(bytes);
+// Decompress
+const restored = await GICS.unpack(compressed);
 
-// Verify integrity (hash chain + CRC) without decompression
-const isValid = await GICS.verify(bytes);
+// Verify integrity without decompressing
+const isValid = await GICS.verify(compressed);
+```
 
-// 2. Advanced / Streaming API
-const encoder = new GICS.Encoder();
+### With Compression Presets
 
-await encoder.addSnapshot({
-  timestamp: Date.now(),
-  items: new Map([
-    [1001, { price: 125.50, quantity: 42 }]
-  ])
+```typescript
+// High compression
+const binary = await GICS.pack(snapshots, { preset: 'max_ratio' });
+
+// Low latency
+const binary = await GICS.pack(snapshots, { preset: 'low_latency' });
+
+// Manual tuning
+const binary = await GICS.pack(snapshots, {
+  compressionLevel: 9,
+  blockSize: 4000,
 });
-
-const compressed = await encoder.finish();
-console.log(`Compressed size: ${compressed.length} bytes`);
-
-const decoder = new GICS.Decoder(compressed);
-const result = await decoder.getAllSnapshots();
 ```
 
+| Preset | Level | Block Size | Use Case |
+|--------|-------|------------|----------|
+| `balanced` | 3 | 1000 | Default. Good ratio and speed |
+| `max_ratio` | 9 | 4000 | Maximum compression, slower |
+| `low_latency` | 1 | 512 | Fastest encode, lower ratio |
 
+### With Encryption
 
----
-
-## 📦 Project Structure
-
-```
-gics-core/
-├── src/
-│   ├── index.ts                  # Main entry point & public API
-│   ├── gics-types.ts             # Core type definitions
-│   ├── gics-utils.ts             # Varint, RLE, and encoding utilities
-│   └── gics/                     # v1.3 codec implementation
-│       ├── encode.ts             # Section/Segment level encoding
-│       ├── decode.ts             # Section/Segment level decoding
-│       ├── format.ts             # Binary format specification
-│       ├── codecs.ts             # Internal bit-level codecs
-│       ├── string-dict.ts        # String dictionary support
-│       ├── segment.ts            # Segment-level operations
-│       └── errors.ts             # Typed error definitions
-├── tests/                        # Vitest test suites (v1.3 only)
-├── bench/                        # Benchmark harness & results
-├── tools/                        # Verification scripts and legacy code
-│   └── legacy/                   # Frozen v1.1/v1.2 code (archived)
-└── docs/                         # Architecture documentation
+```typescript
+const encrypted = await GICS.pack(snapshots, { password: 'secret' });
+const restored = await GICS.unpack(encrypted, { password: 'secret' });
 ```
 
 ---
 
-## 🏗️ Architecture
+## Architecture
+
+### v1.3.2 Module Map
+
+```
+@gredinlabstechnologies/gics-core
+├── Core Engine         Encode/decode with auto-codec selection
+│   ├── Encoder         Streaming or batch, with segment assembly
+│   ├── Decoder         Query by item ID, Bloom filter skip
+│   ├── Codecs          DELTA, RLE, DELTA_RLE, HUFFMAN, RAW (trial-by-size)
+│   ├── Segments        Indexed segments with SHA-256 integrity chain
+│   └── Item-Major      Auto-transpose for multi-item data (+90% compression)
+├── Daemon              Persistent process for continuous ingestion
+│   ├── MemTable        In-memory buffer with auto-flush
+│   ├── WAL             Write-ahead log for crash recovery
+│   ├── IPC Server      JSON-RPC 2.0 over named pipe / Unix socket
+│   └── File Lock       AsyncRWLock (in-process) + marker files (cross-process)
+├── Insight Engine      Behavioral intelligence (zero ML)
+│   ├── Tracker         Per-item velocity, entropy, volatility, streaks
+│   ├── Correlation     Pearson pairwise + Union-Find clustering
+│   └── Signals         Anomaly detection, trend forecasting, recommendations
+└── Profiler            Encoder parameter optimizer (level × blockSize matrix)
+```
+
+### Item-Major Layout (v1.3.2)
+
+When all snapshots contain the same items, GICS automatically transposes data from snapshot-major to item-major order before compression. This groups each item's values contiguously, producing dramatically better deltas.
+
+| Dataset | Without | With | Improvement |
+|---------|---------|------|-------------|
+| 10 items × 500 snapshots | 22x | 42x | +90% |
+| 20 items × 500 snapshots | 20x | 41x | +101% |
+
+Single-item data is unaffected. The decision is binary and deterministic.
 
 ### Dual-Stream Design
 
 ```
 [ DATA SOURCE ]
-      ↓
+      |
 [ Entropy Gate ]
     /       \
  CORE    QUARANTINE
-  ↓           ↓
+  |           |
  High      Fallback
-Compression   (1:1)
-  ↓           ↓
+Compress    (1:1)
+  |           |
 [ Combined Output ]
 ```
 
-- **CORE Stream**: Predictable data with high compression (50x+ typical)
-- **QUARANTINE Stream**: Volatile/high-entropy data preserved as-is
-- **Why?**: Guarantees integrity while optimizing for common patterns
-
-### Key Components
-
-| Component | Purpose |
-|-----------|---------|
-| `GICSv2Encoder` | State machine for ingesting frames and emitting compressed blocks |
-| `GICSv2Decoder` | The enforcer — validates structure, enforces EOS, checks integrity |
-| `CHM` | Compression Health Monitor — tracks ratios and routes to CORE/QUARANTINE |
-| `Context` | Isolated compression state (no global mutable state) |
+- **CORE**: Predictable data with high compression
+- **QUARANTINE**: Volatile/high-entropy data preserved as-is (CHM decides)
 
 ---
 
-## 🔒 Safety Guarantees
+## Daemon Mode
 
-### What GICS Guarantees
+For long-running services that continuously ingest time-series data.
 
-✅ **Bit-Exactness**: `input === output` (byte-for-byte)  
-✅ **Determinism**: Same input + config → same output bytes  
-✅ **Fail-Closed**: Never silently accepts malformed/truncated data  
-✅ **EOS Enforcement**: Decoder strictly requires End-of-Stream marker  
-✅ **Type Safety**: No `any` types — full TypeScript contracts
+```typescript
+import { GICSDaemon } from '@gredinlabstechnologies/gics-core/daemon';
 
-### Common Failure Modes
+const daemon = new GICSDaemon({
+  dataDir: '/var/lib/gics',
+  pipeName: 'gics-prod',
+});
 
-| Failure | Behavior | Why |
-|---------|----------|-----|
-| Missing EOS | `IncompleteDataError` | Prevents ambiguity between "end" and "network cut" |
-| Truncation | Immediate rejection | Partial data is dangerous data |
-| Corruption | `IntegrityError` | Checksum/structural validation |
-| High Entropy | Routes to QUARANTINE | Refuses to fit noise into models |
+await daemon.start();
+// Now accepts JSON-RPC 2.0 over IPC:
+// ingest, query, flush, compact, rotate, getInsights
+```
+
+### IPC Protocol
+
+| Method | Description |
+|--------|-------------|
+| `ingest` | Add snapshots to MemTable (auto-flushes to segments) |
+| `query` | Query by item ID with Bloom filter skip |
+| `flush` | Force MemTable to disk as GICS segment |
+| `compact` | Merge segments for better compression |
+| `rotate` | Archive old segments (HOT → WARM → COLD) |
+| `getInsights` | Behavioral metrics, correlations, anomalies |
+
+### Python Client
+
+```python
+from gics_client import GICSClient
+
+client = GICSClient(pipe_name="gics-prod")
+client.connect()
+
+client.ingest([{"timestamp": 1700000000, "items": {"1": {"price": 100, "quantity": 10}}}])
+results = client.query(item_id=1)
+insights = client.get_insights()
+```
 
 ---
 
-## 📊 Performance
+## Insight Engine
 
-### Compression Ratios (Typical)
+Pure incremental statistics — no ML, no external dependencies.
 
-| Data Type | CORE Ratio | Overall Ratio |
-|-----------|------------|---------------|
-| Trending prices | 50x - 100x | 40x - 80x |
-| Constant values | 100x+ | 90x+ |
-| High volatility | N/A (QUARANTINE) | 1.0x - 2x |
-| Mixed regime | 20x - 50x | 15x - 40x |
+| Module | Algorithm | What It Detects |
+|--------|-----------|-----------------|
+| **Tracker** | Welford variance, Shannon entropy | Velocity, volatility, lifecycle stage per item |
+| **Correlation** | Pearson + Union-Find | Co-moving items, clusters, leading indicators |
+| **Signals** | Z-score, EMA forecast | Anomalies, trend changes, compression recommendations |
 
-**Note**: Compression ratio is **NOT guaranteed** — it depends entirely on data structure. White noise = 1.0x ratio.
+```typescript
+import { InsightTracker, CorrelationAnalyzer, PredictiveSignals } from '@gredinlabstechnologies/gics-core/insight';
+```
+
+---
+
+## Compression Profiler
+
+Discovers optimal encoder parameters for your data.
+
+```bash
+# CLI
+npm run profile
+npm run profile -- --mode deep --snapshots 1000 --items 20
+```
+
+```typescript
+import { CompressionProfiler } from '@gredinlabstechnologies/gics-core';
+
+const result = await CompressionProfiler.profile(sampleSnapshots, 'quick');
+// result.compressionLevel, result.blockSize, result.bestRatio, result.preset
+```
+
+---
+
+## Performance
+
+### Compression Ratios (v1.3.2 benchmarks)
+
+| Dataset | GICS | Zstd Baseline | Multiplier |
+|---------|------|---------------|------------|
+| Trending integer (single-item) | 29.5x | 5.1x | 5.8x better |
+| Volatile integer (single-item) | 21.9x | 4.1x | 5.3x better |
+| Multi-item (10 items, stable) | 41.8x | 11.3x | 3.7x better |
+| Multi-item append (5x volume) | 40.5x | — | — |
 
 ### Throughput
 
-- **Encoding**: ~10-50 MB/s (single-threaded)
-- **Decoding**: ~20-60 MB/s (single-threaded)
-- **Latency**: Block-based (slight buffering for codec selection)
+| Operation | Typical |
+|-----------|---------|
+| Encode | ~50,000 snapshots/sec |
+| Decode | ~80,000 snapshots/sec |
+| Verify (no decompress) | ~200,000 snapshots/sec |
+| Memory | O(segment_size), default 1MB |
 
 ---
 
-## 🧪 Testing & Verification
+## Testing & Verification
 
-### Run Tests
 ```bash
-npm test
+npm test          # 188 tests (vitest)
+npm run verify    # Integrity chain verification
+npm run bench     # Full benchmark suite
+npm run profile   # Encoder parameter profiler
 ```
 
-### Run Benchmarks
-```bash
-npm run bench
-```
+### Test Coverage
 
-### Verify Integrity
-```bash
-npm run verify
-```
-
----
-
-## SonarCloud (automatic analysis)
-
-This repository contains a GitHub Actions workflow at:
-
-- `.github/workflows/build.yml`
-
-To enable automatic scans on push / PR:
-
-1) In GitHub, go to **Settings → Secrets and variables → Actions**
-2) Add a repository secret:
-   - `SONAR_TOKEN` (from SonarCloud: **My Account → Security → Generate Tokens**)
-3) Ensure your SonarCloud project key matches `sonar-project.properties`:
-   - `sonar.projectKey=Shiloren_Gred-In-Compression-System`
-   - and set the correct `sonar.organization` value for your SonarCloud org.
-
-After that, you should see the workflow running in **GitHub → Actions**.
-
-### SonarLint (IDE) — optional
-
-This repo **does not force SonarLint Connected Mode** (to avoid breaking other machines).
-
-If you want Connected Mode locally, see: `docs/SONARLINT_CONNECTED_MODE.md`.
+| Module | Tests | Status |
+|--------|-------|--------|
+| Core encode/decode | 80+ | Stable |
+| Segments & format | 20+ | Stable |
+| Encryption | 10+ | Stable |
+| Schema profiles | 15+ | Stable |
+| Daemon (MemTable, WAL, IPC, lock) | 21 | Stable |
+| Insight Engine | 15+ | Stable |
+| Item-major layout | 5 | Stable |
+| Profiler | 6 | Stable |
+| Regression suite | 7 | Stable |
+| Adversarial / fuzzing | 10+ | Stable |
 
 ---
 
-## 📚 Documentation
+## Safety Guarantees
 
-- **[Implementation Report](./docs/reports/GICS_v1.3_IMPLEMENTATION_REPORT.md)**: Current architecture and implementation details
-- **[Security Model](./docs/SECURITY_MODEL.md)**: Safety guarantees and threat model
-- **[Format Specification](./docs/FORMAT.md)**: Binary format and encoding details
-- **[Repository Layout](./docs/REPO_LAYOUT.md)**: Project structure overview
-- **[Versioning](./docs/VERSIONING.md)**: Version history and archive references
-
----
-
-## 🎯 Use Cases
-
-### ✅ When to Use GICS
-
-- Financial audit logs (trade/transaction records)
-- Event sequence verification (anti-tamper systems)
-- Sensor data for safety-critical systems
-- Any domain requiring **provable correctness**
-
-### ❌ When NOT to Use GICS
-
-- Streaming video/audio (use H.264/AAC)
-- Lossy metrics where 99% accuracy suffices
-- High-frequency trading where microseconds matter more than correctness
+| Invariant | Description |
+|-----------|-------------|
+| **Determinism** | Same input + same options = identical output bytes |
+| **Lossless** | `unpack(pack(data)) === data` — exact roundtrip, zero precision loss |
+| **Fail-closed** | Corrupt/truncated/tampered data always throws, never returns partial results |
+| **Backward compatible** | v1.3.2 decoder reads v1.2 and v1.3.0 files |
+| **Schema embedded** | Schema profile stored inside the file; decoder is self-describing |
+| **Segment isolation** | Corruption in segment N does not affect segments N-1 or N+1 |
+| **No external state** | No network calls, no filesystem reads during encode/decode |
 
 ---
 
-## 🔧 Advanced Configuration
+## Documentation
 
-### Custom Encoder Options
-
-```typescript
-const encoder = new GICSv2Encoder({
-  streamId: 1,              // Stream identifier (default: auto-assigned)
-  enableTelemetry: true     // Enable detailed compression telemetry
-});
-```
-
-### Accessing Telemetry
-
-```typescript
-const telemetry = encoder.getTelemetry();
-console.log(`
-  Core Ratio: ${telemetry.core_ratio.toFixed(2)}x
-  Quarantine Rate: ${(telemetry.quarantine_rate * 100).toFixed(1)}%
-  Total Output: ${telemetry.total_output_bytes} bytes
-`);
-```
+- **[API Reference](./docs/API.md)** — Full public API with examples
+- **[CHANGELOG](./CHANGELOG.md)** — Version history with detailed changes
+- **[Format Spec](./docs/FORMAT.md)** — Binary format specification
+- **[Security Model](./docs/SECURITY_MODEL.md)** — Threat model and encryption details
+- **[Versioning](./docs/VERSIONING.md)** — Version matrix and archive pointers
 
 ---
 
-## 🛡️ Security & Compliance
+## License
 
-- **No external network calls**: Fully offline/airgapped compatible
-- **No AI/ML**: Deterministic algorithms only
-- **No telemetry leaks**: All metrics stay local
-- **Cryptographic validation**: Optional integrity checks via `IntegrityGuardian`
+**Proprietary** — All rights reserved. GredIn Labs Technologies.
 
 ---
 
-## 📄 License
-
-**Proprietary** — All rights reserved.  
-Unauthorized distribution or modification is prohibited.
-
----
-
-## 🙋 Support
-
-For technical support, integration questions, or bug reports:
-
-1. Check [Security Model](./docs/SECURITY_MODEL.md)
-2. Review [test cases](./tests/) for usage examples
-3. Contact: [Your Contact Info]
-
----
-
-## 🔖 Version History
-
-### v1.3.0 (Current) — Production Release
-- ✅ **Clean Namespace**: `GICS.pack`, `GICS.unpack`, `GICS.verify`.
-- ✅ **StreamSections**: Optimized grouped streams with outer Zstd compression.
-- ✅ **Integrity Chain**: SHA-256 hash chain linking all sections and segments.
-- ✅ **Encryption**: AES-256-GCM per section with deterministic IVs.
-- ✅ **Trial-Based Codecs**: Automatic selection of best internal codec per stream.
-
-
-### v1.2.0 — Canonical Release
-- Dual-stream architecture (CORE/QUARANTINE)
-- Compression Health Monitor (CHM)
-- Full EOS enforcement
-- Type-safe error handling
-
-### v1.1.x — Legacy (Archived)
-- See [GICS-ARCHIVE](../GICS-ARCHIVE/) for historical versions
-
----
-
-## 🚦 Status
-
-**Production-Ready** ✅
-
-All critical assurance gates have been passed:
-- ✅ Determinism verified
-- ✅ Integrity roundtrip validated
-- ✅ EOS enforcement hardened
-- ✅ Quarantine semantics proven
-- ✅ Performance benchmarks met
-
-**Safe for critical civil infrastructure deployment.**
+*v1.3.2 | 2026-02-12*

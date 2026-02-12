@@ -1,95 +1,54 @@
-# GICS v1.3 API Reference & Integration Guide
+# GICS v1.3.2 API Reference
 
-> Complete reference for consuming, integrating, and operating GICS in production systems.
+> Complete reference for consuming, integrating, and operating GICS.
 
 ---
 
 ## Table of Contents
 
-1. [Installation & Requirements](#installation--requirements)
-2. [Quick Start](#quick-start)
-3. [Public API](#public-api)
+1. [Installation](#installation)
+2. [Core API](#core-api)
    - [GICS.pack()](#gicspack)
    - [GICS.unpack()](#gicsunpack)
    - [GICS.verify()](#gicsverify)
    - [GICS.Encoder (streaming)](#gicsencoder-streaming)
    - [GICS.Decoder (advanced)](#gicsdecoder-advanced)
    - [GICS.schemas](#gicsschemas)
-4. [Schema Profiles](#schema-profiles)
-   - [Defining a Schema](#defining-a-schema)
-   - [Categorical Fields](#categorical-fields)
-   - [String Item IDs](#string-item-ids)
-   - [Predefined Schemas](#predefined-schemas)
-5. [Encryption](#encryption)
-6. [Integration Patterns](#integration-patterns)
-   - [Node.js Service](#nodejs-service)
-   - [File-Based Pipeline](#file-based-pipeline)
-   - [Streaming / Append Mode](#streaming--append-mode)
-   - [Query by Item ID](#query-by-item-id)
-   - [Cross-System Interop](#cross-system-interop)
-7. [Error Handling](#error-handling)
-   - [Error Hierarchy](#error-hierarchy)
-   - [Failure Modes](#failure-modes)
-   - [Recovery Strategies](#recovery-strategies)
-8. [Performance Characteristics](#performance-characteristics)
-9. [Invariants & Guarantees](#invariants--guarantees)
+3. [Compression Presets & Tuning](#compression-presets--tuning)
+4. [CompressionProfiler](#compressionprofiler)
+5. [Schema Profiles](#schema-profiles)
+6. [Encryption](#encryption)
+7. [Daemon API](#daemon-api)
+8. [Insight Engine API](#insight-engine-api)
+9. [Error Handling](#error-handling)
+10. [Integration Patterns](#integration-patterns)
+11. [Performance](#performance)
+12. [Invariants & Guarantees](#invariants--guarantees)
+13. [Exported Types](#exported-types)
 
 ---
 
-## Installation & Requirements
+## Installation
+
+```ini
+# .npmrc
+@gredinlabstechnologies:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
 
 ```bash
-npm install gics-core
+npm install @gredinlabstechnologies/gics-core
 ```
 
-**Runtime requirements:**
-- Node.js >= 18.0.0
-- Single runtime dependency: `zstd-codec` (WebAssembly, no native compilation)
-
-**No network access required.** GICS is fully offline.
+**Runtime:** Node.js >= 18.0.0. Single dependency: `zstd-codec` (WASM). Fully offline.
 
 ---
 
-## Quick Start
-
-```typescript
-import { GICS } from 'gics-core';
-
-// Create snapshots
-const snapshots = [
-  {
-    timestamp: 1700000000,
-    items: new Map([
-      [1, { price: 15000, quantity: 100 }],
-      [2, { price: 8500, quantity: 250 }],
-    ]),
-  },
-  {
-    timestamp: 1700000060,
-    items: new Map([
-      [1, { price: 15010, quantity: 98 }],
-      [2, { price: 8495, quantity: 260 }],
-    ]),
-  },
-];
-
-// Compress
-const compressed = await GICS.pack(snapshots);
-
-// Decompress
-const restored = await GICS.unpack(compressed);
-
-// Verify integrity without decompressing
-const isValid = await GICS.verify(compressed);
-```
-
----
-
-## Public API
+## Core API
 
 ### GICS.pack()
 
-Compresses an array of snapshots into a single GICS binary blob.
+Compresses an array of snapshots into a single GICS binary.
 
 ```typescript
 GICS.pack(
@@ -100,20 +59,23 @@ GICS.pack(
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `snapshots` | `Snapshot[]` | Yes | Array of time-series snapshots |
-| `options.password` | `string` | No | Enable AES-256-GCM encryption |
-| `options.schema` | `SchemaProfile` | No | Custom field schema (omit for legacy price/quantity) |
-| `options.contextMode` | `'on' \| 'off'` | No | Dictionary context sharing. Default: `'on'` |
-| `options.segmentSizeLimit` | `number` | No | Bytes per segment. Default: `1048576` (1 MB) |
-| `options.probeInterval` | `number` | No | CHM probe frequency. Default: `4` |
-| `options.logger` | `Logger` | No | Route internal log messages |
-| `options.sidecarWriter` | `Function` | No | Persist anomaly reports externally |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `snapshots` | `Snapshot[]` | required | Array of time-series snapshots |
+| `options.preset` | `'balanced' \| 'max_ratio' \| 'low_latency'` | `'balanced'` | Compression preset |
+| `options.compressionLevel` | `number` (1-22) | 3 | Zstd compression level (overrides preset) |
+| `options.blockSize` | `number` | 1000 | Items per block (overrides preset) |
+| `options.password` | `string` | — | Enable AES-256-GCM encryption |
+| `options.schema` | `SchemaProfile` | — | Custom field schema |
+| `options.contextMode` | `'on' \| 'off'` | `'on'` | Dictionary context sharing |
+| `options.segmentSizeLimit` | `number` | `1048576` | Bytes per segment |
+| `options.probeInterval` | `number` | `4` | CHM probe frequency |
+| `options.logger` | `Logger` | — | Route internal log messages |
+| `options.sidecarWriter` | `Function` | — | Persist anomaly reports externally |
 
-**Returns:** `Promise<Uint8Array>` - The compressed GICS binary.
+**Returns:** `Promise<Uint8Array>`
 
-**Throws:** `Error` if encoder is already finalized.
+**Item-Major Layout:** If all snapshots contain the same items (same count, same IDs), GICS automatically transposes arrays to item-major order for better compression. This is transparent — no option needed.
 
 ---
 
@@ -128,104 +90,79 @@ GICS.unpack(
 ): Promise<Snapshot[]>
 ```
 
-**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `data` | `Uint8Array` | required | GICS compressed binary |
+| `options.password` | `string` | — | Password for encrypted files |
+| `options.integrityMode` | `'strict' \| 'warn'` | `'strict'` | Hash chain verification mode |
+| `options.logger` | `Logger` | — | Route warning messages |
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `data` | `Uint8Array` | Yes | GICS compressed binary |
-| `options.password` | `string` | No | Password for encrypted files |
-| `options.integrityMode` | `'strict' \| 'warn'` | No | Hash chain verification mode. Default: `'strict'` |
-| `options.logger` | `Logger` | No | Route warning messages |
-
-**Returns:** `Promise<Snapshot[]>` - Restored snapshots with exact original data.
-
-**Throws:**
-- `IntegrityError` - Magic bytes invalid, hash chain mismatch, CRC failure, wrong password
-- `IncompleteDataError` - File truncated, missing EOS marker
-- `LimitExceededError` - Decompression size exceeds 64 MB safety limit
+**Throws:** `IntegrityError`, `IncompleteDataError`, `LimitExceededError`
 
 ---
 
 ### GICS.verify()
 
-Verifies file integrity (SHA-256 chain + CRC32) **without decompressing payloads**. Fast integrity check for monitoring or ingestion gates.
+Verifies integrity (SHA-256 chain + CRC32) without decompressing payloads.
 
 ```typescript
 GICS.verify(data: Uint8Array): Promise<boolean>
 ```
 
-**Returns:** `true` if all integrity checks pass, `false` otherwise. Never throws.
+Returns `true` if all checks pass, `false` otherwise. Never throws.
 
 ---
 
 ### GICS.Encoder (streaming)
 
-For incremental encoding, append-to-file, or fine-grained control.
-
 ```typescript
-import { GICS } from 'gics-core';
+const encoder = new GICS.Encoder({
+  compressionLevel: 6,
+  blockSize: 2000,
+  password: 'optional',
+});
 
-const encoder = new GICS.Encoder({ password: 'secret' });
-
-// Add snapshots one at a time
 await encoder.addSnapshot(snapshot1);
 await encoder.addSnapshot(snapshot2);
+const bytes = await encoder.finish();
 
-// Flush intermediate segments (for streaming)
-const partialBytes = await encoder.flush();
-
-// Finalize and get complete binary
-const finalBytes = await encoder.finish();
+// Telemetry
+const stats = encoder.getTelemetry();
+// { total_blocks, core_ratio, quarantine_rate, quarantine_blocks, blocks[] }
 ```
 
-**File append mode** (write directly to disk without buffering everything in memory):
+**File append mode:**
 
 ```typescript
 import { open } from 'node:fs/promises';
 
 const handle = await open('data.gics', 'r+');
 const encoder = await GICS.Encoder.openFile(handle, { segmentSizeLimit: 2_000_000 });
-
 await encoder.addSnapshot(newSnapshot);
-await encoder.sealToFile(); // writes segments + EOS directly to file
+await encoder.sealToFile();
 await handle.close();
-```
-
-**Telemetry** (after encoding):
-
-```typescript
-const telemetry = encoder.getTelemetry();
-// {
-//   total_blocks: 12,
-//   core_ratio: 8.5,
-//   quarantine_rate: 0.08,
-//   quarantine_blocks: 1,
-//   blocks: [ ... per-block stats ... ]
-// }
 ```
 
 ---
 
 ### GICS.Decoder (advanced)
 
-For querying specific items, inspecting schemas, or generic snapshot access.
-
 ```typescript
 const decoder = new GICS.Decoder(data, { integrityMode: 'strict' });
 
-// Standard decode
+// Full decode
 const snapshots = await decoder.getAllSnapshots();
 
-// Query a specific item (skips segments via Bloom filter)
-const filtered = await decoder.query(42);
+// Query by item ID (Bloom filter skip)
+const item42 = await decoder.query(42);
 
-// Generic decode (schema-based files with arbitrary fields)
+// Generic decode (schema-based)
 const generic = await decoder.getAllGenericSnapshots();
 
-// Query by string key (schema files with string IDs)
-const results = await decoder.queryGeneric('file_write|main.ts');
+// Query by string key
+const results = await decoder.queryGeneric('sensor_rack_03');
 
-// Inspect schema without decoding data
+// Inspect schema
 await decoder.parseHeader();
 const schema = decoder.getSchema();
 ```
@@ -234,103 +171,273 @@ const schema = decoder.getSchema();
 
 ### GICS.schemas
 
-Predefined schema profiles for common use cases.
+Predefined schema profiles.
 
 ```typescript
-GICS.schemas.MARKET_DATA
-// { id: 'market_data_v1', version: 1, itemIdType: 'number',
-//   fields: [{ name: 'price', type: 'numeric', codecStrategy: 'value' },
-//            { name: 'quantity', type: 'numeric', codecStrategy: 'structural' }] }
+GICS.schemas.MARKET_DATA   // price (value) + quantity (structural)
+GICS.schemas.TRUST_EVENTS  // score, approvals, rejections, outcome (categorical)
+```
 
-GICS.schemas.TRUST_EVENTS
-// { id: 'gimo_trust_v1', version: 1, itemIdType: 'string',
-//   fields: [{ name: 'score', ... }, { name: 'approvals', ... },
-//            { name: 'outcome', type: 'categorical', enumMap: {...} }] }
+---
+
+## Compression Presets & Tuning
+
+| Preset | `compressionLevel` | `blockSize` | Ratio | Speed |
+|--------|-------------------|-------------|-------|-------|
+| `balanced` | 3 | 1000 | Good | Fast |
+| `max_ratio` | 9 | 4000 | Best | Slower |
+| `low_latency` | 1 | 512 | Lower | Fastest |
+
+```typescript
+// Use a preset
+await GICS.pack(data, { preset: 'max_ratio' });
+
+// Or tune manually (overrides preset)
+await GICS.pack(data, { compressionLevel: 12, blockSize: 2000 });
+```
+
+Use `CompressionProfiler` to find optimal parameters for your data.
+
+---
+
+## CompressionProfiler
+
+Benchmarks encoder across a `compressionLevel x blockSize` matrix.
+
+```typescript
+import { CompressionProfiler } from '@gredinlabstechnologies/gics-core';
+
+const result = await CompressionProfiler.profile(sampleSnapshots, 'quick');
+```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `sample` | `Snapshot[]` | required | Data sample (recommended: 200-5000) |
+| `mode` | `'quick' \| 'deep'` | `'quick'` | Quick: 6 trials. Deep: 30 trials |
+| `baseOptions` | `Omit<EncoderOptions, ...>` | `{}` | Base encoder options |
+
+**Returns:** `ProfileResult`
+
+```typescript
+interface ProfileResult {
+  compressionLevel: number;    // Recommended level
+  blockSize: number;           // Recommended block size
+  preset: string | null;       // Matching preset name, or null
+  bestRatio: number;           // Best compression ratio achieved
+  bestEncodeMs: number;        // Encode time for best config
+  trials: TrialResult[];       // All trial results
+  meta: ProfileMeta;           // Reproducibility metadata (hash, date, mode)
+}
+```
+
+**CLI:**
+
+```bash
+npm run profile                              # quick, 500 snapshots, 10 items
+npm run profile -- --mode deep               # exhaustive (30 trials)
+npm run profile -- --snapshots 1000 --items 20
 ```
 
 ---
 
 ## Schema Profiles
 
-Schema Profiles make GICS generic for any structured time-series, not just price/quantity.
-
-### Defining a Schema
+Make GICS generic for any structured time-series.
 
 ```typescript
-import { GICS, type SchemaProfile } from 'gics-core';
-
 const sensorSchema: SchemaProfile = {
   id: 'iot_sensors_v1',
   version: 1,
-  itemIdType: 'string',        // sensor IDs are strings like "temp_rack_03"
+  itemIdType: 'string',
   fields: [
     { name: 'temperature', type: 'numeric', codecStrategy: 'value' },
-    { name: 'humidity',    type: 'numeric', codecStrategy: 'value' },
-    { name: 'pressure',   type: 'numeric', codecStrategy: 'structural' },
-    { name: 'status',     type: 'categorical', enumMap: { ok: 0, warn: 1, critical: 2 } },
+    { name: 'humidity', type: 'numeric', codecStrategy: 'value' },
+    { name: 'status', type: 'categorical', enumMap: { ok: 0, warn: 1, critical: 2 } },
   ],
 };
-
-const snapshots = [{
-  timestamp: 1700000000,
-  items: new Map([
-    ['temp_rack_03', { temperature: 2250, humidity: 65, pressure: 1013, status: 'ok' }],
-    ['temp_rack_07', { temperature: 2310, humidity: 62, pressure: 1012, status: 'warn' }],
-  ]),
-}];
 
 const compressed = await GICS.pack(snapshots, { schema: sensorSchema });
 ```
 
-### Categorical Fields
+**Categorical fields** map strings to compact codes. The `enumMap` is embedded in the file.
 
-Categorical fields map string labels to compact numeric codes. The `enumMap` is stored inside the GICS file, so the decoder reconstructs the original strings automatically.
-
-```typescript
-{ name: 'outcome', type: 'categorical', enumMap: { approved: 0, rejected: 1, error: 2 } }
-```
-
-Encoder converts `'approved'` to `0` before compression. Decoder converts `0` back to `'approved'`.
-
-### String Item IDs
-
-When `itemIdType: 'string'`, GICS builds a **String Dictionary** per segment:
-- String keys are sorted, delta-length-encoded, and stored alongside the Bloom filter index.
-- Queries by string key (`queryGeneric('some_key')`) work via dictionary lookup + Bloom filter skip.
-- The dictionary is transparent to the consumer; the API accepts and returns strings directly.
-
-### Predefined Schemas
-
-| Schema | ID | itemIdType | Fields |
-|--------|----|------------|--------|
-| `MARKET_DATA` | `market_data_v1` | `number` | price (value), quantity (structural) |
-| `TRUST_EVENTS` | `gimo_trust_v1` | `string` | score, approvals, rejections, failures, streak, outcome (categorical) |
-
-**Using without schema** produces bytes identical to v1.3 legacy format (full backward compatibility).
+**String item IDs** build a per-segment String Dictionary (delta-length-encoded, queryable via dictionary lookup + Bloom filter).
 
 ---
 
 ## Encryption
 
-GICS v1.3 supports AES-256-GCM encryption with PBKDF2 key derivation.
+AES-256-GCM with PBKDF2 key derivation.
 
 ```typescript
-// Encrypt
-const encrypted = await GICS.pack(snapshots, { password: 'my-secret-key' });
-
-// Decrypt
-const restored = await GICS.unpack(encrypted, { password: 'my-secret-key' });
-
-// Wrong password → IntegrityError (immediate, fail-closed)
-await GICS.unpack(encrypted, { password: 'wrong' }); // throws IntegrityError
+const encrypted = await GICS.pack(snapshots, { password: 'my-secret' });
+const restored = await GICS.unpack(encrypted, { password: 'my-secret' });
 ```
 
-**Details:**
 - KDF: PBKDF2-HMAC-SHA256, 100,000 iterations
 - Unique 16-byte salt + 12-byte nonce per file
-- Auth tag verification before any decryption attempt
-- Each stream section encrypted independently with deterministic IV (HMAC-derived)
-- See [SECURITY_MODEL.md](./SECURITY_MODEL.md) for full threat model
+- Each stream section encrypted independently with deterministic IV
+- Wrong password throws `IntegrityError` immediately (fail-closed)
+
+See [SECURITY_MODEL.md](./SECURITY_MODEL.md) for full threat model.
+
+---
+
+## Daemon API
+
+Persistent process for continuous ingestion, query, and tier management.
+
+```typescript
+import { GICSDaemon } from '@gredinlabstechnologies/gics-core/daemon';
+
+const daemon = new GICSDaemon({
+  dataDir: './data',
+  pipeName: 'gics-prod',        // named pipe (Win) or socket path (Unix)
+  flushThreshold: 1000,          // auto-flush after N snapshots
+  compactThreshold: 10,          // auto-compact after N segments
+  enableInsights: true,          // activate Insight Engine
+});
+
+await daemon.start();
+```
+
+### IPC Methods (JSON-RPC 2.0)
+
+| Method | Params | Returns | Description |
+|--------|--------|---------|-------------|
+| `ingest` | `{ snapshots }` | `{ count }` | Add snapshots to MemTable |
+| `query` | `{ itemId }` | `{ snapshots }` | Query by item ID |
+| `flush` | — | `{ segmentPath }` | Force MemTable to disk |
+| `compact` | — | `{ before, after }` | Merge segments |
+| `rotate` | `{ maxAge? }` | `{ moved }` | HOT -> WARM -> COLD |
+| `getInsights` | `{ itemId? }` | `{ behavioral, correlations, signals }` | Insight Engine results |
+| `status` | — | `{ memtableSize, segments, uptime }` | Daemon health |
+| `shutdown` | — | — | Graceful stop |
+
+### WAL (Write-Ahead Log)
+
+All ingested data is durably written to WAL before acknowledging. On crash/restart, the daemon replays the WAL to reconstruct the MemTable. Binary format for minimal overhead.
+
+### File Locking
+
+- **In-process**: `AsyncRWLock` — FIFO, write-preferring, zero syscalls
+- **Cross-process**: Marker-file based shared/exclusive locks
+
+```typescript
+import { FileLock } from '@gredinlabstechnologies/gics-core/daemon';
+
+await FileLock.withExclusiveLock('/path/to/file', async () => {
+  // exclusive access
+});
+
+await FileLock.withSharedLock('/path/to/file', async () => {
+  // concurrent read access
+});
+```
+
+---
+
+## Insight Engine API
+
+Pure incremental statistics. No ML, no external dependencies.
+
+### InsightTracker
+
+Per-item behavioral metrics updated incrementally (O(1) per sample).
+
+```typescript
+import { InsightTracker } from '@gredinlabstechnologies/gics-core/insight';
+
+const tracker = new InsightTracker();
+tracker.observe(itemId, { price: 100, quantity: 50 }, timestamp);
+
+const metrics = tracker.getMetrics(itemId);
+// { velocity, entropy, volatility, streaks, fieldTrends, lifecycle }
+```
+
+| Metric | Algorithm | Description |
+|--------|-----------|-------------|
+| `velocity` | Delta / time | Rate of change |
+| `entropy` | Shannon entropy | Randomness of recent values |
+| `volatility` | Welford variance | Dispersion measure |
+| `streaks` | Run counting | Consecutive same-direction moves |
+| `lifecycle` | State machine | new -> active -> stable -> declining |
+
+### CorrelationAnalyzer
+
+Cross-item relationship detection.
+
+```typescript
+import { CorrelationAnalyzer } from '@gredinlabstechnologies/gics-core/insight';
+
+const analyzer = new CorrelationAnalyzer();
+analyzer.observe(itemId, value, timestamp);
+
+const correlations = analyzer.getCorrelations(itemId);
+// [{ itemA, itemB, pearson, lag }]
+
+const clusters = analyzer.getClusters();
+// [{ items: [1, 3, 7], centroid }]
+
+const leaders = analyzer.getLeadingIndicators(itemId);
+// [{ leaderId, lag, correlation }]
+```
+
+### PredictiveSignals
+
+Anomaly detection and trend forecasting.
+
+```typescript
+import { PredictiveSignals } from '@gredinlabstechnologies/gics-core/insight';
+
+const signals = new PredictiveSignals();
+signals.observe(itemId, value, timestamp);
+
+const anomalies = signals.getAnomalies(itemId);
+// [{ timestamp, value, zScore, severity }]
+
+const forecast = signals.getForecast(itemId);
+// { nextValue, confidence, trend }
+
+const recommendations = signals.getRecommendations(itemId);
+// [{ action: 'raise_compression', reason: 'stability_high', confidence }]
+```
+
+---
+
+## Error Handling
+
+```
+GicsError (base)
+├── IntegrityError          — Corruption, hash mismatch, wrong password
+│   └── IncompleteDataError — Truncated file, missing EOS
+└── LimitExceededError      — Decompression bomb (>64MB section)
+```
+
+```typescript
+import { IntegrityError, IncompleteDataError } from '@gredinlabstechnologies/gics-core';
+
+try {
+  const snapshots = await GICS.unpack(data, { password });
+} catch (err) {
+  if (err instanceof IncompleteDataError) {
+    // Truncated — re-download or discard
+  } else if (err instanceof IntegrityError) {
+    // Corruption or wrong password — reject
+  }
+}
+```
+
+| Scenario | Error | Recovery |
+|----------|-------|----------|
+| File truncated | `IncompleteDataError` | Re-encode from source |
+| Bit flip in storage | `IntegrityError` | Restore from backup |
+| Wrong password | `IntegrityError` | Prompt for correct password |
+| Decompression bomb | `LimitExceededError` | Reject file |
+
+**GICS is fail-closed.** It never silently returns partial or wrong data.
 
 ---
 
@@ -339,247 +446,106 @@ await GICS.unpack(encrypted, { password: 'wrong' }); // throws IntegrityError
 ### Node.js Service
 
 ```typescript
-import { GICS } from 'gics-core';
+import { GICS } from '@gredinlabstechnologies/gics-core';
 import { readFile, writeFile } from 'node:fs/promises';
 
-class TimeSeriesStore {
-  async save(snapshots: Snapshot[], path: string, password?: string): Promise<void> {
-    const binary = await GICS.pack(snapshots, { password });
-    await writeFile(path, binary);
-  }
+const binary = await GICS.pack(snapshots, { preset: 'max_ratio' });
+await writeFile('data.gics', binary);
 
-  async load(path: string, password?: string): Promise<Snapshot[]> {
-    const binary = new Uint8Array(await readFile(path));
-    return GICS.unpack(binary, { password });
-  }
-
-  async healthCheck(path: string): Promise<boolean> {
-    const binary = new Uint8Array(await readFile(path));
-    return GICS.verify(binary);
-  }
-}
-```
-
-### File-Based Pipeline
-
-For ETL or batch processing where data flows through stages:
-
-```
-[Data Source] → Snapshot[] → GICS.pack() → .gics file → GICS.unpack() → [Consumer]
-```
-
-```typescript
-// Producer (writes hourly)
-const hourlyData = collectLastHour();
-const binary = await GICS.pack(hourlyData, {
-  schema: mySchema,
-  segmentSizeLimit: 2_000_000,  // 2MB segments for large batches
-});
-await writeFile(`data_${Date.now()}.gics`, binary);
-
-// Consumer (reads on demand)
-const binary = new Uint8Array(await readFile(filePath));
-const decoder = new GICS.Decoder(binary);
-await decoder.parseHeader();
-const schema = decoder.getSchema();  // inspect fields before decoding
-const snapshots = await decoder.getAllGenericSnapshots();
+const restored = await GICS.unpack(new Uint8Array(await readFile('data.gics')));
 ```
 
 ### Streaming / Append Mode
 
-For long-running services that continuously append data:
-
 ```typescript
 import { open } from 'node:fs/promises';
 
-// Initial creation
 const handle = await open('timeseries.gics', 'w+');
 const encoder = await GICS.Encoder.openFile(handle);
 
-// Append periodically
 setInterval(async () => {
-  const snapshot = collectCurrentSnapshot();
-  await encoder.addSnapshot(snapshot);
-  await encoder.flush();  // writes segment to disk
+  await encoder.addSnapshot(collectSnapshot());
+  await encoder.flush();
 }, 60_000);
 
-// On shutdown: finalize
 process.on('SIGTERM', async () => {
-  await encoder.sealToFile();  // writes final segment + EOS
+  await encoder.sealToFile();
   await handle.close();
 });
 ```
 
 ### Query by Item ID
 
-GICS supports efficient item-specific queries using Bloom filter skip:
-
 ```typescript
 const decoder = new GICS.Decoder(data);
-
-// Numeric item IDs (legacy mode)
-const item42History = await decoder.query(42);
-// Returns only snapshots containing item 42
-// Segments without item 42 are skipped entirely (Bloom filter)
-
-// String item IDs (schema mode)
-const results = await decoder.queryGeneric('sensor_rack_03');
-// Looks up string dictionary → numeric ID → Bloom filter → decode
+const item42 = await decoder.query(42);           // numeric ID
+const sensor = await decoder.queryGeneric('rack3'); // string ID (schema mode)
+// Segments without the item are skipped via Bloom filter
 ```
-
-**Performance:** Query skips entire segments where the Bloom filter indicates the item is absent. For files with many segments, this is significantly faster than full decode.
-
-### Cross-System Interop
-
-GICS produces a self-contained binary format. Any system that can read `Uint8Array` / `Buffer` can consume it:
-
-```typescript
-// Send over HTTP
-app.get('/data/:id', async (req, res) => {
-  const binary = await loadGicsFile(req.params.id);
-  res.set('Content-Type', 'application/octet-stream');
-  res.set('Content-Disposition', 'attachment; filename="data.gics"');
-  res.send(Buffer.from(binary));
-});
-
-// Store in database (as BLOB)
-await db.query('INSERT INTO archives (id, data) VALUES ($1, $2)', [id, Buffer.from(binary)]);
-
-// Read from database
-const row = await db.query('SELECT data FROM archives WHERE id = $1', [id]);
-const snapshots = await GICS.unpack(new Uint8Array(row.rows[0].data));
-
-// S3 / Object Storage
-await s3.putObject({ Bucket: 'ts-data', Key: 'data.gics', Body: binary });
-const obj = await s3.getObject({ Bucket: 'ts-data', Key: 'data.gics' });
-const snapshots = await GICS.unpack(new Uint8Array(await obj.Body.transformToByteArray()));
-```
-
-**Wire format:** See [FORMAT.md](./FORMAT.md) for full binary specification if you need to implement a reader in another language.
 
 ---
 
-## Error Handling
+## Performance
 
-### Error Hierarchy
+### Compression Ratios (v1.3.2)
 
-```
-GicsError (base)
-├── IntegrityError          — Data corruption, hash mismatch, wrong password
-│   └── IncompleteDataError — Truncated file, missing EOS marker
-└── LimitExceededError      — Decompression bomb protection (>64MB section)
-```
+| Dataset | GICS | Zstd Baseline | Multiplier |
+|---------|------|---------------|------------|
+| Trending (single-item) | 29.5x | 5.1x | 5.8x |
+| Volatile (single-item) | 21.9x | 4.1x | 5.3x |
+| Multi-item (10 items) | 41.8x | 11.3x | 3.7x |
 
-All errors extend `Error` and include descriptive messages. Import them for typed catches:
+### Throughput
 
-```typescript
-import { IntegrityError, IncompleteDataError } from 'gics-core';
-
-try {
-  const snapshots = await GICS.unpack(data, { password });
-} catch (err) {
-  if (err instanceof IncompleteDataError) {
-    // File was truncated — re-download or discard
-    log.warn('Truncated GICS file:', err.message);
-  } else if (err instanceof IntegrityError) {
-    // Corruption or wrong password — reject
-    log.error('Integrity failure:', err.message);
-  } else {
-    throw err; // unexpected
-  }
-}
-```
-
-### Failure Modes
-
-| Scenario | Error | Cause | Recovery |
-|----------|-------|-------|----------|
-| File truncated during write | `IncompleteDataError` | Missing EOS marker (0xFF) | Re-encode from source data |
-| Bit flip in storage | `IntegrityError` | CRC32 mismatch on segment | Re-download or restore from backup |
-| Hash chain tampered | `IntegrityError` | SHA-256 chain broken | File was modified externally; reject |
-| Wrong password | `IntegrityError` | HMAC auth verify fails | Prompt for correct password |
-| No password on encrypted file | `Error` | Password required but not provided | Supply password in options |
-| File too short (<4 bytes) | `Error` | Not a GICS file | Check file source |
-| Unsupported version byte | `IntegrityError` | Version != 0x02 or 0x03 | Use compatible GICS decoder |
-| Decompression bomb | `LimitExceededError` | Section claims >64MB uncompressed | Reject file (malicious or corrupt) |
-| Schema field count mismatch | `IntegrityError` | Encoded fields != schema definition | Schema was modified after encoding |
-| Cross-stream length mismatch | `IntegrityError` | TIME count != SNAPSHOT_LEN count | Internal corruption; re-encode |
-| Zstd decompression failure | `Error` | Corrupt compressed payload | Re-encode from source |
-
-### Recovery Strategies
-
-**General principle: GICS is fail-closed.** It will never silently return partial or wrong data.
-
-1. **Retry logic is not needed** for decode errors — they indicate data corruption, not transient failures.
-2. **Verify before processing** in pipelines: `if (await GICS.verify(data)) { ... }` is cheap and catches corruption early.
-3. **Integrity mode `'warn'`** (not recommended for production) continues decoding on hash mismatch:
-   ```typescript
-   const snapshots = await GICS.unpack(data, { integrityMode: 'warn', logger: myLogger });
-   ```
-4. **For append workflows**, if the process crashes mid-write the file may lack an EOS marker. The `Encoder.openFile()` method detects and resumes from the last valid EOS.
-
----
-
-## Performance Characteristics
-
-| Metric | Typical Value | Notes |
-|--------|---------------|-------|
-| Compression ratio | 5x - 20x | Depends on data regularity (structured > chaotic) |
-| Encode throughput | ~50,000 snapshots/sec | Single-threaded, on modern hardware |
-| Decode throughput | ~80,000 snapshots/sec | Decompression is faster than encoding |
-| Verify throughput | ~200,000 snapshots/sec | No decompression, only hash/CRC checks |
-| Memory usage | O(segment_size) | Default 1MB segments; configurable |
-| Encryption overhead | ~5-10% | AES-256-GCM is hardware-accelerated on modern CPUs |
-
-**Codec selection is automatic.** GICS tries multiple inner codecs per block and picks the smallest output:
-- `DOD_VARINT` / `RLE_DOD` — Best for timestamps and regular intervals
-- `VARINT_DELTA` — Best for slowly-changing values
-- `BITPACK_DELTA` — Best for small, bounded deltas
-- `RLE_ZIGZAG` — Best for sparse data with many repeated values
-- `DICT_VARINT` — Best for values with high repetition (low cardinality)
-- `FIXED64_LE` — Fallback for chaotic data (quarantined blocks)
-
-The **Compression Health Monitor (CHM)** detects anomalous blocks (regime shifts, entropy spikes) and quarantines them with FIXED64 encoding to prevent ratio degradation.
+| Operation | Rate |
+|-----------|------|
+| Encode | ~50,000 snapshots/sec |
+| Decode | ~80,000 snapshots/sec |
+| Verify | ~200,000 snapshots/sec |
+| Memory | O(segment_size), default 1MB |
 
 ---
 
 ## Invariants & Guarantees
 
-These properties hold for all valid GICS v1.3 files:
-
 | Invariant | Description |
 |-----------|-------------|
 | **Determinism** | Same input + same options = identical output bytes |
-| **Lossless** | `unpack(pack(data)) === data` — exact roundtrip, zero precision loss |
-| **Fail-closed** | Corrupt/truncated/tampered data always throws, never returns partial results |
-| **Backward compatible** | v1.3 decoder reads v1.2 files; `pack()` without schema = v1.3 legacy bytes |
-| **Schema embedded** | Schema profile is stored inside the file; decoder is self-describing |
-| **Segment isolation** | Corruption in segment N does not affect segments N-1 or N+1 |
-| **No external state** | No network calls, no filesystem reads during encode/decode (except explicit file-append mode) |
+| **Lossless** | `unpack(pack(data)) === data` — exact roundtrip |
+| **Fail-closed** | Corrupt data always throws, never returns partial results |
+| **Backward compatible** | v1.3.2 reads v1.2 and v1.3.0 files |
+| **Schema embedded** | Decoder is self-describing |
+| **Segment isolation** | Corruption in segment N doesn't affect N-1 or N+1 |
+| **No external state** | No network, no filesystem during encode/decode |
 
 ---
 
 ## Exported Types
 
 ```typescript
-// Core data types
-export type { Snapshot }           // { timestamp: number, items: Map<number, { price, quantity }> }
-export type { GenericSnapshot }    // { timestamp: number, items: Map<number|string, Record<string, number|string>> }
+// Core
+export type { Snapshot }            // { timestamp, items: Map<number, { price, quantity }> }
+export type { GenericSnapshot }     // { timestamp, items: Map<string|number, Record<string, number|string>> }
 
-// Schema types
-export type { SchemaProfile }      // { id, version, itemIdType, fields: FieldDef[] }
-export type { FieldDef }           // { name, type, codecStrategy?, enumMap? }
+// Schema
+export type { SchemaProfile }       // { id, version, itemIdType, fields }
+export type { FieldDef }            // { name, type, codecStrategy?, enumMap? }
 
 // Options
-export type { EncoderOptions }     // { password?, schema?, contextMode?, segmentSizeLimit?, ... }
-export type { DecoderOptions }     // { password?, integrityMode?, logger? }
-export type { Logger }             // { info?, warn?, error? }
+export type { GICSv2EncoderOptions }  // { preset?, compressionLevel?, blockSize?, password?, schema?, ... }
+export type { CompressionPreset }     // 'balanced' | 'max_ratio' | 'low_latency'
+
+// Profiler
+export { CompressionProfiler }
+export type { ProfileResult, ProfileMode, TrialResult, ProfileMeta }
 
 // Errors
-export { IntegrityError }
-export { IncompleteDataError }
+export { IntegrityError, IncompleteDataError }
+
+// Presets
+export { COMPRESSION_PRESETS }       // Record<CompressionPreset, { compressionLevel, blockSize }>
 ```
 
 ---
 
-*Document version: 1.3.0 | Last updated: 2026-02-11*
+*Document version: 1.3.2 | Last updated: 2026-02-12*

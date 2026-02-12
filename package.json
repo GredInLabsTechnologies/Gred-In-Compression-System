@@ -13,8 +13,9 @@
         "registry": "https://npm.pkg.github.com"
     },
     "files": [
-        "dist",
-        "README.md"
+        "dist/src",
+        "README.md",
+        "CHANGELOG.md"
     ],
     "scripts": {
         "build": "tsc",
