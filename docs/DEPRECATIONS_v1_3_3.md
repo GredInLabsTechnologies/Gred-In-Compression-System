@@ -10,6 +10,16 @@
 - Deprecated documents are **not deleted**.
 - Deprecated documents remain **read-only historical references**.
 - New planning and implementation for the next cycle must reference v1.3.3 prep docs.
+- **Global scope rule (effective immediately):** every document produced before v1.3.3 prep is considered legacy for new implementation work, unless explicitly listed as active below.
+
+### Active documentation set for v1.3.3 prep (allowlist)
+
+- `gics_1_3_3_plan`
+- `docs/DEPRECATIONS_v1_3_3.md`
+- `docs/PRODUCTION_PLAN_V1_3_3.md`
+- `docs/roadmaps/GICS_ROADMAP_v1_3_3.md`
+- `docs/VERSIONING.md` (updated for transition state)
+- `README.md` (transition notice)
 
 ---
 
