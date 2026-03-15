@@ -1,0 +1,53 @@
+# GICS 1.3.3 — Plan de ejecución por agentes (fuente principal)
+
+> Este archivo queda como **plan canónico** para la preparación/implementación de 1.3.3.
+> Basado en el plan proporcionado por el usuario (2026-03-15).
+
+## Reglas globales (obligatorias)
+
+1. Urgencia de producción: no es ejercicio académico.
+2. Cero vaguedad: ante ambigüedad, parar y preguntar.
+3. Verificación obligatoria post-cambio (relectura línea a línea + tests).
+4. Commits atómicos por fase/cambio.
+5. No romper lo existente: suite actual 100% green.
+6. Control de complejidad: evitar sobre-ingeniería.
+
+## Dependencia documental crítica
+
+- Documento obligatorio previo a cualquier implementación:  
+  `docs/todo/GICS_1.3.3_ARCHITECTURE.md` (rev-2)
+
+## Fases prioritarias (orden obligatorio)
+
+1. **WAL v2**
+   - CRC por entry, header versionado, checkpointing, recovery determinista,
+     auto-compaction, fsyncOnCommit configurable.
+2. **GICSSupervisor**
+   - Auto-restart con backoff, DEGRADED mode, buffer temporal de writes,
+     salida de degradado con intervención manual.
+3. **ResilienceShell**
+   - Circuit breaker, retry con jitter, backpressure, timeouts por operación,
+     errores tipados con metadata.
+4. **AuditChain (Merkle/hash chain)**
+   - Audit log append-only, hash encadenado por mutación, verify/export.
+5. **PromptDistiller**
+   - Retention por capas (Raw/Compressed/Distilled), monitor de disco,
+     emergency purge, preservación de metadata.
+6. **PredictiveSignals + ConfidenceTracker wiring (suggest-only)**
+   - Cableado de recomendaciones y outcomes, TTL, auto-disable por baja accuracy.
+
+## Fases secundarias (tras estabilidad de 1-6)
+
+7. BanditRouter (detrás de feature flag)
+8. Lifecycle actions del InsightTracker
+9. Health endpoint `/health/gics`
+
+## Protocolo global de cierre
+
+- Ejecutar verificación integral: tests, crash-recovery, resiliencia,
+  disk management, pipeline de insights y presupuesto de complejidad.
+
+---
+
+Este plan sustituye cualquier bootstrap genérico.  
+Para 1.3.3, **se sigue este archivo + arquitectura rev-2**.

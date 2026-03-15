@@ -2,6 +2,9 @@
 
 > Propósito: establecer el runbook mínimo para arrancar la implementación de v1.3.3 sobre una base documental saneada.
 
+> 🔒 **Fuente canónica de ejecución:** `gics_1_3_3_plan`.
+> Este documento funciona como índice operativo; en caso de conflicto, manda `gics_1_3_3_plan`.
+
 **Estado:** Preparación inicial  
 **Rama de trabajo:** `dev/v1.3.3`  
 **Fecha:** 2026-03-15
@@ -14,6 +17,11 @@ Dejar preparado el entorno de trabajo para que el desarrollo de 1.3.3 empiece si
 
 - documentación histórica (legacy), y
 - documentación activa (source of truth).
+
+## 1.1) Referencias obligatorias antes de implementar
+
+- `gics_1_3_3_plan` (orden de fases y reglas globales)
+- `docs/todo/GICS_1.3.3_ARCHITECTURE.md` (rev-2, cuando esté disponible en el repo)
 
 ---
 
@@ -44,10 +52,9 @@ Dejar preparado el entorno de trabajo para que el desarrollo de 1.3.3 empiece si
 
 Pendiente de definir en siguiente iteración:
 
-- objetivos funcionales de 1.3.3,
-- alcance por fases,
-- criterios de aceptación por feature,
-- plan de pruebas y benchmarks asociados.
+- ejecutar Fase 1 (WAL v2) según `gics_1_3_3_plan`,
+- continuar en orden estricto hasta Fase 6 (prioridad alta),
+- dejar Fases 7-9 para estabilidad posterior, tal como define el plan canónico.
 
 ---
 
