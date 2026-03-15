@@ -1,5 +1,7 @@
 # GICS v1.3 — Production Plan (Definitivo)
 
+> ⚠️ **Deprecation Notice (v1.3.3 prep, 2026-03-15):** Este runbook queda como referencia histórica del ciclo v1.3.x previo. Para nueva planificación/ejecución, usar `docs/PRODUCTION_PLAN_V1_3_3.md`.
+
 > Propósito: este documento es un **runbook** para que agentes futuros puedan implementar GICS v1.3 por fases, **verificar** cada fase con comandos reproducibles, y **anotar** si fue exitoso, qué se mejoró y observaciones útiles.
 >
 

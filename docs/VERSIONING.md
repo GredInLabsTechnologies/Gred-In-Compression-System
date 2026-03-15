@@ -12,6 +12,9 @@
 | **v1.2.0** | 🏛️ Archived | `GICS-ARCHIVE/versions/v1.2/` | Verification suite + legacy formats |
 | **v1.3.1** | ✅ Production | **This repository** | Stable core (Schema + Encryption) |
 | **v1.3.2** | ✅ Release | `dev/v1.3.2` | The Cognitive Storage Engine (Daemon + Insight) |
+| **v1.3.3** | 🚧 In Preparation | `dev/v1.3.3` | Documentation transition + implementation prep |
+
+> ⚠️ **v1.3.3 Transition Policy (2026-03-15):** Documentation from cycles up to **v1.3.2** is considered **legacy/deprecated for new implementation work**. Historical content remains available as read-only reference.
 
 ---
 
@@ -51,6 +54,12 @@ Released from `dev/v1.3.2` branch.
   - **Zero new runtime dependencies**: All intelligence uses pure incremental statistics
 - **Roadmap**: See [GICS_ROADMAP_v1_3_2.md](./roadmaps/GICS_ROADMAP_v1_3_2.md)
 
+## v1.3.3 — Preparation Branch
+Active preparation in `dev/v1.3.3`.
+- **Scope (prep):** documentation deprecation framework, roadmap/bootstrap docs for 1.3.3, and release branch setup.
+- **Roadmap (prep):** See [GICS_ROADMAP_v1_3_3.md](./roadmaps/GICS_ROADMAP_v1_3_3.md)
+- **Deprecation ledger:** See [DEPRECATIONS_v1_3_3.md](./DEPRECATIONS_v1_3_3.md)
+
 ---
 
-*Document version: 1.3.2 | Updated: 2026-02-11*
+*Document version: 1.3.3-prep | Updated: 2026-03-15*
