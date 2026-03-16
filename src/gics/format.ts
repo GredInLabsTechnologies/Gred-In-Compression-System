@@ -19,6 +19,8 @@ export enum InnerCodecId {
     DOD_VARINT = 5, // For Time mainly (Delta-of-Delta + Varint)
     DICT_VARINT = 6, // Dictionary + Varint
     FIXED64_LE = 7,  // 8 bytes per item (Little Endian)
+    XOR_FLOAT = 8,   // Gorilla-style XOR for Float64 streams
+    FOR_BITPACK = 9, // Frame-of-reference + bitpacked residuals
 }
 
 export enum OuterCodecId {
@@ -61,7 +63,7 @@ export interface EncryptionHeaderV3 {
     salt: Uint8Array;    // 16 bytes
     authVerify: Uint8Array; // 32 bytes (HMAC of a known constant to verify password)
     kdfId: number;       // 1: PBKDF2
-    iterations: number;  // e.g. 100000
+    iterations: number;  // default: 600000 (OWASP 2023), min 100000
     digestId: number;    // 1: SHA-256
     fileNonce: Uint8Array; // 12 bytes
 }

@@ -41,6 +41,8 @@ export type GICSv2EncoderOptions = {
     segmentSizeLimit?: number;
     /** Optional password for AES-256-GCM encryption (v1.3+). */
     password?: string;
+    /** PBKDF2 iteration count (min 100_000). Default: 600_000 (OWASP 2023 recommendation). */
+    pbkdf2Iterations?: number;
     /** Optional schema profile for generic field encoding. If omitted, legacy price/quantity mode. */
     schema?: import('../gics-types.js').SchemaProfile;
     /** Compression preset. Sets compressionLevel and blockSize to well-tested defaults. */

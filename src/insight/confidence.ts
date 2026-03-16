@@ -66,7 +66,7 @@ export class ConfidenceTracker {
         this.recentWindowSize = config.recentWindowSize ?? RECENT_WINDOW;
     }
 
-    recordOutcome(insightId: string, result: OutcomeResult, recommendation: Recommendation): void {
+    recordOutcome(insightId: string, result: OutcomeResult, recommendation: Recommendation): { wasDisabled: boolean; nowDisabled: boolean } {
         // Derive type and scope
         const insightType = RECOMMENDATION_TYPE_TO_INSIGHT[recommendation.type] ?? 'recommendation';
         const scope = this.deriveScope(recommendation.target);
@@ -104,6 +104,8 @@ export class ConfidenceTracker {
             this.confidenceByScope.set(scopeKey, conf);
         }
 
+        const wasDisabled = conf.disabled;
+
         conf.totalPredictions++;
         if (correct) conf.correctPredictions++;
 
@@ -118,10 +120,10 @@ export class ConfidenceTracker {
         // Calibration: correlation between estimated confidence and actual accuracy
         conf.calibration = this.computeCalibration(insightType, scope);
 
-        // Apply gradual adjustment rules
-        if (conf.accuracy < 0.3 && conf.totalPredictions >= 10) {
+        // Apply gradual adjustment rules (Phase 9: accuracy < 50% after 20+ outcomes)
+        if (conf.accuracy < 0.5 && conf.totalPredictions >= 20) {
             conf.disabled = true;
-        } else if (conf.accuracy >= 0.5) {
+        } else if (conf.accuracy >= 0.6) {
             conf.disabled = false;
         }
 
@@ -130,6 +132,8 @@ export class ConfidenceTracker {
         } else if (conf.accuracy <= 0.9) {
             conf.highReliability = false;
         }
+
+        return { wasDisabled, nowDisabled: conf.disabled };
     }
 
     getAccuracy(insightType?: string, scope?: string): InsightConfidence[] {

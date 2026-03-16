@@ -15,8 +15,20 @@ async function withTempDir(run: (dir: string) => Promise<void>): Promise<void> {
 async function corruptFirstBinaryEntryPayload(filePath: string): Promise<void> {
     const buf = await fs.readFile(filePath);
 
-    // [op:1][keyLen:2][key][valLen:4][val][crc:4]
+    // v2 binary may include header [magic:4][version:1]
     let offset = 0;
+    if (buf.length >= 5 && buf.subarray(0, 4).toString('ascii') === 'GWV2') {
+        offset = 5;
+    }
+
+    // v1: [op:1][keyLen:2][key][valLen:4][val][crc:4]
+    // v2: [lsn:8][ts:8][op:1][keyLen:2][key][valLen:4][val][crc:4]
+    const isV2 = offset === 5;
+    if (isV2) {
+        offset += 8; // lsn
+        offset += 8; // timestamp
+    }
+
     offset += 1;
     const keyLen = buf.readUInt16LE(offset);
     offset += 2 + keyLen;
@@ -37,7 +49,15 @@ async function corruptFirstBinaryEntryPayload(filePath: string): Promise<void> {
 async function corruptFirstJsonlEntryCrc(filePath: string): Promise<void> {
     const text = await fs.readFile(filePath, 'utf8');
     const lines = text.split('\n');
-    const first = lines.findIndex((line) => line.trim().length > 0);
+    const first = lines.findIndex((line) => {
+        if (!line.trim()) return false;
+        try {
+            const parsed = JSON.parse(line) as Record<string, unknown>;
+            return typeof parsed.crc32 === 'number' && parsed.op !== undefined;
+        } catch {
+            return false;
+        }
+    });
 
     if (first < 0) {
         throw new Error('No JSONL entries found to corrupt.');

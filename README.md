@@ -1,8 +1,10 @@
 # GICS — Deterministic Time-Series Compression
 
-![Version](https://img.shields.io/badge/version-1.3.2-blue)
+![Version](https://img.shields.io/badge/version-1.3.3--prep-blue)
 ![Status](https://img.shields.io/badge/status-production-green)
 ![License](https://img.shields.io/badge/license-proprietary-red)
+
+> ⚠️ **Documentation Transition Notice (v1.3.3 prep):** Documentation generated for cycles up to **v1.3.2** is now considered **legacy/deprecated for new implementation work**. Use the v1.3.3 preparation docs as source of truth for upcoming planning and execution.
 
 ## What Is GICS?
 
@@ -319,4 +321,4 @@ npm run profile   # Encoder parameter profiler
 
 ---
 
-*v1.3.2 | 2026-02-12*
+*v1.3.3-prep | 2026-03-15*

@@ -897,8 +897,12 @@ export class GICSv2Decoder {
                 return Codecs.decodeRLE(payload);
             case InnerCodecId.DICT_VARINT:
                 return Codecs.decodeDict(payload, context);
+            case InnerCodecId.FOR_BITPACK:
+                return Codecs.decodeFOR(payload, nItems);
             case InnerCodecId.FIXED64_LE:
                 return Codecs.decodeFixed64(payload, nItems);
+            case InnerCodecId.XOR_FLOAT:
+                return Codecs.decodeXorFloat(payload, nItems);
             default:
                 return [];
         }

@@ -1,9 +1,11 @@
 # GICS v1.3.2 — Roadmap
 ## "The Cognitive Storage Engine"
 
+> ⚠️ **Deprecation Notice (v1.3.3 prep, 2026-03-15):** This roadmap is kept as historical release documentation for v1.3.2. For new planning and implementation work, use `docs/roadmaps/GICS_ROADMAP_v1_3_3.md`.
+
 **Fecha:** 2026-02-11T12:00:00Z
 **Version:** 1.3.2
-**Estado:** Implementado 
+**Estado:** Implementado (Legacy for new planning)
 **Base:** GICS v1.3.1 (estable, Schema Profiles, AES-256-GCM, hash chain)
 **Autores:** Equipo GICS + Claude Opus 4.6 (asistencia estratégica y técnica)
 

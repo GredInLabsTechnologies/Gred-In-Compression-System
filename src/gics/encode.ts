@@ -80,6 +80,7 @@ export class GICSv2Encoder {
     private readonly encryptionSalt: Uint8Array | null = null;
     private readonly encryptionFileNonce: Uint8Array | null = null;
     private readonly authVerify: Uint8Array | null = null;
+    private pbkdf2Iterations: number = 600_000;
 
     static reset() {
         // Backward-compat for existing tests. No global mutable state is used anymore.
@@ -112,6 +113,7 @@ export class GICSv2Encoder {
             logger: null,
             segmentSizeLimit: 1024 * 1024, // 1MB
             password: '',
+            pbkdf2Iterations: 600_000,
             schema: undefined as unknown as import('../gics-types.js').SchemaProfile,
             preset: options.preset ?? 'balanced',
             compressionLevel: presetConfig.compressionLevel,
@@ -122,11 +124,16 @@ export class GICSv2Encoder {
         this.compressionLevel = this.options.compressionLevel;
 
         if (this.options.password) {
+            const iterations = this.options.pbkdf2Iterations ?? 600_000;
+            if (iterations < 100_000) {
+                throw new Error(`PBKDF2 iterations must be >= 100,000 (got ${iterations})`);
+            }
             const secrets = generateEncryptionSecrets();
             this.encryptionSalt = secrets.salt;
             this.encryptionFileNonce = secrets.fileNonce;
-            this.encryptionKey = deriveKey(this.options.password, this.encryptionSalt, 100000);
+            this.encryptionKey = deriveKey(this.options.password, this.encryptionSalt, iterations);
             this.authVerify = generateAuthVerify(this.encryptionKey);
+            this.pbkdf2Iterations = iterations;
         }
 
         this.runId = this.options.runId;
@@ -181,7 +188,7 @@ export class GICSv2Encoder {
             headerBytes.set(this.encryptionSalt!, pos); pos += 16;
             headerBytes.set(this.authVerify!, pos); pos += 32;
             view.setUint8(pos++, 1); // kdfId: PBKDF2
-            view.setUint32(pos, 100000, true); pos += 4;
+            view.setUint32(pos, this.pbkdf2Iterations, true); pos += 4;
             view.setUint8(pos++, 1); // digestId: SHA-256
             headerBytes.set(this.encryptionFileNonce!, pos);
         }
@@ -694,7 +701,7 @@ export class GICSv2Encoder {
             const chunk = prices.slice(i, i + this.blockSize);
             if (this.hasNonIntegerValues(chunk)) {
                 const last = ctx.lastValue ?? 0;
-                if (this.hasUnsafeValueDeltas(chunk, last)) {
+                if (this.hasUnsafeValueDeltas(chunk, last) || this.hasLossyFiniteDeltas(chunk, last)) {
                     // For unsafe deltas (NaN/Inf/overflow), persist absolute FIXED64 values.
                     const encoded = Codecs.encodeFixed64(chunk);
                     ctx.lastValue = chunk.length > 0 ? chunk[chunk.length - 1] : ctx.lastValue;
@@ -717,9 +724,25 @@ export class GICSv2Encoder {
                 const result = FieldMath.computeValueDeltas(chunk, last);
                 ctx.lastValue = result.nextValue;
                 ctx.lastValueDelta = 0;
-                const encoded = Codecs.encodeFixed64(result.deltas);
-                addToStream(StreamId.VALUE, { innerCodecId: InnerCodecId.FIXED64_LE, nItems: chunk.length, payloadLen: encoded.length, flags: 0 }, encoded);
-                this.recordSimpleBlockStats(StreamId.VALUE, chunk, encoded, stats, InnerCodecId.FIXED64_LE);
+
+                const encodedXor = Codecs.encodeXorFloat(result.deltas);
+                const encodedFixed = Codecs.encodeFixed64(result.deltas);
+                const useXor = encodedXor.length < encodedFixed.length;
+
+                const encoded = useXor ? encodedXor : encodedFixed;
+                const codecId = useXor ? InnerCodecId.XOR_FLOAT : InnerCodecId.FIXED64_LE;
+
+                addToStream(
+                    StreamId.VALUE,
+                    {
+                        innerCodecId: codecId,
+                        nItems: chunk.length,
+                        payloadLen: encoded.length,
+                        flags: 0
+                    },
+                    encoded
+                );
+                this.recordSimpleBlockStats(StreamId.VALUE, chunk, encoded, stats, codecId);
                 continue;
             }
             const snapshot = ctx.snapshot();
@@ -733,6 +756,19 @@ export class GICSv2Encoder {
         for (const current of values) {
             const diff = current - prev;
             if (!Number.isFinite(diff)) {
+                return true;
+            }
+            prev = current;
+        }
+        return false;
+    }
+
+    private hasLossyFiniteDeltas(values: number[], lastValue: number): boolean {
+        let prev = lastValue;
+        for (const current of values) {
+            const diff = current - prev;
+            const reconstructed = prev + diff;
+            if (!Object.is(reconstructed, current)) {
                 return true;
             }
             prev = current;
@@ -849,6 +885,8 @@ export class GICSv2Encoder {
 
             if (finalCodec === InnerCodecId.DICT_VARINT) {
                 finalEncoded = Codecs.encodeDict(finalData, ctx);
+            } else if (finalCodec === InnerCodecId.FOR_BITPACK) {
+                finalEncoded = Codecs.encodeFOR(finalData);
             } else if (finalCodec === InnerCodecId.BITPACK_DELTA) {
                 finalEncoded = Codecs.encodeBitPack(finalData);
             } else if (finalCodec === InnerCodecId.RLE_ZIGZAG || finalCodec === InnerCodecId.RLE_DOD) {
@@ -1003,6 +1041,7 @@ export class GICSv2Encoder {
         } else if (streamId === StreamId.VALUE) {
             candidates.push(
                 { id: InnerCodecId.VARINT_DELTA, encode: () => encodeVarint(inputData) },
+                { id: InnerCodecId.FOR_BITPACK, encode: () => Codecs.encodeFOR(inputData) },
                 { id: InnerCodecId.BITPACK_DELTA, encode: () => Codecs.encodeBitPack(inputData) },
                 { id: InnerCodecId.RLE_ZIGZAG, encode: () => Codecs.encodeRLE(inputData) },
             );
