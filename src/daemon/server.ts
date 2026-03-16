@@ -15,6 +15,7 @@ import { ConfidenceTracker, type OutcomeResult } from '../insight/confidence.js'
 import { InsightPersistence } from '../insight/persistence.js';
 import { GICSSupervisor } from './supervisor.js';
 import { AuditChain } from './audit-chain.js';
+import { PromptDistiller } from './prompt-distiller.js';
 
 export interface GICSDaemonConfig {
     socketPath: string;
@@ -65,6 +66,7 @@ export class GICSDaemon {
     private readonly insightPersistence = new InsightPersistence();
     private readonly supervisor = new GICSSupervisor();
     private auditChain: AuditChain | null = null;
+    private promptDistiller: PromptDistiller | null = null;
     private readonly subscriptions = new Map<string, { socket: net.Socket; events: string[] }>();
     private static readonly INSIGHT_SEGMENT_PREFIX = 'insight-';
     private static readonly PRESENCE_PREFIX = '__gics_p__';
@@ -106,6 +108,14 @@ export class GICSDaemon {
 
         this.token = this.ensureToken();
         this.auditChain = new AuditChain({ filePath: path.join(config.dataPath, 'audit.chain') });
+
+        // Phase 12: PromptDistiller (optional, for lifecycle-based retention)
+        if (process.env.GICS_DISTILLER_ENABLED === 'true') {
+            this.promptDistiller = new PromptDistiller({
+                dataPath: path.join(config.dataPath, 'distilled'),
+            });
+        }
+
         this.server = net.createServer((socket) => this.handleConnection(socket));
     }
 
@@ -161,6 +171,12 @@ export class GICSDaemon {
                 } catch { return false; }
             },
         });
+
+        // Phase 12: Initialize PromptDistiller if enabled
+        if (this.promptDistiller) {
+            await this.promptDistiller.initialize();
+        }
+
         this.supervisor.start();
 
         // 3. Start listening
@@ -179,6 +195,7 @@ export class GICSDaemon {
     async stop(): Promise<void> {
         this.supervisor.stop();
         await this.auditChain?.close();
+        await this.promptDistiller?.stop();
         return new Promise((resolve) => {
             this.server.close(() => {
                 console.log('[GICS] Daemon stopped.');
@@ -844,6 +861,29 @@ export class GICSDaemon {
                         // Emit events to subscribers
                         if (prevBehavior && prevBehavior.lifecycle !== writeBehavior.lifecycle) {
                             this.emitEvent('lifecycle_change', { key: params.key, from: prevBehavior.lifecycle, to: writeBehavior.lifecycle });
+
+                            // Phase 12: Lifecycle-based actions
+                            if (writeBehavior.lifecycle === 'dormant' || writeBehavior.lifecycle === 'dead') {
+                                // Item became dormant/dead → trigger retention policy (compress old data)
+                                if (this.promptDistiller) {
+                                    this.promptDistiller.runRetentionPolicy().catch((err) => {
+                                        console.warn(`[GICS] PromptDistiller retention policy failed: ${err.message}`);
+                                    });
+                                }
+                            } else if (writeBehavior.lifecycle === 'resurrected') {
+                                // Item resurrected from dead state → log alert
+                                console.log(`[GICS] ALERT: Item resurrected: ${params.key} (previous: ${prevBehavior.lifecycle})`);
+                                try {
+                                    await this.auditChain?.append(
+                                        'system:lifecycle',
+                                        'item_resurrected',
+                                        params.key,
+                                        { from: prevBehavior.lifecycle, timestamp: putTs }
+                                    );
+                                } catch (auditErr: any) {
+                                    console.warn(`[GICS] Failed to audit resurrection: ${auditErr.message}`);
+                                }
+                            }
                         }
                         for (const anomaly of signalResult.newAnomalies) {
                             this.emitEvent('anomaly_detected', anomaly);
@@ -1153,6 +1193,75 @@ export class GICSDaemon {
                 case 'exportAudit':
                     const auditLines = await this.auditChain?.export();
                     return { jsonrpc: '2.0', id, result: { entries: auditLines } };
+
+                case 'getHealth': {
+                    // Phase 13: Health endpoint (response time < 100ms)
+                    const healthStart = Date.now();
+
+                    // Basic metrics (fast)
+                    const health: any = {
+                        status: 'ok',
+                        timestamp: Date.now(),
+                        uptime: process.uptime(),
+                        supervisor: this.supervisor.getStatus(),
+                    };
+
+                    // MemTable metrics
+                    health.memTable = {
+                        count: this.memTable.count,
+                        sizeBytes: this.memTable.sizeBytes,
+                        dirtyCount: this.memTable.dirtyCount,
+                    };
+
+                    // WAL metrics
+                    health.wal = {
+                        type: this.walType,
+                        fsyncMode: this.walFsyncMode,
+                        maxSizeMB: this.walMaxSizeMB,
+                        recoveredEntries: this.recoveredEntries,
+                    };
+
+                    // Insight engine metrics
+                    health.insights = {
+                        tracked: this.insightTracker.count,
+                        recommendations: this.predictiveSignals.getRecommendations().length,
+                    };
+
+                    // Tier metrics (fast, just counts)
+                    health.tiers = {
+                        warmKeys: this.tierIndexWarm.size,
+                        coldKeys: this.tierIndexCold.size,
+                    };
+
+                    // Audit chain metrics
+                    if (this.auditChain) {
+                        const auditVerify = await this.auditChain.verify();
+                        health.auditChain = {
+                            valid: auditVerify.valid,
+                            entries: auditVerify.totalEntries,
+                        };
+                    }
+
+                    // PromptDistiller metrics (if enabled)
+                    if (this.promptDistiller) {
+                        try {
+                            const distillerStats = await this.promptDistiller.getStats();
+                            health.distiller = {
+                                tiers: distillerStats.map(t => ({
+                                    tier: t.tier,
+                                    recordCount: t.recordCount,
+                                    sizeBytes: t.sizeBytes,
+                                })),
+                            };
+                        } catch {
+                            health.distiller = { error: 'unavailable' };
+                        }
+                    }
+
+                    health.responseTimeMs = Date.now() - healthStart;
+
+                    return { jsonrpc: '2.0', id, result: health };
+                }
 
                 case 'ping':
                     const segments = await this.countSegmentFiles();
