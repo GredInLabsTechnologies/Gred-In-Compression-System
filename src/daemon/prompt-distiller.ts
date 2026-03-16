@@ -3,7 +3,7 @@
  *
  * Implements a 3-tier retention policy for volatile data (prompts, traces, logs):
  * - RAW (0-7 days): Full data, instant access
- * - COMPRESSED (7-30 days): Delta-encoded + zlib, <10ms access
+ * - COMPRESSED (7-30 days): Delta-encoded + zstd, <10ms access
  * - DISTILLED (30+ days): Metadata only (~200 bytes), permanent
  *
  * Features:
@@ -17,7 +17,44 @@ import * as fs from 'fs/promises';
 import { existsSync, statSync, readdirSync } from 'fs';
 import * as path from 'path';
 import { createHash } from 'crypto';
-import { gzipSync, gunzipSync } from 'zlib';
+import { ZstdCodec } from 'zstd-codec';
+
+interface ZstdSimple {
+    compress(data: Uint8Array, level: number): Uint8Array | null;
+    decompress(data: Uint8Array): Uint8Array | null;
+}
+
+interface ZstdInstance {
+    Simple: new () => ZstdSimple;
+}
+
+let zstdInstance: ZstdInstance | null = null;
+
+async function getZstd(): Promise<ZstdInstance> {
+    if (zstdInstance) return zstdInstance;
+    return new Promise((resolve) => {
+        ZstdCodec.run((zstd: ZstdInstance) => {
+            zstdInstance = zstd;
+            resolve(zstd);
+        });
+    });
+}
+
+async function zstdCompress(data: Uint8Array, level: number = 3): Promise<Uint8Array> {
+    const zstd = await getZstd();
+    const simple = new zstd.Simple();
+    const compressed = simple.compress(data, level);
+    if (!compressed) throw new Error('Zstd compression failed');
+    return compressed;
+}
+
+async function zstdDecompress(data: Uint8Array): Promise<Uint8Array> {
+    const zstd = await getZstd();
+    const simple = new zstd.Simple();
+    const decompressed = simple.decompress(data);
+    if (!decompressed) throw new Error('Zstd decompression failed');
+    return decompressed;
+}
 
 export interface DistilledRecord {
     originalKey: string;
@@ -379,13 +416,12 @@ export class PromptDistiller {
             const content = await fs.readFile(rawFilePath, 'utf8');
             const record = JSON.parse(content) as PromptRecord;
 
-            // Delta encoding (simple: store diff from baseline if possible)
-            // For now, just compress the JSON
-            const compressed = gzipSync(Buffer.from(content, 'utf8'));
+            // Compress with zstd (aligned with architecture spec)
+            const compressed = await zstdCompress(Buffer.from(content, 'utf8'));
 
             // Preserve timestamp in filename
             const baseName = path.basename(rawFilePath, '.json');
-            const fileName = `${baseName}.gz`;
+            const fileName = `${baseName}.zst`;
             const compressedPath = path.join(this.compressedDir, fileName);
 
             await fs.writeFile(compressedPath, compressed);
@@ -399,7 +435,8 @@ export class PromptDistiller {
     private async distillRecord(compressedFilePath: string): Promise<void> {
         try {
             const compressed = await fs.readFile(compressedFilePath);
-            const content = gunzipSync(compressed).toString('utf8');
+            const decompressed = await zstdDecompress(new Uint8Array(compressed));
+            const content = Buffer.from(decompressed).toString('utf8');
             const record = JSON.parse(content) as PromptRecord;
 
             const distilled: DistilledRecord = {
@@ -415,7 +452,7 @@ export class PromptDistiller {
             };
 
             // Preserve timestamp in filename
-            const baseName = path.basename(compressedFilePath, '.gz');
+            const baseName = path.basename(compressedFilePath, '.zst');
             const fileName = `${baseName}.distilled.json`;
             const distilledPath = path.join(this.distilledDir, fileName);
 
@@ -447,7 +484,8 @@ export class PromptDistiller {
                     return JSON.parse(content) as PromptRecord;
                 } else if (tier === 'compressed') {
                     const compressed = await fs.readFile(filePath);
-                    const content = gunzipSync(compressed).toString('utf8');
+                    const decompressed = await zstdDecompress(new Uint8Array(compressed));
+                    const content = Buffer.from(decompressed).toString('utf8');
                     return JSON.parse(content) as PromptRecord;
                 } else {
                     const content = await fs.readFile(filePath, 'utf8');
@@ -473,7 +511,7 @@ export class PromptDistiller {
         // Filter files by tier type
         const files = allFiles.filter(f => {
             if (tier === 'raw') return f.endsWith('.json') && !f.includes('aggregated') && !f.includes('distilled');
-            if (tier === 'compressed') return f.endsWith('.gz');
+            if (tier === 'compressed') return f.endsWith('.zst');
             if (tier === 'distilled') return f.endsWith('.distilled.json') || f.includes('aggregated');
             return false;
         });
@@ -585,7 +623,7 @@ export class PromptDistiller {
             } else if (age >= this.compressedRetentionMs) {
                 // Direct to distilled
                 await this.compressRecord(filePath);
-                const compressedPath = path.join(this.compressedDir, file.replace('.json', '.gz'));
+                const compressedPath = path.join(this.compressedDir, file.replace('.json', '.zst'));
                 if (existsSync(compressedPath)) {
                     await this.distillRecord(compressedPath);
                 }

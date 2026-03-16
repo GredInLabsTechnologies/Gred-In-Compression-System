@@ -37,7 +37,7 @@ GICS v1.3 uses an internal data integrity chain to ensure every byte is valid.
 | **Bit-Flip / Tampering**| AES-GCM Auth Tags + CRC32 on every segment |
 | **Unauthorized Access** | AES-256-GCM encryption of StreamSection payloads |
 | **Replay Attacks** | Deterministic nonces derived from unique file salt |
-| **Password Guessing** | PBKDF2 slowdown with 100k iterations |
+| **Password Guessing** | PBKDF2 slowdown with 600k iterations (configurable, min 100k) |
 
 ### Out-of-Scope Threats
 | Threat | Reason |
@@ -67,7 +67,20 @@ GICS v1.3 uses a "Chain of Integrity" to ensure every byte is valid.
 | **Generic Roundtrip** | Bit-exact schema + legacy verification | `tests/gics-generic-roundtrip.test.ts` |
 | **Integrity Regression** | Seed-based deterministic roundtrip | `tests/regression/integrity_mismatch.test.ts` |
 | **Forensics** | Cross-run determinism verification | `tests/gics-v1.3-forensics.test.ts` |
+| **Security Audit** | 115-probe adversarial audit (14 security domains + compression ratios) | `tests/security-audit-empirical.test.ts` |
 
 ---
 
-*Document version: 1.3 | Updated: 2026-02-11*
+## Production Deployment Recommendations
+
+| Setting | Default | Production | Reason |
+|---------|---------|------------|--------|
+| `pbkdf2Iterations` | 600,000 | 600,000+ | OWASP 2023 recommendation for PBKDF2-SHA256 |
+| WAL `fsyncMode` | `best_effort` | `strict` | Ensures data durability on crash |
+| WAL `fsyncOnCommit` | `true` | `true` | Already correct for production |
+| AuditChain `fsyncOnCommit` | `false` | `true` | Ensures audit trail survives host crash |
+| Key rotation | Caller responsibility | Rotate per dataset/time window | GICS derives unique key per file; cross-file rotation is caller-managed |
+
+---
+
+*Document version: 1.3.3 | Updated: 2026-03-16*

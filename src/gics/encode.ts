@@ -80,6 +80,7 @@ export class GICSv2Encoder {
     private readonly encryptionSalt: Uint8Array | null = null;
     private readonly encryptionFileNonce: Uint8Array | null = null;
     private readonly authVerify: Uint8Array | null = null;
+    private pbkdf2Iterations: number = 600_000;
 
     static reset() {
         // Backward-compat for existing tests. No global mutable state is used anymore.
@@ -112,6 +113,7 @@ export class GICSv2Encoder {
             logger: null,
             segmentSizeLimit: 1024 * 1024, // 1MB
             password: '',
+            pbkdf2Iterations: 600_000,
             schema: undefined as unknown as import('../gics-types.js').SchemaProfile,
             preset: options.preset ?? 'balanced',
             compressionLevel: presetConfig.compressionLevel,
@@ -122,11 +124,16 @@ export class GICSv2Encoder {
         this.compressionLevel = this.options.compressionLevel;
 
         if (this.options.password) {
+            const iterations = this.options.pbkdf2Iterations ?? 600_000;
+            if (iterations < 100_000) {
+                throw new Error(`PBKDF2 iterations must be >= 100,000 (got ${iterations})`);
+            }
             const secrets = generateEncryptionSecrets();
             this.encryptionSalt = secrets.salt;
             this.encryptionFileNonce = secrets.fileNonce;
-            this.encryptionKey = deriveKey(this.options.password, this.encryptionSalt, 100000);
+            this.encryptionKey = deriveKey(this.options.password, this.encryptionSalt, iterations);
             this.authVerify = generateAuthVerify(this.encryptionKey);
+            this.pbkdf2Iterations = iterations;
         }
 
         this.runId = this.options.runId;
@@ -181,7 +188,7 @@ export class GICSv2Encoder {
             headerBytes.set(this.encryptionSalt!, pos); pos += 16;
             headerBytes.set(this.authVerify!, pos); pos += 32;
             view.setUint8(pos++, 1); // kdfId: PBKDF2
-            view.setUint32(pos, 100000, true); pos += 4;
+            view.setUint32(pos, this.pbkdf2Iterations, true); pos += 4;
             view.setUint8(pos++, 1); // digestId: SHA-256
             headerBytes.set(this.encryptionFileNonce!, pos);
         }

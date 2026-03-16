@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { createHash } from 'crypto';
-import { existsSync, createWriteStream, WriteStream } from 'fs';
+import { existsSync, createWriteStream, WriteStream, fdatasyncSync } from 'fs';
 
 export interface AuditEntry {
     sequence: number;
@@ -30,6 +30,8 @@ export interface MerkleCheckpoint {
 export interface AuditChainConfig {
     filePath: string;
     checkpointInterval?: number; // default: 1000
+    /** Enable fsync after each write and checkpoint (default: false). Set true for production durability. */
+    fsyncOnCommit?: boolean;
 }
 
 function sha256(input: string): string {
@@ -66,6 +68,7 @@ export class AuditChain {
     private readonly filePath: string;
     private readonly checkpointPath: string;
     private readonly checkpointInterval: number;
+    private readonly fsyncOnCommit: boolean;
     private writeStream: WriteStream | null = null;
     private sequence = 0;
     private prevHash = '';
@@ -78,6 +81,7 @@ export class AuditChain {
         this.filePath = config.filePath;
         this.checkpointPath = `${config.filePath}.ckpt`;
         this.checkpointInterval = config.checkpointInterval ?? 1000;
+        this.fsyncOnCommit = config.fsyncOnCommit ?? false;
     }
 
     async initialize(): Promise<void> {
@@ -139,6 +143,9 @@ export class AuditChain {
         return new Promise((resolve, reject) => {
             this.writeStream!.write(JSON.stringify(fullEntry) + '\n', (err) => {
                 if (err) return reject(err);
+                if (this.fsyncOnCommit) {
+                    try { fdatasyncSync((this.writeStream as any).fd); } catch { /* best-effort */ }
+                }
                 this.maybeCheckpoint().catch(() => {}); // Best-effort
                 resolve(fullEntry);
             });
@@ -157,6 +164,10 @@ export class AuditChain {
         };
 
         await fs.appendFile(this.checkpointPath, JSON.stringify(checkpoint) + '\n', 'utf8');
+        if (this.fsyncOnCommit) {
+            const fh = await fs.open(this.checkpointPath, 'r');
+            try { await fh.datasync(); } catch { /* best-effort */ } finally { await fh.close(); }
+        }
         this.batchHashes = [];
     }
 

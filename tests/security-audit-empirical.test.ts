@@ -82,8 +82,12 @@ function makeSnapshots(count: number, itemsPerSnapshot: number = 3): Snapshot[] 
 }
 
 /** Encode snapshots using real GICS API (addSnapshot + finish) */
-async function encodeSnapshots(snapshots: Snapshot[], options: { password?: string } = {}): Promise<Uint8Array> {
-    const encoder = new GICSv2Encoder(options);
+async function encodeSnapshots(snapshots: Snapshot[], options: { password?: string; pbkdf2Iterations?: number } = {}): Promise<Uint8Array> {
+    // Use 100k iterations in tests for speed (production default: 600k)
+    const encoder = new GICSv2Encoder({
+        ...options,
+        pbkdf2Iterations: options.pbkdf2Iterations ?? (options.password ? 100_000 : undefined),
+    });
     for (const s of snapshots) await encoder.addSnapshot(s);
     return encoder.finish();
 }
@@ -1423,5 +1427,178 @@ describe('AUDIT §14 — Cross-Module Integration Seams', () => {
                 expect(decoded[i].items.get(id)!.quantity).toBe(item.quantity);
             }
         }
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// §15: COMPRESSION RATIO EMPIRICAL DATA
+// Target: GICS v1.3.3 aims for 60x nominal on structured time-series
+// ═══════════════════════════════════════════════════════════════════
+
+describe('§15 — Compression Ratio Empirical Data', () => {
+    /** Helper: compute JSON size of snapshots as raw baseline */
+    function rawJsonSize(snapshots: Snapshot[]): number {
+        let size = 0;
+        for (const s of snapshots) {
+            // Approximate JSON size: timestamp + items as array of objects
+            const items: any[] = [];
+            for (const [id, item] of s.items) {
+                items.push({ id, price: item.price, quantity: item.quantity });
+            }
+            size += JSON.stringify({ timestamp: s.timestamp, items }).length;
+        }
+        return size;
+    }
+
+    /** Generate trending (monotonic) price snapshots */
+    function makeTrendingSnapshots(count: number, itemsPerSnapshot: number): Snapshot[] {
+        const snapshots: Snapshot[] = [];
+        const baseTime = 1700000000;
+        for (let i = 0; i < count; i++) {
+            const items = new Map<number, { price: number; quantity: number }>();
+            for (let j = 1; j <= itemsPerSnapshot; j++) {
+                items.set(j, {
+                    price: 1000 + i * 10 + j, // Monotonically increasing
+                    quantity: 100 + (i % 50),
+                });
+            }
+            snapshots.push({ timestamp: baseTime + i * 60, items });
+        }
+        return snapshots;
+    }
+
+    /** Generate volatile (random-walk) price snapshots — realistic tick-level data */
+    function makeVolatileSnapshots(count: number, itemsPerSnapshot: number): Snapshot[] {
+        const snapshots: Snapshot[] = [];
+        const baseTime = 1700000000;
+        let seed = 42;
+        const nextRand = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed; };
+
+        // Realistic tick-level data: small deltas (±0-3) on prices ~1000-5000
+        const prices = Array.from({ length: itemsPerSnapshot }, (_, j) => 1000 + j * 200);
+        const quantities = Array.from({ length: itemsPerSnapshot }, () => 100);
+        for (let i = 0; i < count; i++) {
+            const items = new Map<number, { price: number; quantity: number }>();
+            for (let j = 0; j < itemsPerSnapshot; j++) {
+                // Tick-level walk: ±0-3 per step (realistic market microstructure)
+                prices[j] += (nextRand() % 7) - 3;
+                if (prices[j] < 1) prices[j] = 1;
+                // Quantities with temporal correlation
+                quantities[j] += (nextRand() % 3) - 1;
+                if (quantities[j] < 1) quantities[j] = 1;
+                items.set(j + 1, {
+                    price: prices[j],
+                    quantity: quantities[j],
+                });
+            }
+            snapshots.push({ timestamp: baseTime + i * 60, items });
+        }
+        return snapshots;
+    }
+
+    /** Generate regular-pattern snapshots (high compressibility) */
+    function makeRegularSnapshots(count: number, itemsPerSnapshot: number): Snapshot[] {
+        const snapshots: Snapshot[] = [];
+        const baseTime = 1700000000;
+        for (let i = 0; i < count; i++) {
+            const items = new Map<number, { price: number; quantity: number }>();
+            for (let j = 1; j <= itemsPerSnapshot; j++) {
+                items.set(j, {
+                    price: 1000 + j * 100 + Math.round(Math.sin(i * 0.01) * 5), // Very regular
+                    quantity: 50 + (i % 10),
+                });
+            }
+            snapshots.push({ timestamp: baseTime + i * 60, items });
+        }
+        return snapshots;
+    }
+
+    it('PROBE 110: Trending integers — 500 snapshots, 10 items → ratio > 25x', async () => {
+        const snapshots = makeTrendingSnapshots(500, 10);
+        const rawSize = rawJsonSize(snapshots);
+        const encoded = await encodeSnapshots(snapshots);
+        const ratio = rawSize / encoded.length;
+
+        console.log(`[§15] Trending: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x)`);
+        expect(ratio).toBeGreaterThan(25);
+
+        // Verify roundtrip
+        const decoded = await decodeSnapshots(encoded);
+        expect(decoded.length).toBe(500);
+    });
+
+    it('PROBE 111: Volatile integers — 1000 snapshots, 50 items → ratio > 55x', async () => {
+        const snapshots = makeVolatileSnapshots(1000, 50);
+        const rawSize = rawJsonSize(snapshots);
+        const encoded = await encodeSnapshots(snapshots);
+        const ratio = rawSize / encoded.length;
+
+        console.log(`[§15] Volatile: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x)`);
+        expect(ratio).toBeGreaterThan(55);
+
+        // Verify roundtrip
+        const decoded = await decodeSnapshots(encoded);
+        expect(decoded.length).toBe(1000);
+    });
+
+    it('PROBE 112: Multi-item dense — 200 snapshots, 50 items → ratio > 40x', async () => {
+        const snapshots = makeTrendingSnapshots(200, 50);
+        const rawSize = rawJsonSize(snapshots);
+        const encoded = await encodeSnapshots(snapshots);
+        const ratio = rawSize / encoded.length;
+
+        console.log(`[§15] Multi-item dense: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x)`);
+        expect(ratio).toBeGreaterThan(40);
+
+        // Verify roundtrip
+        const decoded = await decodeSnapshots(encoded);
+        expect(decoded.length).toBe(200);
+        expect(decoded[0].items.size).toBe(50);
+    });
+
+    it('PROBE 113: Single snapshot — binary overhead dominates on tiny data', async () => {
+        const snapshots = makeSnapshots(1, 3);
+        const rawSize = rawJsonSize(snapshots);
+        const encoded = await encodeSnapshots(snapshots);
+        const ratio = rawSize / encoded.length;
+
+        console.log(`[§15] Single snapshot: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x)`);
+        // GICS binary format has fixed header overhead (~700 bytes).
+        // On 1 snapshot (139 bytes JSON), ratio < 1 is expected and honest.
+        // This proves GICS is NOT a good choice for single-record storage.
+        expect(ratio).toBeLessThan(1);
+        expect(encoded.length).toBeLessThan(2000); // But overhead is bounded
+    });
+
+    it('PROBE 114: Large dataset (60x target) — 2000 snapshots, 20 items → ratio > 50x', async () => {
+        const snapshots = makeRegularSnapshots(2000, 20);
+        const rawSize = rawJsonSize(snapshots);
+        const encoded = await encodeSnapshots(snapshots);
+        const ratio = rawSize / encoded.length;
+
+        console.log(`[§15] Large regular: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x)`);
+        expect(ratio).toBeGreaterThan(50);
+
+        // Verify roundtrip
+        const decoded = await decodeSnapshots(encoded);
+        expect(decoded.length).toBe(2000);
+    });
+
+    it('PROBE 115: Encrypted vs unencrypted overhead — bounded and proportional', async () => {
+        // Use a larger dataset where fixed enc header (67 bytes) is amortized
+        const snapshots = makeTrendingSnapshots(1000, 20);
+
+        const plain = await encodeSnapshots(snapshots);
+        const encrypted = await encodeSnapshots(snapshots, { password: 'audit-overhead-test' });
+
+        const overhead = (encrypted.length - plain.length) / plain.length;
+        const fixedOverhead = encrypted.length - plain.length;
+
+        console.log(`[§15] Encryption overhead: plain=${plain.length}, encrypted=${encrypted.length}, delta=${fixedOverhead} bytes, overhead=${(overhead * 100).toFixed(2)}%`);
+
+        // Encryption adds a fixed 67-byte header + per-segment auth tags.
+        // On large data the percentage overhead is small.
+        expect(overhead).toBeLessThan(0.10); // < 10%
+        expect(fixedOverhead).toBeGreaterThan(0); // Encryption always adds some bytes
     });
 });
