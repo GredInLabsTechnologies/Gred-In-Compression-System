@@ -694,7 +694,7 @@ export class GICSv2Encoder {
             const chunk = prices.slice(i, i + this.blockSize);
             if (this.hasNonIntegerValues(chunk)) {
                 const last = ctx.lastValue ?? 0;
-                if (this.hasUnsafeValueDeltas(chunk, last)) {
+                if (this.hasUnsafeValueDeltas(chunk, last) || this.hasLossyFiniteDeltas(chunk, last)) {
                     // For unsafe deltas (NaN/Inf/overflow), persist absolute FIXED64 values.
                     const encoded = Codecs.encodeFixed64(chunk);
                     ctx.lastValue = chunk.length > 0 ? chunk[chunk.length - 1] : ctx.lastValue;
@@ -717,9 +717,25 @@ export class GICSv2Encoder {
                 const result = FieldMath.computeValueDeltas(chunk, last);
                 ctx.lastValue = result.nextValue;
                 ctx.lastValueDelta = 0;
-                const encoded = Codecs.encodeFixed64(result.deltas);
-                addToStream(StreamId.VALUE, { innerCodecId: InnerCodecId.FIXED64_LE, nItems: chunk.length, payloadLen: encoded.length, flags: 0 }, encoded);
-                this.recordSimpleBlockStats(StreamId.VALUE, chunk, encoded, stats, InnerCodecId.FIXED64_LE);
+
+                const encodedXor = Codecs.encodeXorFloat(result.deltas);
+                const encodedFixed = Codecs.encodeFixed64(result.deltas);
+                const useXor = encodedXor.length < encodedFixed.length;
+
+                const encoded = useXor ? encodedXor : encodedFixed;
+                const codecId = useXor ? InnerCodecId.XOR_FLOAT : InnerCodecId.FIXED64_LE;
+
+                addToStream(
+                    StreamId.VALUE,
+                    {
+                        innerCodecId: codecId,
+                        nItems: chunk.length,
+                        payloadLen: encoded.length,
+                        flags: 0
+                    },
+                    encoded
+                );
+                this.recordSimpleBlockStats(StreamId.VALUE, chunk, encoded, stats, codecId);
                 continue;
             }
             const snapshot = ctx.snapshot();
@@ -733,6 +749,19 @@ export class GICSv2Encoder {
         for (const current of values) {
             const diff = current - prev;
             if (!Number.isFinite(diff)) {
+                return true;
+            }
+            prev = current;
+        }
+        return false;
+    }
+
+    private hasLossyFiniteDeltas(values: number[], lastValue: number): boolean {
+        let prev = lastValue;
+        for (const current of values) {
+            const diff = current - prev;
+            const reconstructed = prev + diff;
+            if (!Object.is(reconstructed, current)) {
                 return true;
             }
             prev = current;
@@ -849,6 +878,8 @@ export class GICSv2Encoder {
 
             if (finalCodec === InnerCodecId.DICT_VARINT) {
                 finalEncoded = Codecs.encodeDict(finalData, ctx);
+            } else if (finalCodec === InnerCodecId.FOR_BITPACK) {
+                finalEncoded = Codecs.encodeFOR(finalData);
             } else if (finalCodec === InnerCodecId.BITPACK_DELTA) {
                 finalEncoded = Codecs.encodeBitPack(finalData);
             } else if (finalCodec === InnerCodecId.RLE_ZIGZAG || finalCodec === InnerCodecId.RLE_DOD) {
@@ -1003,6 +1034,7 @@ export class GICSv2Encoder {
         } else if (streamId === StreamId.VALUE) {
             candidates.push(
                 { id: InnerCodecId.VARINT_DELTA, encode: () => encodeVarint(inputData) },
+                { id: InnerCodecId.FOR_BITPACK, encode: () => Codecs.encodeFOR(inputData) },
                 { id: InnerCodecId.BITPACK_DELTA, encode: () => Codecs.encodeBitPack(inputData) },
                 { id: InnerCodecId.RLE_ZIGZAG, encode: () => Codecs.encodeRLE(inputData) },
             );

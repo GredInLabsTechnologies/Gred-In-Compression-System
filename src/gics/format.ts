@@ -19,6 +19,8 @@ export enum InnerCodecId {
     DOD_VARINT = 5, // For Time mainly (Delta-of-Delta + Varint)
     DICT_VARINT = 6, // Dictionary + Varint
     FIXED64_LE = 7,  // 8 bytes per item (Little Endian)
+    XOR_FLOAT = 8,   // Gorilla-style XOR for Float64 streams
+    FOR_BITPACK = 9, // Frame-of-reference + bitpacked residuals
 }
 
 export enum OuterCodecId {

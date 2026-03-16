@@ -1,44 +1,139 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<testsuites name="vitest tests" tests="190" failures="1" errors="0" time="11.8131926">
-    <testsuite name="tests/daemon-file-lock.test.ts" timestamp="2026-02-12T02:12:13.082Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.4434192">
-        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; permite múltiples locks compartidos simultáneos" time="0.0101449">
+<testsuites name="vitest tests" tests="247" failures="0" errors="0" time="21.9395533">
+    <testsuite name="tests/cli.test.ts" timestamp="2026-03-16T01:40:42.653Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="1.6847367">
+        <testcase classname="tests/cli.test.ts" name="CLI Tool (Phase 10) &gt; encode + decode roundtrip preserves data" time="0.3442797">
         </testcase>
-        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; bloquea lock exclusivo cuando existe lock compartido y respeta timeout" time="0.0868466">
+        <testcase classname="tests/cli.test.ts" name="CLI Tool (Phase 10) &gt; verify returns 0 for valid file" time="0.3757305">
         </testcase>
-        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; bloquea lock compartido cuando existe lock exclusivo y respeta timeout" time="0.0910571">
+        <testcase classname="tests/cli.test.ts" name="CLI Tool (Phase 10) &gt; info displays file metadata" time="0.5282698">
         </testcase>
-        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; permite lock exclusivo una vez liberados locks compartidos" time="0.0878837">
+        <testcase classname="tests/cli.test.ts" name="CLI Tool (Phase 10) &gt; returns exit code 1 on invalid file" time="0.224555">
         </testcase>
-        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; helpers withSharedLock/withExclusiveLock aplican semántica correcta" time="0.1238512">
-        </testcase>
-    </testsuite>
-    <testsuite name="tests/daemon-memtable.test.ts" timestamp="2026-02-12T02:12:13.087Z" hostname="DESKTOP-28NKMQD" tests="8" failures="0" errors="0" skipped="0" time="0.0186215">
-        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; inserta y recupera registros con created/updated/accessCount" time="0.0018101">
-        </testcase>
-        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; reemplaza fields en updates, incrementa updated y no duplica dirtyCount" time="0.0086112">
-        </testcase>
-        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; scan(prefix) filtra por prefijo" time="0.0017788">
-        </testcase>
-        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; delete elimina registro y ajusta count/dirty/size" time="0.0005834">
-        </testcase>
-        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; resetDirty limpia dirty flags y dirtyCount" time="0.0003705">
-        </testcase>
-        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; expone thresholds por defecto del roadmap" time="0.0002516">
-        </testcase>
-        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; shouldFlush por dirtyCount cuando supera maxDirtyRecords" time="0.0003437">
-        </testcase>
-        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; shouldFlush por size cuando supera maxMemTableBytes" time="0.000228">
+        <testcase classname="tests/cli.test.ts" name="CLI Tool (Phase 10) &gt; returns exit code 2 for usage errors" time="0.2072516">
         </testcase>
     </testsuite>
-    <testsuite name="tests/daemon-realworld-soak.test.ts" timestamp="2026-02-12T02:12:13.089Z" hostname="DESKTOP-28NKMQD" tests="2" failures="0" errors="0" skipped="0" time="3.2351309">
-        <testcase classname="tests/daemon-realworld-soak.test.ts" name="GICSDaemon real-world soak / fault-line test &gt; survive mixed continuous load + maintenance + restart (binary)" time="2.4612891">
+    <testsuite name="tests/codec-for.test.ts" timestamp="2026-03-16T01:40:42.658Z" hostname="DESKTOP-28NKMQD" tests="7" failures="0" errors="0" skipped="0" time="0.0925415">
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; roundtrips integer arrays with negatives and wide ranges" time="0.0030412">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; encodes constant blocks with bitWidth=0 and decodes exactly" time="0.0006585">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; is competitive on favorable narrow-range VALUE integer deltas" time="0.0007936">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; keeps full roundtrip integrity when FOR_BITPACK is used in VALUE stream" time="0.0640565">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; beats plain varint size on narrow residual distributions" time="0.0006542">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; keeps roundtrip correctness on wide-range values where FOR may not be best" time="0.004771">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; keeps deterministic VALUE codec selection sequence across repeated runs" time="0.0101091">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/codec-xor-float.test.ts" timestamp="2026-03-16T01:40:42.659Z" hostname="DESKTOP-28NKMQD" tests="9" failures="0" errors="0" skipped="1" time="0.2275583">
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; roundtrips constant float deltas exactly" time="0.0103889">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; roundtrips linear-trend float deltas exactly" time="0.0109708">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; roundtrips volatile/random deterministic float deltas exactly" time="0.088495">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; roundtrips float deltas bit-a-bit for finite values" time="0.0007558">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; produces smaller payload than FIXED64 on favorable float deltas" time="0.0278833">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; uses XOR_FLOAT for favorable finite float sequences" time="0.0670041">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; falls back to absolute FIXED64 for non-finite sequences" time="0.008855">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; keeps deterministic codec selection sequence for float blocks" time="0.0055897">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; FASE 10: CLI e2e se valida en tests/cli.test.ts (no bloquea FASE 3 de codecs)" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-audit-chain.test.ts" timestamp="2026-03-16T01:40:42.662Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="1.8787915">
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; 10K entries → chain integridad verificada al 100%" time="1.8127105">
+        </testcase>
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; tamper 1 entry → verify() detecta corruption" time="0.0086019">
+        </testcase>
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; tamper payload → verify() detecta corruption" time="0.0085368">
+        </testcase>
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; audit write fails → original put() tambien falla (integración)" time="0.0060419">
+        </testcase>
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; merkle checkpoint cada 1000 entries con root hash correcto" time="0.0315346">
+        </testcase>
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; export() genera JSON lines valido y parseable" time="0.0052276">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-file-lock.test.ts" timestamp="2026-03-16T01:40:42.663Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.3760428">
+        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; permite múltiples locks compartidos simultáneos" time="0.0140023">
+        </testcase>
+        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; bloquea lock exclusivo cuando existe lock compartido y respeta timeout" time="0.0957493">
+        </testcase>
+        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; bloquea lock compartido cuando existe lock exclusivo y respeta timeout" time="0.0922869">
+        </testcase>
+        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; permite lock exclusivo una vez liberados locks compartidos" time="0.0802936">
+        </testcase>
+        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; helpers withSharedLock/withExclusiveLock aplican semántica correcta" time="0.0885416">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-insight-wiring.test.ts" timestamp="2026-03-16T01:40:42.664Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.173018">
+        <testcase classname="tests/daemon-insight-wiring.test.ts" name="Insight Engine Wiring (Phase 9) &gt; degradation simulated → recommendation emitted in &lt;5s" time="0.0035499">
+        </testcase>
+        <testcase classname="tests/daemon-insight-wiring.test.ts" name="Insight Engine Wiring (Phase 9) &gt; accuracy tracking: follow successful rec → accuracy increases" time="0.0013858">
+        </testcase>
+        <testcase classname="tests/daemon-insight-wiring.test.ts" name="Insight Engine Wiring (Phase 9) &gt; accuracy &lt; 50% after 20 outcomes → type disabled" time="0.0041799">
+        </testcase>
+        <testcase classname="tests/daemon-insight-wiring.test.ts" name="Insight Engine Wiring (Phase 9) &gt; onWrite fails → put() operation succeeds (best-effort)" time="0.0003116">
+        </testcase>
+        <testcase classname="tests/daemon-insight-wiring.test.ts" name="Insight Engine Wiring (Phase 9) &gt; TTL 24h → expired recommendation not returned" time="0.1578152">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-memtable.test.ts" timestamp="2026-03-16T01:40:42.665Z" hostname="DESKTOP-28NKMQD" tests="8" failures="0" errors="0" skipped="0" time="0.0192841">
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; inserta y recupera registros con created/updated/accessCount" time="0.0028536">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; reemplaza fields en updates, incrementa updated y no duplica dirtyCount" time="0.0078432">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; scan(prefix) filtra por prefijo" time="0.0016932">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; delete elimina registro y ajusta count/dirty/size" time="0.0004731">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; resetDirty limpia dirty flags y dirtyCount" time="0.0004021">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; expone thresholds por defecto del roadmap" time="0.0002677">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; shouldFlush por dirtyCount cuando supera maxDirtyRecords" time="0.0003058">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; shouldFlush por size cuando supera maxMemTableBytes" time="0.0001956">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-prompt-distiller.test.ts" timestamp="2026-03-16T01:40:42.667Z" hostname="DESKTOP-28NKMQD" tests="8" failures="0" errors="0" skipped="0" time="0.3858238">
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should store and retrieve records from RAW tier" time="0.016122">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should compress RAW → COMPRESSED after retention period" time="0.0154938">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should distill COMPRESSED → DISTILLED after 30+ days" time="0.0211803">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should preserve metadata across all tier transitions" time="0.0257315">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should show significant disk usage reduction after 30 days" time="0.2128764">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should handle compression failure gracefully - data stays in previous tier" time="0.017576">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should run emergency purge when triggered manually" time="0.046779">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should correctly classify existing data on first initialization" time="0.024015">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-realworld-soak.test.ts" timestamp="2026-03-16T01:40:42.668Z" hostname="DESKTOP-28NKMQD" tests="2" failures="0" errors="0" skipped="0" time="3.7618056">
+        <testcase classname="tests/daemon-realworld-soak.test.ts" name="GICSDaemon real-world soak / fault-line test &gt; survive mixed continuous load + maintenance + restart (binary)" time="2.1013459">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-soak-6JhP84\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-soak-gUQd2w\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-soak-a-binary-1770862329818-xyk44arls1
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:38.889Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-soak-a-binary-1773625238876-92ucqoijdyj
 
 [GICS] Daemon stopped.
 
@@ -48,7 +143,9 @@
 
 [GICS] Restored insights from segments: behavioral=147, confidence=0
 
-[GICS] Daemon listening on \\.\pipe\gics-soak-b-binary-1770862332085-oz67kugcski
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:40.626Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-soak-b-binary-1773625240506-3mlgcwzwozt
 
 [GICS] Daemon stopped.
 
@@ -56,648 +153,18 @@
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-realworld-soak.test.ts" name="GICSDaemon real-world soak / fault-line test &gt; survive mixed continuous load + maintenance + restart (jsonl)" time="0.7692885">
+        <testcase classname="tests/daemon-realworld-soak.test.ts" name="GICSDaemon real-world soak / fault-line test &gt; survive mixed continuous load + maintenance + restart (jsonl)" time="1.65569">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-soak-lpaN0L\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-soak-fzeAcs\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-soak-a-jsonl-1770862332277-5rscjpcm0ge
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:41.006Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-soak-a-jsonl-1773625240983-n176kts6l3
 
 [GICS] Daemon stopped.
 
@@ -707,7 +174,9 @@
 
 [GICS] Restored insights from segments: behavioral=147, confidence=0
 
-[GICS] Daemon listening on \\.\pipe\gics-soak-b-jsonl-1770862332884-rvslxmseu1p
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:42.505Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-soak-b-jsonl-1773625242466-s7ktn2y2o7b
 
 [GICS] Daemon stopped.
 
@@ -715,650 +184,20 @@
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
             </system-err>
         </testcase>
     </testsuite>
-    <testsuite name="tests/daemon-recovery.test.ts" timestamp="2026-02-12T02:12:13.122Z" hostname="DESKTOP-28NKMQD" tests="14" failures="0" errors="0" skipped="0" time="2.6902607">
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; reconstruye MemTable tras reinicio usando WAL (binary)" time="0.3433326">
+    <testsuite name="tests/daemon-recovery.test.ts" timestamp="2026-03-16T01:40:42.671Z" hostname="DESKTOP-28NKMQD" tests="14" failures="0" errors="0" skipped="0" time="1.9624959">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; reconstruye MemTable tras reinicio usando WAL (binary)" time="0.1774663">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-iipeUh\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-UMf8WP\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-recovery-a-binary-1770862329818-moz42klmdnd
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:38.888Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-recovery-a-binary-1773625238876-jubgqey0jv
 
 [GICS] Daemon stopped.
 
@@ -1366,7 +205,9 @@
 
 [GICS] WAL replayed. 2 records loaded (2 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-recovery-b-binary-1770862329923-7rj8bc1tq5r
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:38.975Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-recovery-b-binary-1773625238968-xg4wiibosl
 
 [GICS] Daemon stopped.
 
@@ -1374,18 +215,18 @@
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; reconstruye MemTable tras reinicio usando WAL (jsonl)" time="0.2980038">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; reconstruye MemTable tras reinicio usando WAL (jsonl)" time="0.1528083">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-DGEqSa\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-ZYQnZk\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-recovery-a-jsonl-1770862330164-pyjixeevger
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:39.063Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-recovery-a-jsonl-1773625239052-w7ubsjg9dj9
 
 [GICS] Daemon stopped.
 
@@ -1393,26 +234,9 @@
 
 [GICS] WAL replayed. 2 records loaded (2 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-recovery-b-jsonl-1770862330379-cw5axvfq8uh
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:39.133Z)
 
-[GICS] Daemon stopped.
-
-            </system-out>
-            <system-err>
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-            </system-err>
-        </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; flush limpia dirtyCount y trunca WAL" time="0.289938">
-            <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-7HMUk0\.gics_token
-[GICS] Replaying WAL...
-
-[GICS] WAL replayed. 0 records loaded (0 entries replayed).
-
-[GICS] Daemon listening on \\.\pipe\gics-flush-binary-1770862330460-9fhu95tymjs
+[GICS] Daemon listening on \\.\pipe\gics-recovery-b-jsonl-1773625239121-rl2lwmianm
 
 [GICS] Daemon stopped.
 
@@ -1422,14 +246,16 @@
 
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; put puede disparar auto-flush por threshold de dirtyCount" time="0.3120827">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; flush limpia dirtyCount y trunca WAL" time="0.1866311">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-qzPHO7\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-OWk8gg\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-autoflush-dirty-threshold-1770862330753-6bxtwp6fr2j
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:39.218Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-flush-binary-1773625239206-0g0tq9cj2igr
 
 [GICS] Daemon stopped.
 
@@ -1439,37 +265,16 @@
 
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; compact fusiona segmentos WARM y aplica last-writer-wins por key" time="0.4128394">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; put puede disparar auto-flush por threshold de dirtyCount" time="0.1246596">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-iUcLuZ\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-3NdyTq\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-compact-warm-segments-1770862331075-fc36zhyyjv5
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:39.405Z)
 
-[GICS] Daemon stopped.
-
-            </system-out>
-            <system-err>
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-            </system-err>
-        </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; rotate mueve segmentos WARM a COLD y actualiza ping.tiers" time="0.252237">
-            <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-6F5Owu\.gics_token
-[GICS] Replaying WAL...
-
-[GICS] WAL replayed. 0 records loaded (0 entries replayed).
-
-[GICS] Daemon listening on \\.\pipe\gics-rotate-warm-cold-1770862331475-oszso6esz8
+[GICS] Daemon listening on \\.\pipe\gics-autoflush-dirty-threshold-1773625239392-hmtg01cj5q
 
 [GICS] Daemon stopped.
 
@@ -1479,14 +284,16 @@
 
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; rotate con coldEncryption escribe archivo COLD cifrado" time="0.1632092">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; compact fusiona segmentos WARM y aplica last-writer-wins por key" time="0.1889423">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-OlO4ZU\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-FsatJ5\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-rotate-cold-encryption-1770862331729-4gtn31m1y8
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:39.538Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-compact-warm-segments-1773625239518-1pdlsqxy6gb
 
 [GICS] Daemon stopped.
 
@@ -1496,14 +303,54 @@
 
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; get enruta HOT→WARM→COLD según disponibilidad" time="0.1526967">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; rotate mueve segmentos WARM a COLD y actualiza ping.tiers" time="0.0979029">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-WtIBTB\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-9mUSFO\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-tier-routing-get-1770862331890-3x7yyi5wbxp
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:39.716Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-rotate-warm-cold-1773625239707-9rh6cjh4n5o
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; rotate con coldEncryption escribe archivo COLD cifrado" time="0.2105358">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-JX0Het\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:39.815Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-rotate-cold-encryption-1773625239805-rjs2j9klhg
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; get enruta HOT→WARM→COLD según disponibilidad" time="0.1737947">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-BeDnp9\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:40.023Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-tier-routing-get-1773625240016-mfp8db0p7k
 
 [GICS] Daemon stopped.
 
@@ -1513,7 +360,9 @@
 
 [GICS] Restored insights from segments: behavioral=1, confidence=0
 
-[GICS] Daemon listening on \\.\pipe\gics-tier-routing-get-1770862331890-3x7yyi5wbxp
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:40.116Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-tier-routing-get-1773625240016-mfp8db0p7k
 
 [GICS] Daemon stopped.
 
@@ -1523,66 +372,76 @@
 
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; ping reporta walFsyncMode configurado" time="0.0601375">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; ping reporta walFsyncMode configurado" time="0.0812161">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-OYPRoa\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-XhcziG\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-fsync-mode-1770862332043-aqjff0xlh94
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:40.198Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-fsync-mode-1773625240189-k9e8d0jm0m
 
 [GICS] Daemon stopped.
 
             </system-out>
         </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; IPC responde JSON-RPC 2.0 y errores estándar de protocolo" time="0.0617724">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; IPC responde JSON-RPC 2.0 y errores estándar de protocolo" time="0.073492">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-3CxK8F\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-Pb2AxX\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-ipc-jsonrpc-1770862332103-7cz3cjitjla
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:40.278Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-ipc-jsonrpc-1773625240271-c6hl8ucrn19
 
 [GICS] Daemon stopped.
 
             </system-out>
         </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; IPC exige token para escritura pero permite ping sin token" time="0.0603718">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; IPC exige token para escritura pero permite ping sin token" time="0.0725672">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-E9IB7s\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-DXEsTc\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-ipc-auth-1770862332165-hxmr71vqgpk
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:40.353Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-ipc-auth-1773625240345-6zv7td6c23
 
 [GICS] Daemon stopped.
 
             </system-out>
         </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; IPC acepta múltiples readers simultáneos (ping concurrente)" time="0.0612513">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; IPC acepta múltiples readers simultáneos (ping concurrente)" time="0.0827171">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-F1Wmf4\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-laQo2Z\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-ipc-concurrency-readers-1770862332225-a531pbjrl26
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:40.425Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-ipc-concurrency-readers-1773625240416-fjksv3kdiy
 
 [GICS] Daemon stopped.
 
             </system-out>
         </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; Insight API base: getInsight/getInsights/reportOutcome/getAccuracy/subscribe/unsubscribe" time="0.0766453">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; Insight API base: getInsight/getInsights/reportOutcome/getAccuracy/subscribe/unsubscribe" time="0.1016308">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-W6Esc8\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-meaCt3\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-insight-api-base-1770862332287-cmt2c5mpnhk
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:40.508Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-api-base-1773625240500-h9m82u75nyd
 
 [GICS] Daemon stopped.
 
@@ -1590,26 +449,18 @@
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; persiste insights en segmentos y los restaura tras reinicio" time="0.1393384">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; persiste insights en segmentos y los restaura tras reinicio" time="0.2278367">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-0ivy9M\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-b0B3GG\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-insight-persistence-a-1770862332363-ni3q96tgojq
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:40.617Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-persistence-a-1773625240601-3q2sp55k6kf
 
 [GICS] Daemon stopped.
 
@@ -1619,7 +470,9 @@
 
 [GICS] Restored insights from segments: behavioral=1, confidence=1
 
-[GICS] Daemon listening on \\.\pipe\gics-insight-persistence-b-1770862332437-c7s6cq1q4ga
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:40.759Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-persistence-b-1773625240720-af8syy65iw8
 
 [GICS] Daemon stopped.
 
@@ -1627,6 +480,85 @@
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
+            </system-err>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-resilience.test.ts" timestamp="2026-03-16T01:40:42.681Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="1.987095">
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; 5 failures en 60s → circuit OPEN → calls fail-fast" time="0.311428">
+        </testcase>
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; 30s cooldown → HALF-OPEN → 3 probes OK → CLOSED" time="0.2748777">
+        </testcase>
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; retry con jitter: delays no son idénticos en múltiples retries" time="0.4691004">
+        </testcase>
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; backpressure: &gt;highWaterMark pending → caller recibe error con queueDepth" time="0.106829">
+        </testcase>
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; error metadata siempre presente: {attempts, circuitState, queueDepth}" time="0.5280517">
+        </testcase>
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; circuitState transitions: CLOSED → OPEN → HALF_OPEN → CLOSED" time="0.2824246">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-supervisor.test.ts" timestamp="2026-03-16T01:40:42.683Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="3.9511276">
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; subsystem falla → restart automático en &lt;2s" time="1.5099148">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:38.585Z)
+
+[Supervisor] HEALTHY -&gt; RESTARTING: subsystem failure (memOk=false, walOk=false) (2026-03-16T01:40:38.688Z)
+
+[Supervisor] RESTARTING -&gt; HEALTHY: restart succeeded after 50ms backoff (2026-03-16T01:40:38.749Z)
+
+            </system-out>
+        </testcase>
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; 5 failures en 5min → DEGRADED mode activado" time="1.5083813">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:40.095Z)
+
+[Supervisor] HEALTHY -&gt; RESTARTING: subsystem failure (memOk=false, walOk=false) (2026-03-16T01:40:40.151Z)
+
+            </system-out>
+            <system-err>
+[Supervisor] RESTARTING -&gt; DEGRADED: 5 restarts in 300s window (2026-03-16T01:40:40.459Z)
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; en DEGRADED: writes se bufferizan, reads del snapshot" time="0.1081623">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:41.603Z)
+
+            </system-out>
+        </testcase>
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; post-recovery: buffer se flushea, conflictos resueltos (WAL wins)" time="0.0032552">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:41.711Z)
+[Supervisor] Conflict: WAL wins for key=&quot;k2&quot;, buffer write discarded.
+
+            </system-out>
+        </testcase>
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; resetDegraded() → vuelve a STARTING → HEALTHY" time="0.8145582">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:41.715Z)
+
+[Supervisor] HEALTHY -&gt; RESTARTING: subsystem failure (memOk=false, walOk=false) (2026-03-16T01:40:41.770Z)
+
+[Supervisor] DEGRADED -&gt; STARTING: manual reset from DEGRADED (2026-03-16T01:40:42.529Z)
+
+[Supervisor] STARTING -&gt; HEALTHY: subsystem restarted after manual reset (2026-03-16T01:40:42.529Z)
+
+            </system-out>
+            <system-err>
+[Supervisor] RESTARTING -&gt; DEGRADED: 3 restarts in 300s window (2026-03-16T01:40:41.896Z)
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; state transitions logueados con timestamp" time="0.0012129">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:42.529Z)
+
+            </system-out>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-wal-v2.test.ts" timestamp="2026-03-16T01:40:42.686Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="1.2917879">
+        <testcase classname="tests/daemon-wal-v2.test.ts" name="WAL v2 (fase 4) &gt; 100 ciclos write+recovery mantienen consistencia post-fsync" time="0.6817824">
+            <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
@@ -1643,399 +575,589 @@
 
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal-v2.test.ts" name="WAL v2 (fase 4) &gt; lector v2 migra y replays WAL v1 binario" time="0.0135439">
+        </testcase>
+        <testcase classname="tests/daemon-wal-v2.test.ts" name="WAL v2 (fase 4) &gt; corrupción CRC en recovery: salta entry corrupta y continúa" time="0.0157468">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] CRC mismatch at offset 5. Skipping corrupted entry.
+
+[WAL] CRC mismatch at offset 5. Skipping corrupted entry.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal-v2.test.ts" name="WAL v2 (fase 4) &gt; checkpoint corrupto: fallback a checkpoint anterior válido" time="0.0189842">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] Invalid checkpoint hash detected. Falling back to previous checkpoint.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal-v2.test.ts" name="WAL v2 (fase 4) &gt; auto-compact mantiene WAL acotado al superar maxWalSizeMB" time="0.5508427">
+            <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
             </system-err>
         </testcase>
     </testsuite>
-    <testsuite name="tests/daemon-wal.test.ts" timestamp="2026-02-12T02:12:13.133Z" hostname="DESKTOP-28NKMQD" tests="8" failures="0" errors="0" skipped="0" time="0.1396586">
-        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; append + replay roundtrip (binary)" time="0.0183686">
-            <system-err>
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-            </system-err>
-        </testcase>
-        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; append + replay roundtrip (jsonl)" time="0.0161196">
-            <system-err>
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-            </system-err>
-        </testcase>
-        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; truncate limpia el archivo WAL (binary)" time="0.0084819">
+    <testsuite name="tests/daemon-wal.test.ts" timestamp="2026-03-16T01:40:42.693Z" hostname="DESKTOP-28NKMQD" tests="8" failures="0" errors="0" skipped="0" time="0.1196997">
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; append + replay roundtrip (binary)" time="0.0393424">
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; truncate limpia el archivo WAL (jsonl)" time="0.0091091">
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; append + replay roundtrip (jsonl)" time="0.0118905">
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; replay ignora entry corrupta y continúa con las siguientes (binary)" time="0.0123732">
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; truncate limpia el archivo WAL (binary)" time="0.0111458">
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] CRC mismatch at offset 0. Skipping corrupted entry.
 
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; replay ignora entry corrupta y continúa con las siguientes (jsonl)" time="0.0122288">
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; truncate limpia el archivo WAL (jsonl)" time="0.0080933">
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; replay ignora entry corrupta y continúa con las siguientes (binary)" time="0.0160258">
+            <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] CRC mismatch at offset 5. Skipping corrupted entry.
+
+[WAL] CRC mismatch at offset 5. Skipping corrupted entry.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; replay ignora entry corrupta y continúa con las siguientes (jsonl)" time="0.0134495">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] JSONL CRC mismatch. Skipping corrupted entry.
 
 [WAL] JSONL CRC mismatch. Skipping corrupted entry.
 
             </system-err>
         </testcase>
-        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; fsync strict se comporta como fail-closed en errores de sync (binary)" time="0.047282">
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; fsync strict se comporta como fail-closed en errores de sync (binary)" time="0.0082497">
         </testcase>
-        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; fsync strict se comporta como fail-closed en errores de sync (jsonl)" time="0.0093436">
-        </testcase>
-    </testsuite>
-    <testsuite name="tests/gics-adversarial.test.ts" timestamp="2026-02-12T02:12:13.136Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.3151828">
-        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 1. Fuzz Roundtrip (50 iterations) &gt; should roundtrip 50 randomized datasets without error" time="0.2558759">
-        </testcase>
-        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 2. Systematic Truncation &gt; should throw IncompleteDataError for every truncated length" time="0.0171109">
-        </testcase>
-        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 3. Systematic Bit-Flipping &gt; should detect bit flips in header and payload" time="0.0071512">
-        </testcase>
-        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 4. Decompression Bomb Protection &gt; should reject StreamSection claiming huge uncompressed size" time="0.0024424">
-        </testcase>
-        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 5. Concurrency &gt; should handle 10 parallel encoder/decoder instances without pollution" time="0.0074714">
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; fsync strict se comporta como fail-closed en errores de sync (jsonl)" time="0.005874">
         </testcase>
     </testsuite>
-    <testsuite name="tests/gics-chm.test.ts" timestamp="2026-02-12T02:12:13.137Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="0.0076524">
-        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; starts in NORMAL state" time="0.0013134">
+    <testsuite name="tests/gics-adversarial.test.ts" timestamp="2026-03-16T01:40:42.696Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.2773128">
+        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 1. Fuzz Roundtrip (50 iterations) &gt; should roundtrip 50 randomized datasets without error" time="0.2422906">
         </testcase>
-        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; routes to CORE in normal conditions" time="0.000711">
+        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 2. Systematic Truncation &gt; should throw IncompleteDataError for every truncated length" time="0.0142761">
         </testcase>
-        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; triggers ENTROPY_GATE when entropy is too high" time="0.0002001">
+        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 3. Systematic Bit-Flipping &gt; should detect bit flips in header and payload" time="0.003432">
         </testcase>
-        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; detects RATIO_DROP anomaly and switches to QUARANTINE" time="0.000437">
+        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 4. Decompression Bomb Protection &gt; should reject StreamSection claiming huge uncompressed size" time="0.0023246">
         </testcase>
-        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; detects ENTROPY_BURST" time="0.00033">
-        </testcase>
-        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; recovers from QUARANTINE after M_RECOVERY_BLOCKS successes" time="0.0006271">
+        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 5. Concurrency &gt; should handle 10 parallel encoder/decoder instances without pollution" time="0.0083641">
         </testcase>
     </testsuite>
-    <testsuite name="tests/gics-float-edge-cases.test.ts" timestamp="2026-02-12T02:12:13.138Z" hostname="DESKTOP-28NKMQD" tests="2" failures="1" errors="0" skipped="0" time="0.1222385">
-        <testcase classname="tests/gics-float-edge-cases.test.ts" name="GICS float edge-cases &gt; roundtrips special IEEE-754 values (NaN, ±Infinity, -0)" time="0.0869744">
+    <testsuite name="tests/gics-chm.test.ts" timestamp="2026-03-16T01:40:42.697Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="0.0092423">
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; starts in NORMAL state" time="0.0015989">
         </testcase>
-        <testcase classname="tests/gics-float-edge-cases.test.ts" name="GICS float edge-cases &gt; roundtrips extreme finite floats (MAX_VALUE, MIN_VALUE/subnormal)" time="0.0183166">
-            <failure message="expected false to be true // Object.is equality" type="AssertionError">
-AssertionError: expected false to be true // Object.is equality
-
-- Expected
-+ Received
-
-- true
-+ false
-
- ❯ expectSameNumberSemantics tests/gics-float-edge-cases.test.ts:8:41
- ❯ tests/gics-float-edge-cases.test.ts:75:17
-            </failure>
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; routes to CORE in normal conditions" time="0.0008014">
+        </testcase>
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; triggers ENTROPY_GATE when entropy is too high" time="0.0002805">
+        </testcase>
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; detects RATIO_DROP anomaly and switches to QUARANTINE" time="0.0006301">
+        </testcase>
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; detects ENTROPY_BURST" time="0.0003506">
+        </testcase>
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; recovers from QUARANTINE after M_RECOVERY_BLOCKS successes" time="0.0004597">
         </testcase>
     </testsuite>
-    <testsuite name="tests/gics-generic-roundtrip.test.ts" timestamp="2026-02-12T02:12:13.140Z" hostname="DESKTOP-28NKMQD" tests="12" failures="0" errors="0" skipped="0" time="0.2850237">
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Trust schema (string keys + categorical) &gt; round-trips trust snapshots with identical data" time="0.1461121">
+    <testsuite name="tests/gics-float-edge-cases.test.ts" timestamp="2026-03-16T01:40:42.698Z" hostname="DESKTOP-28NKMQD" tests="2" failures="0" errors="0" skipped="0" time="0.0681878">
+        <testcase classname="tests/gics-float-edge-cases.test.ts" name="GICS float edge-cases &gt; roundtrips special IEEE-754 values (NaN, ±Infinity, -0)" time="0.0564599">
         </testcase>
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Trust schema (string keys + categorical) &gt; categorical fields round-trip as strings, not numbers" time="0.0120169">
-        </testcase>
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Trust schema (string keys + categorical) &gt; string keys are preserved exactly" time="0.0044825">
-        </testcase>
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Numeric schema (no categorical) &gt; round-trips sensor data" time="0.0189794">
-        </testcase>
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Minimal schema &gt; single-field schema round-trips" time="0.0028919">
-        </testcase>
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; queryGeneric() &gt; query by string key returns matching snapshots" time="0.0057288">
-        </testcase>
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; queryGeneric() &gt; query by numeric key on numeric schema" time="0.0027874">
-        </testcase>
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; queryGeneric() &gt; query by non-existent key returns empty" time="0.0021203">
-        </testcase>
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Legacy compatibility via getAllGenericSnapshots() &gt; legacy files return { price, quantity } records" time="0.0043191">
-        </testcase>
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Integrity &gt; verify() passes on schema-encoded files" time="0.0036446">
-        </testcase>
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Integrity &gt; getAllSnapshots() on legacy files still works" time="0.0021027">
-        </testcase>
-        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Large dataset &gt; 1000 trust snapshots round-trip correctly" time="0.0658522">
+        <testcase classname="tests/gics-float-edge-cases.test.ts" name="GICS float edge-cases &gt; roundtrips extreme finite floats (MAX_VALUE, MIN_VALUE/subnormal)" time="0.0042327">
         </testcase>
     </testsuite>
-    <testsuite name="tests/gics-golden-corpus.test.ts" timestamp="2026-02-12T02:12:13.142Z" hostname="DESKTOP-28NKMQD" tests="7" failures="0" errors="0" skipped="0" time="0.3681999">
-        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; legacy_plain: sha256 matches, verify ok, unpack matches expected" time="0.107929">
+    <testsuite name="tests/gics-generic-roundtrip.test.ts" timestamp="2026-03-16T01:40:42.698Z" hostname="DESKTOP-28NKMQD" tests="12" failures="0" errors="0" skipped="0" time="0.2207304">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Trust schema (string keys + categorical) &gt; round-trips trust snapshots with identical data" time="0.0935276">
         </testcase>
-        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; legacy_multisegment: verify ok, unpack matches expected" time="0.0550172">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Trust schema (string keys + categorical) &gt; categorical fields round-trip as strings, not numbers" time="0.0051609">
         </testcase>
-        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; legacy_encrypted: verify ok, unpack requires password and matches expected" time="0.0819191">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Trust schema (string keys + categorical) &gt; string keys are preserved exactly" time="0.0045927">
         </testcase>
-        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; schema_trust_events_plain: verify ok, schema is readable and generic query works" time="0.0344826">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Numeric schema (no categorical) &gt; round-trips sensor data" time="0.0158251">
         </testcase>
-        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; tamper: 1-bit flip must fail (IntegrityError)" time="0.0077056">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Minimal schema &gt; single-field schema round-trips" time="0.0033385">
         </testcase>
-        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; truncation: missing EOS must fail (IncompleteDataError)" time="0.0033203">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; queryGeneric() &gt; query by string key returns matching snapshots" time="0.0076078">
         </testcase>
-        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; wrong password: encrypted file rejects" time="0.0381469">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; queryGeneric() &gt; query by numeric key on numeric schema" time="0.0030467">
         </testcase>
-    </testsuite>
-    <testsuite name="tests/gics-item-major.test.ts" timestamp="2026-02-12T02:12:13.144Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.630415">
-        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; roundtrip: stable multi-item (20 items x 100 snapshots)" time="0.2516987">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; queryGeneric() &gt; query by non-existent key returns empty" time="0.0033772">
         </testcase>
-        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; segment flag is set for stable multi-item data" time="0.0106576">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Legacy compatibility via getAllGenericSnapshots() &gt; legacy files return { price, quantity } records" time="0.0053115">
         </testcase>
-        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; fallback: varying item counts stay snapshot-major" time="0.0264456">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Integrity &gt; verify() passes on schema-encoded files" time="0.0102083">
         </testcase>
-        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; single-item data does not activate item-major" time="0.0090527">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Integrity &gt; getAllSnapshots() on legacy files still works" time="0.002557">
         </testcase>
-        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; roundtrip: large multi-item (20 items x 500 snapshots)" time="0.3210429">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Large dataset &gt; 1000 trust snapshots round-trip correctly" time="0.0507249">
         </testcase>
     </testsuite>
-    <testsuite name="tests/gics-limits.test.ts" timestamp="2026-02-12T02:12:13.145Z" hostname="DESKTOP-28NKMQD" tests="4" failures="0" errors="0" skipped="1" time="0.3781475">
-        <testcase classname="tests/gics-limits.test.ts" name="GICS system limits &gt; handles a high snapshot count without integrity loss" time="0.2621802">
+    <testsuite name="tests/gics-golden-corpus.test.ts" timestamp="2026-03-16T01:40:42.701Z" hostname="DESKTOP-28NKMQD" tests="7" failures="0" errors="0" skipped="0" time="0.1746769">
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; legacy_plain: sha256 matches, verify ok, unpack matches expected" time="0.0531129">
         </testcase>
-        <testcase classname="tests/gics-limits.test.ts" name="GICS system limits &gt; handles snapshots with thousands of items" time="0.0924373">
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; legacy_multisegment: verify ok, unpack matches expected" time="0.0071668">
+        </testcase>
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; legacy_encrypted: verify ok, unpack requires password and matches expected" time="0.0372386">
+        </testcase>
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; schema_trust_events_plain: verify ok, schema is readable and generic query works" time="0.0318252">
+        </testcase>
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; tamper: 1-bit flip must fail (IntegrityError)" time="0.0061374">
+        </testcase>
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; truncation: missing EOS must fail (IncompleteDataError)" time="0.0021345">
+        </testcase>
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; wrong password: encrypted file rejects" time="0.0259749">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-item-major.test.ts" timestamp="2026-03-16T01:40:42.702Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.5214011">
+        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; roundtrip: stable multi-item (20 items x 100 snapshots)" time="0.1906915">
+        </testcase>
+        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; segment flag is set for stable multi-item data" time="0.0067553">
+        </testcase>
+        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; fallback: varying item counts stay snapshot-major" time="0.0150981">
+        </testcase>
+        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; single-item data does not activate item-major" time="0.0042886">
+        </testcase>
+        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; roundtrip: large multi-item (20 items x 500 snapshots)" time="0.2905477">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-limits.test.ts" timestamp="2026-03-16T01:40:42.703Z" hostname="DESKTOP-28NKMQD" tests="4" failures="0" errors="0" skipped="1" time="0.3112417">
+        <testcase classname="tests/gics-limits.test.ts" name="GICS system limits &gt; handles a high snapshot count without integrity loss" time="0.231788">
+        </testcase>
+        <testcase classname="tests/gics-limits.test.ts" name="GICS system limits &gt; handles snapshots with thousands of items" time="0.0655898">
         </testcase>
         <testcase classname="tests/gics-limits.test.ts" name="GICS system limits &gt; supports configurable heavy stress for snapshot and item counts" time="0">
             <skipped/>
         </testcase>
-        <testcase classname="tests/gics-limits.test.ts" name="GICS system limits &gt; rejects malicious section length tampering (limit or integrity path)" time="0.0048436">
+        <testcase classname="tests/gics-limits.test.ts" name="GICS system limits &gt; rejects malicious section length tampering (limit or integrity path)" time="0.0045107">
         </testcase>
     </testsuite>
-    <testsuite name="tests/gics-multiitem.test.ts" timestamp="2026-02-12T02:12:13.146Z" hostname="DESKTOP-28NKMQD" tests="8" failures="0" errors="0" skipped="0" time="0.137015">
-        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should roundtrip multi-item snapshots exactly" time="0.0859794">
+    <testsuite name="tests/gics-multiitem.test.ts" timestamp="2026-03-16T01:40:42.706Z" hostname="DESKTOP-28NKMQD" tests="8" failures="0" errors="0" skipped="0" time="0.1158233">
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should roundtrip multi-item snapshots exactly" time="0.0642334">
         </testcase>
-        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should preserve item IDs correctly" time="0.0035204">
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should preserve item IDs correctly" time="0.0040556">
         </testcase>
-        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should preserve quantities correctly" time="0.0023933">
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should preserve quantities correctly" time="0.0028212">
         </testcase>
-        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should roundtrip floating point price/quantity without precision loss in legacy mode" time="0.0026399">
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should roundtrip floating point price/quantity without precision loss in legacy mode" time="0.0066195">
         </testcase>
-        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should handle variable item counts per snapshot" time="0.0076629">
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should handle variable item counts per snapshot" time="0.0039137">
         </testcase>
-        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should handle empty items (snapshot with 0 items)" time="0.0020086">
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should handle empty items (snapshot with 0 items)" time="0.0015185">
         </testcase>
-        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should produce deterministic output (sorted by itemId)" time="0.0188297">
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should produce deterministic output (sorted by itemId)" time="0.019864">
         </testcase>
-        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should reject data without EOS marker" time="0.0032668">
-        </testcase>
-    </testsuite>
-    <testsuite name="tests/gics-profiler.test.ts" timestamp="2026-02-12T02:12:13.148Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="0.1750601">
-        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; profiles trend data (quick mode)" time="0.0862464">
-        </testcase>
-        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; profiles volatile data (quick mode)" time="0.0175716">
-        </testcase>
-        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; profiles multi-item data (quick mode)" time="0.0441499">
-        </testcase>
-        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; best trial has highest ratio among all trials" time="0.0095647">
-        </testcase>
-        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; rejects empty sample" time="0.0026009">
-        </testcase>
-        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; preset matching works when config aligns" time="0.0066857">
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should reject data without EOS marker" time="0.004585">
         </testcase>
     </testsuite>
-    <testsuite name="tests/gics-quarantine-cap.test.ts" timestamp="2026-02-12T02:12:13.149Z" hostname="DESKTOP-28NKMQD" tests="2" failures="0" errors="0" skipped="0" time="0.1091583">
-        <testcase classname="tests/gics-quarantine-cap.test.ts" name="GICS Phase 11: Quarantine Cap (FIXED64_LE) &gt; should trigger quarantine and use FIXED64_LE for noisy data" time="0.0964743">
+    <testsuite name="tests/gics-profiler.test.ts" timestamp="2026-03-16T01:40:42.708Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="0.1725165">
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; profiles trend data (quick mode)" time="0.0747546">
         </testcase>
-        <testcase classname="tests/gics-quarantine-cap.test.ts" name="GICS Phase 11: Quarantine Cap (FIXED64_LE) &gt; reconstructs values correctly when using FIXED64_LE" time="0.0032606">
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; profiles volatile data (quick mode)" time="0.0174645">
         </testcase>
-    </testsuite>
-    <testsuite name="tests/gics-schema-retrocompat.test.ts" timestamp="2026-02-12T02:12:13.149Z" hostname="DESKTOP-28NKMQD" tests="16" failures="0" errors="0" skipped="0" time="0.1180458">
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; FieldDef has correct shape" time="0.0018033">
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; profiles multi-item data (quick mode)" time="0.0557075">
         </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; FieldDef supports categorical with enumMap" time="0.0004065">
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; best trial has highest ratio among all trials" time="0.0071219">
         </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; SchemaProfile has correct shape" time="0.0014357">
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; rejects empty sample" time="0.004259">
         </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; GenericSnapshot supports custom item types" time="0.0002318">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; GenericSnapshot default type matches legacy Snapshot" time="0.0002034">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Format constants &gt; HAS_SCHEMA flag is defined and does not conflict" time="0.0002132">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Format constants &gt; SCHEMA_STREAM_BASE is 100" time="0.0002256">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Format constants &gt; VERSION_BYTE remains 0x03" time="0.000134">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Predefined schemas &gt; MARKET_DATA schema exists and has price+quantity" time="0.0004179">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Predefined schemas &gt; TRUST_EVENTS schema exists with 6 fields" time="0.0004903">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Byte-identical encoding without schema &gt; pack() without schema produces identical bytes across two calls" time="0.0549242">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Byte-identical encoding without schema &gt; header version byte is 0x03 when no schema" time="0.0017605">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Byte-identical encoding without schema &gt; header flags do NOT include HAS_SCHEMA when no schema given" time="0.0015207">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Round-trip without schema (legacy path) &gt; encode → decode produces identical data" time="0.0178772">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Round-trip without schema (legacy path) &gt; verify() passes on files without schema" time="0.0027946">
-        </testcase>
-        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Round-trip without schema (legacy path) &gt; query() works on files without schema" time="0.0059981">
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; preset matching works when config aligns" time="0.0068552">
         </testcase>
     </testsuite>
-    <testsuite name="tests/gics-schema-section.test.ts" timestamp="2026-02-12T02:12:13.152Z" hostname="DESKTOP-28NKMQD" tests="7" failures="0" errors="0" skipped="0" time="0.1286025">
-        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Schema encoding/decoding round-trip &gt; encoder with schema → decoder reads same schema via parseHeader()" time="0.0772103">
+    <testsuite name="tests/gics-quarantine-cap.test.ts" timestamp="2026-03-16T01:40:42.709Z" hostname="DESKTOP-28NKMQD" tests="2" failures="0" errors="0" skipped="0" time="0.1111054">
+        <testcase classname="tests/gics-quarantine-cap.test.ts" name="GICS Phase 11: Quarantine Cap (FIXED64_LE) &gt; should trigger quarantine and use FIXED64_LE for noisy data" time="0.0994024">
         </testcase>
-        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Schema encoding/decoding round-trip &gt; schema with categorical field preserves enum map" time="0.0033598">
-        </testcase>
-        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Schema encoding/decoding round-trip &gt; all field properties survive round-trip" time="0.0072648">
-        </testcase>
-        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Legacy files (no schema) &gt; decoder returns legacy schema for v1.3 files without HAS_SCHEMA" time="0.0071721">
-        </testcase>
-        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Header flags &gt; HAS_SCHEMA flag is set when schema provided" time="0.0069638">
-        </testcase>
-        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Header flags &gt; HAS_SCHEMA flag is NOT set without schema" time="0.0049209">
-        </testcase>
-        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Integrity &gt; verify() passes on files with schema" time="0.005254">
+        <testcase classname="tests/gics-quarantine-cap.test.ts" name="GICS Phase 11: Quarantine Cap (FIXED64_LE) &gt; reconstructs values correctly when using FIXED64_LE" time="0.0038668">
         </testcase>
     </testsuite>
-    <testsuite name="tests/gics-security-crypto.test.ts" timestamp="2026-02-12T02:12:13.154Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="0.4972051">
-        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; PBKDF2 key derivation is deterministic for same password/salt/iterations" time="0.0484895">
+    <testsuite name="tests/gics-schema-retrocompat.test.ts" timestamp="2026-03-16T01:40:42.710Z" hostname="DESKTOP-28NKMQD" tests="16" failures="0" errors="0" skipped="0" time="0.1047544">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; FieldDef has correct shape" time="0.0015357">
         </testcase>
-        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; auth verification succeeds for correct key and fails for wrong key" time="0.0642528">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; FieldDef supports categorical with enumMap" time="0.0003528">
         </testcase>
-        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; auth verification has bounded timing delta between match/mismatch paths" time="0.1292934">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; SchemaProfile has correct shape" time="0.001356">
         </testcase>
-        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; stream IV domain separation produces different ciphertext/tag across stream IDs" time="0.0316059">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; GenericSnapshot supports custom item types" time="0.0002931">
         </testcase>
-        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; tampered ciphertext/tag is rejected by decryptSection" time="0.0341672">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; GenericSnapshot default type matches legacy Snapshot" time="0.0002551">
         </testcase>
-        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; encrypted pack/unpack succeeds with correct password and fails with wrong password" time="0.1740507">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Format constants &gt; HAS_SCHEMA flag is defined and does not conflict" time="0.0002724">
         </testcase>
-    </testsuite>
-    <testsuite name="tests/gics-string-dict.test.ts" timestamp="2026-02-12T02:12:13.155Z" hostname="DESKTOP-28NKMQD" tests="16" failures="0" errors="0" skipped="0" time="0.0439716">
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; build() &gt; builds from unique keys, sorted" time="0.0173924">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Format constants &gt; SCHEMA_STREAM_BASE is 100" time="0.0002004">
         </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; build() &gt; deduplicates keys" time="0.0004771">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Format constants &gt; VERSION_BYTE remains 0x03" time="0.0001768">
         </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; build() &gt; handles empty input" time="0.0003276">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Predefined schemas &gt; MARKET_DATA schema exists and has price+quantity" time="0.0005677">
         </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips simple keys" time="0.0011329">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Predefined schemas &gt; TRUST_EVENTS schema exists with 6 fields" time="0.0005987">
         </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips keys with common prefixes" time="0.000835">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Byte-identical encoding without schema &gt; pack() without schema produces identical bytes across two calls" time="0.0576492">
         </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips with decodeForward" time="0.0004888">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Byte-identical encoding without schema &gt; header version byte is 0x03 when no schema" time="0.0017125">
         </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips empty dictionary" time="0.0002695">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Byte-identical encoding without schema &gt; header flags do NOT include HAS_SCHEMA when no schema given" time="0.0015599">
         </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips single entry" time="0.0002575">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Round-trip without schema (legacy path) &gt; encode → decode produces identical data" time="0.0249276">
         </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips unicode strings" time="0.0016191">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Round-trip without schema (legacy path) &gt; verify() passes on files without schema" time="0.0028234">
         </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; should throw when decoding truncated data" time="0.0013005">
-        </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; compression efficiency &gt; common prefix keys compress smaller than naive" time="0.0005955">
-        </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; large dictionary &gt; handles 1000 entries" time="0.004694">
-        </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; round-trips SegmentIndex WITHOUT string dict (backward compat)" time="0.0011761">
-        </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; round-trips SegmentIndex WITH string dict" time="0.0007818">
-        </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; containsString() works via string dict lookup" time="0.0004588">
-        </testcase>
-        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; containsString() returns false when no string dict" time="0.0001733">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Round-trip without schema (legacy path) &gt; query() works on files without schema" time="0.0031203">
         </testcase>
     </testsuite>
-    <testsuite name="tests/gics-v1.3-forensics.test.ts" timestamp="2026-02-12T02:12:13.158Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.1150373">
-        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should verify file integrity without decompression" time="0.0720055">
+    <testsuite name="tests/gics-schema-section.test.ts" timestamp="2026-03-16T01:40:42.713Z" hostname="DESKTOP-28NKMQD" tests="7" failures="0" errors="0" skipped="0" time="0.100336">
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Schema encoding/decoding round-trip &gt; encoder with schema → decoder reads same schema via parseHeader()" time="0.0725061">
         </testcase>
-        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should fail verification if CRC is tampered" time="0.0023629">
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Schema encoding/decoding round-trip &gt; schema with categorical field preserves enum map" time="0.0031416">
         </testcase>
-        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; verifyIntegrityOnly should return false for corrupt data (no throw)" time="0.0015135">
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Schema encoding/decoding round-trip &gt; all field properties survive round-trip" time="0.0054795">
         </testcase>
-        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should fail if cross-stream lengths mismatch (Manual Trigger)" time="0.0065007">
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Legacy files (no schema) &gt; decoder returns legacy schema for v1.3 files without HAS_SCHEMA" time="0.0036031">
         </testcase>
-        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should detect sum(snapshotLen) != itemIds.length" time="0.0101973">
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Header flags &gt; HAS_SCHEMA flag is set when schema provided" time="0.00196">
         </testcase>
-    </testsuite>
-    <testsuite name="tests/gics-v1.3-format.test.ts" timestamp="2026-02-12T02:12:13.159Z" hostname="DESKTOP-28NKMQD" tests="12" failures="0" errors="0" skipped="0" time="0.144629">
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Version Byte &gt; should encode with version byte 0x03" time="0.0517514">
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Header flags &gt; HAS_SCHEMA flag is NOT set without schema" time="0.002132">
         </testcase>
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Version Byte &gt; should decode v1.3 format successfully" time="0.006636">
-        </testcase>
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Hash Chain Integrity &gt; should detect payload tampering" time="0.0026771">
-        </testcase>
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Hash Chain Integrity &gt; should detect hash field tampering" time="0.0290952">
-        </testcase>
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Hash Chain Integrity &gt; should verify multiple stream sections" time="0.0065211">
-        </testcase>
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Roundtrip Integrity &gt; should roundtrip single snapshot correctly" time="0.0033388">
-        </testcase>
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Roundtrip Integrity &gt; should roundtrip multi-item snapshots" time="0.0092025">
-        </testcase>
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Roundtrip Integrity &gt; should roundtrip large dataset with trends" time="0.0160796">
-        </testcase>
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Backward Compatibility &gt; should accept v1.2 format (version 0x02)" time="0.0002343">
-        </testcase>
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Backward Compatibility &gt; should reject unsupported version with clear error" time="0.0010875">
-        </testcase>
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Stream Section Format &gt; should encode all mandatory streams" time="0.0021103">
-        </testcase>
-        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Stream Section Format &gt; should use outer compression (Zstd)" time="0.0036143">
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Integrity &gt; verify() passes on files with schema" time="0.0045958">
         </testcase>
     </testsuite>
-    <testsuite name="tests/gics-v1.3-segments.test.ts" timestamp="2026-02-12T02:12:13.161Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.1164805">
-        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should encode and decode multiple segments using size limit" time="0.0680078">
+    <testsuite name="tests/gics-security-crypto.test.ts" timestamp="2026-03-16T01:40:42.714Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="0.3915011">
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; PBKDF2 key derivation is deterministic for same password/salt/iterations" time="0.048255">
         </testcase>
-        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should append to an existing GICS file" time="0.0169143">
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; auth verification succeeds for correct key and fails for wrong key" time="0.0462974">
         </testcase>
-        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should perform optimized query using segment index" time="0.006091">
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; auth verification has bounded timing delta between match/mismatch paths" time="0.0900157">
         </testcase>
-        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should verify file-level integrity chain" time="0.0043904">
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; stream IV domain separation produces different ciphertext/tag across stream IDs" time="0.0262643">
         </testcase>
-        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should throw IntegrityError on decodeNextSegment with corrupt data" time="0.0042631">
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; tampered ciphertext/tag is rejected by decryptSection" time="0.0294106">
+        </testcase>
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; encrypted pack/unpack succeeds with correct password and fails with wrong password" time="0.144067">
         </testcase>
     </testsuite>
-    <testsuite name="tests/insight-engine.test.ts" timestamp="2026-02-12T02:12:13.162Z" hostname="DESKTOP-28NKMQD" tests="16" failures="0" errors="0" skipped="0" time="0.6531993">
-        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; tracks entropy, volatility, streak, and streakRecord" time="0.0030261">
+    <testsuite name="tests/gics-string-dict.test.ts" timestamp="2026-03-16T01:40:42.716Z" hostname="DESKTOP-28NKMQD" tests="16" failures="0" errors="0" skipped="0" time="0.0366883">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; build() &gt; builds from unique keys, sorted" time="0.0153884">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; computes per-field trends with ema, direction, zScore" time="0.0008108">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; build() &gt; deduplicates keys" time="0.0003026">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; resets streak on direction change" time="0.0005305">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; build() &gt; handles empty input" time="0.0002492">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; computes Shannon entropy approaching 1.0 for equal up/down" time="0.0004204">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips simple keys" time="0.0008852">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; lifecycle classification works with new fields present" time="0.001335">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips keys with common prefixes" time="0.0004529">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; detects positive correlation between co-moving items" time="0.0027991">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips with decodeForward" time="0.0003412">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; forms clusters from correlated items" time="0.0026311">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips empty dictionary" time="0.000236">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; getLeadingIndicators returns indicators with lag" time="0.0031385">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips single entry" time="0.0002476">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; getSeasonalPatterns returns array" time="0.0005355">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips unicode strings" time="0.0012551">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; detects anomaly when z-score exceeds threshold" time="0.0023213">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; should throw when decoding truncated data" time="0.0008655">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; generates lifecycle-based recommendations" time="0.0006745">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; compression efficiency &gt; common prefix keys compress smaller than naive" time="0.0005086">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; getForecast returns projection with decaying confidence" time="0.0005612">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; large dictionary &gt; handles 1000 entries" time="0.0043637">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; getAnomalies filters by since timestamp" time="0.0006995">
+        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; round-trips SegmentIndex WITHOUT string dict (backward compat)" time="0.0010588">
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="Daemon Insight IPC (Phase 3 integration) &gt; getCorrelations, getClusters, getLeadingIndicators, getSeasonalPatterns via IPC" time="0.2813708">
+        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; round-trips SegmentIndex WITH string dict" time="0.0006102">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; containsString() works via string dict lookup" time="0.0003071">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; containsString() returns false when no string dict" time="0.0001507">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-v1.3-forensics.test.ts" timestamp="2026-03-16T01:40:42.719Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.0821444">
+        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should verify file integrity without decompression" time="0.0592401">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should fail verification if CRC is tampered" time="0.002908">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; verifyIntegrityOnly should return false for corrupt data (no throw)" time="0.001723">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should fail if cross-stream lengths mismatch (Manual Trigger)" time="0.0094626">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should detect sum(snapshotLen) != itemIds.length" time="0.0030851">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-v1.3-format.test.ts" timestamp="2026-03-16T01:40:42.720Z" hostname="DESKTOP-28NKMQD" tests="12" failures="0" errors="0" skipped="0" time="0.1147177">
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Version Byte &gt; should encode with version byte 0x03" time="0.0609429">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Version Byte &gt; should decode v1.3 format successfully" time="0.0112262">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Hash Chain Integrity &gt; should detect payload tampering" time="0.0030036">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Hash Chain Integrity &gt; should detect hash field tampering" time="0.0020975">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Hash Chain Integrity &gt; should verify multiple stream sections" time="0.0045189">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Roundtrip Integrity &gt; should roundtrip single snapshot correctly" time="0.0040529">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Roundtrip Integrity &gt; should roundtrip multi-item snapshots" time="0.0031283">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Roundtrip Integrity &gt; should roundtrip large dataset with trends" time="0.0104949">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Backward Compatibility &gt; should accept v1.2 format (version 0x02)" time="0.0002207">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Backward Compatibility &gt; should reject unsupported version with clear error" time="0.0012988">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Stream Section Format &gt; should encode all mandatory streams" time="0.0023501">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Stream Section Format &gt; should use outer compression (Zstd)" time="0.002508">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-v1.3-segments.test.ts" timestamp="2026-03-16T01:40:42.722Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.0891582">
+        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should encode and decode multiple segments using size limit" time="0.0598028">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should append to an existing GICS file" time="0.011438">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should perform optimized query using segment index" time="0.0055756">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should verify file-level integrity chain" time="0.0035581">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should throw IntegrityError on decodeNextSegment with corrupt data" time="0.0028569">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/insight-engine.test.ts" timestamp="2026-03-16T01:40:42.723Z" hostname="DESKTOP-28NKMQD" tests="16" failures="0" errors="0" skipped="0" time="0.3338407">
+        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; tracks entropy, volatility, streak, and streakRecord" time="0.0026396">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; computes per-field trends with ema, direction, zScore" time="0.0007797">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; resets streak on direction change" time="0.0004299">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; computes Shannon entropy approaching 1.0 for equal up/down" time="0.0003277">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; lifecycle classification works with new fields present" time="0.0012197">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; detects positive correlation between co-moving items" time="0.0022415">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; forms clusters from correlated items" time="0.0021076">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; getLeadingIndicators returns indicators with lag" time="0.0020919">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; getSeasonalPatterns returns array" time="0.0004099">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; detects anomaly when z-score exceeds threshold" time="0.002016">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; generates lifecycle-based recommendations" time="0.0007162">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; getForecast returns projection with decaying confidence" time="0.0006791">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; getAnomalies filters by since timestamp" time="0.0005197">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="Daemon Insight IPC (Phase 3 integration) &gt; getCorrelations, getClusters, getLeadingIndicators, getSeasonalPatterns via IPC" time="0.1272577">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-insight-test-aF8w6z\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-insight-test-5rECOt\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-insight-insight-ipc-corr-1770862329841-ancw33q3p2u
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:38.909Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-insight-ipc-corr-1773625238897-drinq4r4xya
 
 [GICS] Daemon stopped.
 
@@ -2043,74 +1165,18 @@ AssertionError: expected false to be true // Object.is equality
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
             </system-err>
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="Daemon Insight IPC (Phase 3 integration) &gt; getForecast, getAnomalies, getRecommendations via IPC" time="0.2343481">
+        <testcase classname="tests/insight-engine.test.ts" name="Daemon Insight IPC (Phase 3 integration) &gt; getForecast, getAnomalies, getRecommendations via IPC" time="0.1129184">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-insight-test-tmAdrS\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-insight-test-allw70\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-insight-insight-ipc-pred-1770862330117-k5nviwlp0vr
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:39.027Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-insight-ipc-pred-1773625239019-iagdu8r9kr
 
 [GICS] Daemon stopped.
 
@@ -2118,54 +1184,18 @@ AssertionError: expected false to be true // Object.is equality
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
             </system-err>
         </testcase>
-        <testcase classname="tests/insight-engine.test.ts" name="Daemon Insight IPC (Phase 3 integration) &gt; put response includes behavior with new fields" time="0.1067726">
+        <testcase classname="tests/insight-engine.test.ts" name="Daemon Insight IPC (Phase 3 integration) &gt; put response includes behavior with new fields" time="0.0723346">
             <system-out>
-[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-insight-test-3ZpMon\.gics_token
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-insight-test-xmqk9A\.gics_token
 [GICS] Replaying WAL...
 
 [GICS] WAL replayed. 0 records loaded (0 entries replayed).
 
-[GICS] Daemon listening on \\.\pipe\gics-insight-insight-ipc-put-behavior-1770862330353-d97z4qnuc3
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T01:40:39.139Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-insight-ipc-put-behavior-1773625239133-jlg01crawde
 
 [GICS] Daemon stopped.
 
@@ -2173,63 +1203,61 @@ AssertionError: expected false to be true // Object.is equality
             <system-err>
 [WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
 
-[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
-
             </system-err>
         </testcase>
     </testsuite>
-    <testsuite name="tests/phase4-deep-deep.test.ts" timestamp="2026-02-12T02:12:13.169Z" hostname="DESKTOP-28NKMQD" tests="4" failures="0" errors="0" skipped="0" time="0.1059829">
-        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies SNAPSHOT_LEN trial selection chooses the most efficient codec" time="0.0664522">
+    <testsuite name="tests/phase4-deep-deep.test.ts" timestamp="2026-03-16T01:40:42.727Z" hostname="DESKTOP-28NKMQD" tests="4" failures="0" errors="0" skipped="0" time="0.1128348">
+        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies SNAPSHOT_LEN trial selection chooses the most efficient codec" time="0.0706209">
         </testcase>
-        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies ITEM_ID uses DICT_VARINT when item IDs repeat" time="0.0086538">
+        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies ITEM_ID uses DICT_VARINT when item IDs repeat" time="0.0133001">
         </testcase>
-        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies context isolation: one stream must NOT affect another in trial" time="0.0073345">
+        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies context isolation: one stream must NOT affect another in trial" time="0.0060723">
         </testcase>
-        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies CHM transition for TIME stream under high jitter" time="0.0131843">
+        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies CHM transition for TIME stream under high jitter" time="0.0167757">
         </testcase>
     </testsuite>
-    <testsuite name="tests/smoke-globals.test.ts" timestamp="2026-02-12T02:12:13.170Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0046718">
-        <testcase classname="tests/smoke-globals.test.ts" name="smoke-globals &gt; vitest runs (globals)" time="0.0010777">
+    <testsuite name="tests/smoke-globals.test.ts" timestamp="2026-03-16T01:40:42.728Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0042683">
+        <testcase classname="tests/smoke-globals.test.ts" name="smoke-globals &gt; vitest runs (globals)" time="0.0009622">
             <system-out>
 [smoke-globals] test executed
 
             </system-out>
         </testcase>
     </testsuite>
-    <testsuite name="tests/smoke.test.ts" timestamp="2026-02-12T02:12:13.171Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0062794">
-        <testcase classname="tests/smoke.test.ts" name="smoke &gt; vitest runs" time="0.0016901">
+    <testsuite name="tests/smoke.test.ts" timestamp="2026-03-16T01:40:42.728Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0048071">
+        <testcase classname="tests/smoke.test.ts" name="smoke &gt; vitest runs" time="0.0010848">
             <system-out>
 [smoke] test executed
 
             </system-out>
         </testcase>
     </testsuite>
-    <testsuite name="tests/regression/codec-selection-stability.test.ts" timestamp="2026-02-12T02:12:13.171Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.1953587">
-        <testcase classname="tests/regression/codec-selection-stability.test.ts" name="Regression: codec selection stability &gt; produces deterministic telemetry codec sequence for same input" time="0.183367">
+    <testsuite name="tests/regression/codec-selection-stability.test.ts" timestamp="2026-03-16T01:40:42.729Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.1220814">
+        <testcase classname="tests/regression/codec-selection-stability.test.ts" name="Regression: codec selection stability &gt; produces deterministic telemetry codec sequence for same input" time="0.1158253">
         </testcase>
     </testsuite>
-    <testsuite name="tests/regression/eos_missing.test.ts" timestamp="2026-02-12T02:12:13.172Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0623008">
-        <testcase classname="tests/regression/eos_missing.test.ts" name="Regression: EOS Missing &gt; should throw IncompleteDataError if EOS marker is missing" time="0.0531517">
+    <testsuite name="tests/regression/eos_missing.test.ts" timestamp="2026-03-16T01:40:42.729Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0568697">
+        <testcase classname="tests/regression/eos_missing.test.ts" name="Regression: EOS Missing &gt; should throw IncompleteDataError if EOS marker is missing" time="0.0509159">
         </testcase>
     </testsuite>
-    <testsuite name="tests/regression/eos_trailing.test.ts" timestamp="2026-02-12T02:12:13.172Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0784788">
-        <testcase classname="tests/regression/eos_trailing.test.ts" name="Regression: EOS Trailing Bytes &gt; should throw if bytes exist after EOS" time="0.0635912">
+    <testsuite name="tests/regression/eos_trailing.test.ts" timestamp="2026-03-16T01:40:42.729Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0581108">
+        <testcase classname="tests/regression/eos_trailing.test.ts" name="Regression: EOS Trailing Bytes &gt; should throw if bytes exist after EOS" time="0.0501158">
         </testcase>
     </testsuite>
-    <testsuite name="tests/regression/float-precision-loss.test.ts" timestamp="2026-02-12T02:12:13.172Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0879176">
-        <testcase classname="tests/regression/float-precision-loss.test.ts" name="Regression: float precision stability &gt; keeps IEEE-754 semantics for challenging floating values" time="0.0756591">
+    <testsuite name="tests/regression/float-precision-loss.test.ts" timestamp="2026-03-16T01:40:42.730Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0707006">
+        <testcase classname="tests/regression/float-precision-loss.test.ts" name="Regression: float precision stability &gt; keeps IEEE-754 semantics for challenging floating values" time="0.0640308">
         </testcase>
     </testsuite>
-    <testsuite name="tests/regression/integrity_mismatch.test.ts" timestamp="2026-02-12T02:12:13.173Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0814501">
-        <testcase classname="tests/regression/integrity_mismatch.test.ts" name="Regression: Integrity Mismatch &gt; should roundtrip bit-exact with seed 12345" time="0.0666662">
+    <testsuite name="tests/regression/integrity_mismatch.test.ts" timestamp="2026-03-16T01:40:42.730Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0775927">
+        <testcase classname="tests/regression/integrity_mismatch.test.ts" name="Regression: Integrity Mismatch &gt; should roundtrip bit-exact with seed 12345" time="0.0699765">
         </testcase>
     </testsuite>
-    <testsuite name="tests/regression/quarantine-trigger.test.ts" timestamp="2026-02-12T02:12:13.173Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.1243386">
-        <testcase classname="tests/regression/quarantine-trigger.test.ts" name="Regression: quarantine trigger stability &gt; keeps triggering quarantine on noisy bursts and remains decodable" time="0.1079371">
+    <testsuite name="tests/regression/quarantine-trigger.test.ts" timestamp="2026-03-16T01:40:42.731Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.1072342">
+        <testcase classname="tests/regression/quarantine-trigger.test.ts" name="Regression: quarantine trigger stability &gt; keeps triggering quarantine on noisy bursts and remains decodable" time="0.0942912">
         </testcase>
     </testsuite>
-    <testsuite name="tests/regression/truncation.test.ts" timestamp="2026-02-12T02:12:13.174Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.1940587">
-        <testcase classname="tests/regression/truncation.test.ts" name="Regression: Truncation Silent Success &gt; should throw IncompleteDataError for truncated streams" time="0.1812162">
+    <testsuite name="tests/regression/truncation.test.ts" timestamp="2026-03-16T01:40:42.731Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.1778663">
+        <testcase classname="tests/regression/truncation.test.ts" name="Regression: Truncation Silent Success &gt; should throw IncompleteDataError for truncated streams" time="0.1655274">
         </testcase>
     </testsuite>
 </testsuites>

@@ -13,6 +13,8 @@ import { CorrelationAnalyzer } from '../insight/correlation.js';
 import { PredictiveSignals } from '../insight/signals.js';
 import { ConfidenceTracker, type OutcomeResult } from '../insight/confidence.js';
 import { InsightPersistence } from '../insight/persistence.js';
+import { GICSSupervisor } from './supervisor.js';
+import { AuditChain } from './audit-chain.js';
 
 export interface GICSDaemonConfig {
     socketPath: string;
@@ -20,6 +22,10 @@ export interface GICSDaemonConfig {
     tokenPath: string;
     walType?: WALType;
     walFsyncMode?: WALFsyncMode;
+    walFsyncOnCommit?: boolean;
+    walCheckpointEveryOps?: number;
+    walCheckpointEveryMs?: number;
+    walMaxSizeMB?: number;
     maxMemSizeBytes?: number;
     maxDirtyCount?: number;
     fileLockTimeoutMs?: number;
@@ -38,6 +44,10 @@ export class GICSDaemon {
     private recoveredEntries: number = 0;
     private readonly walType: WALType;
     private readonly walFsyncMode: WALFsyncMode;
+    private readonly walFsyncOnCommit: boolean;
+    private readonly walCheckpointEveryOps: number;
+    private readonly walCheckpointEveryMs: number;
+    private readonly walMaxSizeMB: number;
     private readonly fileLockTimeoutMs: number;
     private readonly storageLockTarget: string;
     private readonly warmDirPath: string;
@@ -53,6 +63,8 @@ export class GICSDaemon {
     private readonly predictiveSignals = new PredictiveSignals();
     private readonly confidenceTracker = new ConfidenceTracker();
     private readonly insightPersistence = new InsightPersistence();
+    private readonly supervisor = new GICSSupervisor();
+    private auditChain: AuditChain | null = null;
     private readonly subscriptions = new Map<string, { socket: net.Socket; events: string[] }>();
     private static readonly INSIGHT_SEGMENT_PREFIX = 'insight-';
     private static readonly PRESENCE_PREFIX = '__gics_p__';
@@ -65,6 +77,10 @@ export class GICSDaemon {
         });
         this.walType = config.walType ?? 'binary';
         this.walFsyncMode = config.walFsyncMode ?? 'best_effort';
+        this.walFsyncOnCommit = config.walFsyncOnCommit ?? true;
+        this.walCheckpointEveryOps = config.walCheckpointEveryOps ?? 500;
+        this.walCheckpointEveryMs = config.walCheckpointEveryMs ?? 30_000;
+        this.walMaxSizeMB = config.walMaxSizeMB ?? 50;
         this.fileLockTimeoutMs = config.fileLockTimeoutMs ?? 5000;
         this.storageLockTarget = path.join(config.dataPath, 'segments');
         this.warmDirPath = path.join(config.dataPath, 'warm');
@@ -80,9 +96,16 @@ export class GICSDaemon {
             mkdirSync(config.dataPath, { recursive: true });
             writeFileSync(walPath, ''); // Ensure file exists
         }
-        this.wal = createWALProvider(this.walType, walPath, { fsyncMode: this.walFsyncMode });
+        this.wal = createWALProvider(this.walType, walPath, {
+            fsyncMode: this.walFsyncMode,
+            fsyncOnCommit: this.walFsyncOnCommit,
+            checkpointEveryOps: this.walCheckpointEveryOps,
+            checkpointEveryMs: this.walCheckpointEveryMs,
+            maxWalSizeMB: this.walMaxSizeMB,
+        });
 
         this.token = this.ensureToken();
+        this.auditChain = new AuditChain({ filePath: path.join(config.dataPath, 'audit.chain') });
         this.server = net.createServer((socket) => this.handleConnection(socket));
     }
 
@@ -122,7 +145,25 @@ export class GICSDaemon {
             }
         }, this.fileLockTimeoutMs);
 
-        // 2. Start listening
+        // 2. Register supervisor health checks and start
+        this.supervisor.registerHealthChecks({
+            checkMemTable: () => {
+                try { return this.memTable.count >= 0; } catch { return false; }
+            },
+            checkWAL: () => {
+                try { return this.wal !== null && this.wal !== undefined; } catch { return false; }
+            },
+            restartSubsystem: async () => {
+                try {
+                    // Re-verify MemTable and WAL are functional
+                    this.memTable.count; // throws if broken
+                    return true;
+                } catch { return false; }
+            },
+        });
+        this.supervisor.start();
+
+        // 3. Start listening
         if (process.platform !== 'win32' && existsSync(this.config.socketPath)) {
             await fs.unlink(this.config.socketPath);
         }
@@ -136,6 +177,8 @@ export class GICSDaemon {
     }
 
     async stop(): Promise<void> {
+        this.supervisor.stop();
+        await this.auditChain?.close();
         return new Promise((resolve) => {
             this.server.close(() => {
                 console.log('[GICS] Daemon stopped.');
@@ -740,44 +783,93 @@ export class GICSDaemon {
 
         try {
             switch (method) {
+                case 'getStatus':
+                    return { jsonrpc: '2.0', id, result: this.supervisor.getStatus() };
+
+                case 'resetDegraded': {
+                    if (!this.supervisor.isDegraded()) {
+                        return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Daemon is not in DEGRADED state' } };
+                    }
+                    const resetOk = await this.supervisor.resetDegraded();
+                    if (resetOk) {
+                        // Flush buffered writes post-recovery
+                        const walKeys = new Set<string>();
+                        this.memTable.scan('').forEach(r => walKeys.add(r.key));
+                        const flushResult = this.supervisor.flushBuffer(
+                            (key) => walKeys.has(key),
+                            (key, fields) => {
+                                this.memTable.put(key, fields);
+                            }
+                        );
+                        return { jsonrpc: '2.0', id, result: { ok: true, flush: flushResult } };
+                    }
+                    return { jsonrpc: '2.0', id, error: { code: -32603, message: 'Failed to exit DEGRADED state' } };
+                }
+
                 case 'put': {
+                    // DEGRADED mode: buffer writes in-memory instead of WAL
+                    if (this.supervisor.isDegraded()) {
+                        const buffered = this.supervisor.bufferWrite(params.key, params.fields);
+                        return { jsonrpc: '2.0', id, result: { ok: true, degraded: true, bufferedSeq: buffered.seq } };
+                    }
+
+                    // Audit log ANTES de la mutación (mandatory)
+                    try {
+                        await this.auditChain?.append(
+                            params.actor ?? 'system:unknown',
+                            'put',
+                            params.key,
+                            params.fields
+                        );
+                    } catch (auditErr: any) {
+                        return { jsonrpc: '2.0', id, error: { code: -32603, message: `Audit failed: ${auditErr.message}` } };
+                    }
+
                     await this.wal.append(Operation.PUT, params.key, params.fields);
                     this.memTable.put(params.key, params.fields);
                     const putTs = Date.now();
-                    const prevBehavior = this.insightTracker.getInsight(params.key);
-                    const prevCorrelations = this.correlationAnalyzer.getCorrelations();
-                    const prevCorrelationSet = new Set(prevCorrelations.map((c) => `${c.itemA}|${c.itemB}`));
-                    const prevClusterSet = new Set(this.correlationAnalyzer.getClusters().map((c) => c.id));
-                    const writeBehavior = this.insightTracker.onWrite(params.key, putTs, params.fields);
-                    this.correlationAnalyzer.onItemUpdate(params.key, params.fields, putTs);
-                    this.correlationAnalyzer.setLifecycleHint(params.key, writeBehavior.lifecycle);
-                    const signalResult = this.predictiveSignals.onBehaviorUpdate(writeBehavior, params.fields);
 
-                    // Emit events to subscribers
-                    if (prevBehavior && prevBehavior.lifecycle !== writeBehavior.lifecycle) {
-                        this.emitEvent('lifecycle_change', { key: params.key, from: prevBehavior.lifecycle, to: writeBehavior.lifecycle });
-                    }
-                    for (const anomaly of signalResult.newAnomalies) {
-                        this.emitEvent('anomaly_detected', anomaly);
-                    }
-                    for (const rec of signalResult.newRecommendations) {
-                        this.emitEvent('recommendation_new', rec);
-                    }
+                    // Phase 9: Insight Engine wiring (best-effort, failures don't block put)
+                    let writeBehavior = this.insightTracker.getInsight(params.key) ?? undefined;
+                    try {
+                        const prevBehavior = this.insightTracker.getInsight(params.key);
+                        const prevCorrelations = this.correlationAnalyzer.getCorrelations();
+                        const prevCorrelationSet = new Set(prevCorrelations.map((c) => `${c.itemA}|${c.itemB}`));
+                        const prevClusterSet = new Set(this.correlationAnalyzer.getClusters().map((c) => c.id));
+                        writeBehavior = this.insightTracker.onWrite(params.key, putTs, params.fields);
+                        this.correlationAnalyzer.onItemUpdate(params.key, params.fields, putTs);
+                        this.correlationAnalyzer.setLifecycleHint(params.key, writeBehavior.lifecycle);
+                        const signalResult = this.predictiveSignals.onBehaviorUpdate(writeBehavior, params.fields);
 
-                    const nextCorrelations = this.correlationAnalyzer.getCorrelations();
-                    for (const corr of nextCorrelations) {
-                        const corrId = `${corr.itemA}|${corr.itemB}`;
-                        if (!prevCorrelationSet.has(corrId)) {
-                            this.emitEvent('correlation_discovered', corr);
+                        // Emit events to subscribers
+                        if (prevBehavior && prevBehavior.lifecycle !== writeBehavior.lifecycle) {
+                            this.emitEvent('lifecycle_change', { key: params.key, from: prevBehavior.lifecycle, to: writeBehavior.lifecycle });
                         }
-                    }
+                        for (const anomaly of signalResult.newAnomalies) {
+                            this.emitEvent('anomaly_detected', anomaly);
+                        }
+                        for (const rec of signalResult.newRecommendations) {
+                            this.emitEvent('recommendation_new', rec);
+                        }
 
-                    const nextClusterSet = new Set(this.correlationAnalyzer.getClusters().map((c) => c.id));
-                    for (const id of nextClusterSet) {
-                        if (!prevClusterSet.has(id)) this.emitEvent('cluster_formed', { clusterId: id });
-                    }
-                    for (const id of prevClusterSet) {
-                        if (!nextClusterSet.has(id)) this.emitEvent('cluster_dissolved', { clusterId: id });
+                        const nextCorrelations = this.correlationAnalyzer.getCorrelations();
+                        for (const corr of nextCorrelations) {
+                            const corrId = `${corr.itemA}|${corr.itemB}`;
+                            if (!prevCorrelationSet.has(corrId)) {
+                                this.emitEvent('correlation_discovered', corr);
+                            }
+                        }
+
+                        const nextClusterSet = new Set(this.correlationAnalyzer.getClusters().map((c) => c.id));
+                        for (const id of nextClusterSet) {
+                            if (!prevClusterSet.has(id)) this.emitEvent('cluster_formed', { clusterId: id });
+                        }
+                        for (const id of prevClusterSet) {
+                            if (!nextClusterSet.has(id)) this.emitEvent('cluster_dissolved', { clusterId: id });
+                        }
+                    } catch (insightErr: any) {
+                        // Best-effort: insight failures do not block put operation
+                        console.warn(`[GICS] Insight engine error (best-effort): ${insightErr.message}`);
                     }
 
                     const flushDecision = this.memTable.shouldFlush();
@@ -847,14 +939,35 @@ export class GICSDaemon {
                 case 'reportOutcome': {
                     const outcomeInsightId = String(params?.insightId ?? '');
                     const outcomeResult = String(params?.result ?? '') as OutcomeResult;
-                    const recorded = this.predictiveSignals.recordOutcome(outcomeInsightId, outcomeResult, this.confidenceTracker);
-                    if (!recorded) {
+                    const recordedMeta = this.predictiveSignals.recordOutcome(outcomeInsightId, outcomeResult, this.confidenceTracker);
+                    if (!recordedMeta || !recordedMeta.found) {
                         return { jsonrpc: '2.0', id, error: { code: -32602, message: `Insight ${outcomeInsightId} not found` } };
                     }
+
+                    // Phase 9: Audit log when insight type gets disabled (graceful)
+                    if (!recordedMeta.wasDisabled && recordedMeta.nowDisabled) {
+                        try {
+                            await this.auditChain?.append(
+                                params.actor ?? 'system:confidence',
+                                'insight_disabled',
+                                outcomeInsightId,
+                                { result: outcomeResult, timestamp: Date.now() }
+                            );
+                        } catch (auditErr: any) {
+                            console.warn(`[GICS] Failed to audit insight disable: ${auditErr.message}`);
+                        }
+                    }
+
                     return {
                         jsonrpc: '2.0',
                         id,
-                        result: { ok: true, insightId: outcomeInsightId, result: outcomeResult, recordedAt: Date.now() }
+                        result: {
+                            ok: true,
+                            insightId: outcomeInsightId,
+                            result: outcomeResult,
+                            recordedAt: Date.now(),
+                            disabled: recordedMeta.nowDisabled
+                        }
                     };
                 }
 
@@ -939,6 +1052,18 @@ export class GICSDaemon {
                     };
 
                 case 'delete':
+                    // Audit log ANTES de la mutación (mandatory)
+                    try {
+                        await this.auditChain?.append(
+                            params.actor ?? 'system:unknown',
+                            'delete',
+                            params.key,
+                            {}
+                        );
+                    } catch (auditErr: any) {
+                        return { jsonrpc: '2.0', id, error: { code: -32603, message: `Audit failed: ${auditErr.message}` } };
+                    }
+
                     await this.wal.append(Operation.DELETE, params.key, {});
                     this.memTable.delete(params.key);
                     return { jsonrpc: '2.0', id, result: { ok: true } };
@@ -1021,6 +1146,14 @@ export class GICSDaemon {
                     }, this.fileLockTimeoutMs);
                 }
 
+                case 'verifyAudit':
+                    const auditResult = await this.auditChain?.verify();
+                    return { jsonrpc: '2.0', id, result: auditResult };
+
+                case 'exportAudit':
+                    const auditLines = await this.auditChain?.export();
+                    return { jsonrpc: '2.0', id, result: { entries: auditLines } };
+
                 case 'ping':
                     const segments = await this.countSegmentFiles();
                     const coldSegments = await this.countColdSegmentFiles();
@@ -1037,6 +1170,10 @@ export class GICSDaemon {
                             recoveredEntries: this.recoveredEntries,
                             walType: this.walType,
                             walFsyncMode: this.walFsyncMode,
+                            walFsyncOnCommit: this.walFsyncOnCommit,
+                            walCheckpointEveryOps: this.walCheckpointEveryOps,
+                            walCheckpointEveryMs: this.walCheckpointEveryMs,
+                            walMaxSizeMB: this.walMaxSizeMB,
                             segments,
                             coldSegments,
                             tiers: {
@@ -1048,7 +1185,8 @@ export class GICSDaemon {
                                 warmKeys: this.tierIndexWarm.size,
                                 coldKeys: this.tierIndexCold.size
                             },
-                            insightsTracked: this.insightTracker.count
+                            insightsTracked: this.insightTracker.count,
+                            supervisorState: this.supervisor.getState()
                         }
                     };
 

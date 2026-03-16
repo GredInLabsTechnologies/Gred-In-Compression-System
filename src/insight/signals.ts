@@ -135,14 +135,14 @@ export class PredictiveSignals {
     }
 
     /**
-     * Record outcome of following/ignoring a recommendation (Phase 4.1).
-     * Returns true if the insightId was found and recorded, false otherwise.
+     * Record outcome of following/ignoring a recommendation (Phase 9).
+     * Returns metadata about the outcome recording, including disability state changes.
      */
-    recordOutcome(insightId: string, result: OutcomeResult, confidenceTracker: ConfidenceTracker): boolean {
+    recordOutcome(insightId: string, result: OutcomeResult, confidenceTracker: ConfidenceTracker): { found: boolean; wasDisabled: boolean; nowDisabled: boolean } | null {
         const recommendation = this.recommendations.get(insightId);
-        if (!recommendation) return false;
-        confidenceTracker.recordOutcome(insightId, result, recommendation);
-        return true;
+        if (!recommendation) return null;
+        const metadata = confidenceTracker.recordOutcome(insightId, result, recommendation);
+        return { found: true, ...metadata };
     }
 
     getForecast(behavior: ItemBehavior, field: string, horizon?: number): TrendForecast | null {

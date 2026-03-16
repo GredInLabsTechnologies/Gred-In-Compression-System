@@ -1,53 +1,1210 @@
-# GICS 1.3.3 — Plan de ejecución por agentes (fuente principal)
+# GICS 1.3.3 — Plan de ejecucion por agentes
 
-> Este archivo queda como **plan canónico** para la preparación/implementación de 1.3.3.
-> Basado en el plan proporcionado por el usuario (2026-03-15).
-
-## Reglas globales (obligatorias)
-
-1. Urgencia de producción: no es ejercicio académico.
-2. Cero vaguedad: ante ambigüedad, parar y preguntar.
-3. Verificación obligatoria post-cambio (relectura línea a línea + tests).
-4. Commits atómicos por fase/cambio.
-5. No romper lo existente: suite actual 100% green.
-6. Control de complejidad: evitar sobre-ingeniería.
-
-## Dependencia documental crítica
-
-- Documento obligatorio previo a cualquier implementación:  
-  `docs/todo/GICS_1.3.3_ARCHITECTURE.md` (rev-2)
-
-## Fases prioritarias (orden obligatorio)
-
-1. **WAL v2**
-   - CRC por entry, header versionado, checkpointing, recovery determinista,
-     auto-compaction, fsyncOnCommit configurable.
-2. **GICSSupervisor**
-   - Auto-restart con backoff, DEGRADED mode, buffer temporal de writes,
-     salida de degradado con intervención manual.
-3. **ResilienceShell**
-   - Circuit breaker, retry con jitter, backpressure, timeouts por operación,
-     errores tipados con metadata.
-4. **AuditChain (Merkle/hash chain)**
-   - Audit log append-only, hash encadenado por mutación, verify/export.
-5. **PromptDistiller**
-   - Retention por capas (Raw/Compressed/Distilled), monitor de disco,
-     emergency purge, preservación de metadata.
-6. **PredictiveSignals + ConfidenceTracker wiring (suggest-only)**
-   - Cableado de recomendaciones y outcomes, TTL, auto-disable por baja accuracy.
-
-## Fases secundarias (tras estabilidad de 1-6)
-
-7. BanditRouter (detrás de feature flag)
-8. Lifecycle actions del InsightTracker
-9. Health endpoint `/health/gics`
-
-## Protocolo global de cierre
-
-- Ejecutar verificación integral: tests, crash-recovery, resiliencia,
-  disk management, pipeline de insights y presupuesto de complejidad.
+> **Este documento es ejecutable.** Cada fase contiene system prompts listos para
+> copiar-pegar a un agente de codigo. Cada agente tiene constraints, entregables,
+> y protocolo de verificacion post-implementacion.
+>
+> **Documento de referencia obligatorio:** `GICS_1_3_3_ARCHITECTURE.MD` (rev-2)
+> Todo agente DEBE leer ese documento antes de escribir una sola linea.
 
 ---
 
-Este plan sustituye cualquier bootstrap genérico.  
-Para 1.3.3, **se sigue este archivo + arquitectura rev-2**.
+## Reglas globales para TODOS los agentes
+
+```
+REGLAS INQUEBRANTABLES — APLICAN A TODA FASE:
+
+1. URGENCIA: Esto va a produccion. No es un ejercicio academico.
+   Cada linea que escribas sera ejecutada por usuarios reales.
+
+2. CERO VAGUEDAD: Si algo no esta claro en la spec, PARA y pregunta.
+   Nunca asumas. Nunca inventes. Nunca rellenes con placeholder.
+
+3. VERIFICACION OBLIGATORIA: Cuando creas que has terminado, NO has terminado.
+   Debes releer CADA archivo modificado linea por linea y verificar:
+   - ¿Compila sin errores?
+   - ¿Los tipos son correctos?
+   - ¿Las invariantes del modulo se mantienen?
+   - ¿Los tests pasan?
+   - ¿He introducido algun silent failure?
+   - ¿Hay algun path donde un error se traga sin loguear?
+
+4. COMMITS ATOMICOS: Cada cambio en un commit separado con tests pasando.
+   Si un commit rompe algo, revierte ANTES de seguir.
+
+5. NO ROMPER LO EXISTENTE: La suite de tests actual (575+) debe seguir
+   100% green tras cada cambio. Sin excepciones.
+
+6. PRESUPUESTO DE COMPLEJIDAD: Si tu implementacion supera 2x las LOC
+   estimadas en la spec, PARA y revisa si estas sobre-ingenierizando.
+
+7. KPI DE COMPRESION: El objetivo integrado de este plan es empujar la
+   compresion nominal hacia ~60x en datasets time-series estructurados.
+   Cualquier cambio debe medirse contra ese objetivo.
+```
+
+---
+
+## Objetivo integrado de compresion y alcance
+
+- Objetivo primario: elevar compresion nominal desde ~44x hacia ~60x en time-series estructuradas.
+- Cuello de botella identificado: floats en `FIXED64_LE` (8 bytes/valor) sin compresion efectiva.
+- Estrategia integrada: introducir `XOR_FLOAT` + `FOR_BITPACK` + CLI standalone, sin romper retrocompatibilidad.
+
+---
+
+## FASE 1 — XOR Float Codec (Gorilla-style)
+
+### System prompt para el agente
+
+```
+ERES UN INGENIERO DE COMPRESION DE SERIES TEMPORALES. Tu tarea es URGENTE y va
+directamente a produccion. Vas a implementar un codec XOR para Float64 estilo
+Gorilla (Facebook 2015) dentro del pipeline core de GICS.
+
+LEE PRIMERO estos archivos (NO escribas nada hasta haberlos leido TODOS):
+- GICS_1_3_3_ARCHITECTURE.MD
+- src/gics/format.ts
+- src/gics/codecs.ts
+- src/gics/encode.ts
+- src/gics/decode.ts
+- tests/gics-float-edge-cases.test.ts
+
+TU TAREA:
+1. Agregar InnerCodecId.XOR_FLOAT = 8 en format.ts
+2. Implementar Codecs.encodeXorFloat(values:number[]) y decodeXorFloat(data,count)
+3. Integrar en processValueBlocks() best-of-2 para chunks float:
+   - candidato A: XOR_FLOAT
+   - candidato B: FIXED64_LE
+   Elegir el menor payload
+4. Mantener fallback robusto a FIXED64_LE para NaN/Infinity/unsafe
+5. Agregar case XOR_FLOAT en dispatchCodec() del decoder
+
+INVARIANTES QUE DEBES MANTENER:
+- Roundtrip bit-a-bit para Float64 finitos
+- Archivos antiguos siguen decodificando sin cambios
+- Si XOR no conviene, FIXED64_LE debe seguir siendo seleccionado
+- 0 cambios en la logica de enteros
+
+CONSTRAINTS:
+- 0 dependencias nuevas
+- ~120 LOC target (max 240)
+- GICS_VERSION_BYTE permanece 0x03
+
+CUANDO CREAS QUE HAS TERMINADO:
+1. Relee cada linea modificada
+2. Verifica compatibilidad retro
+3. Ejecuta tests existentes y nuevos de codec float
+```
+
+### Constraints
+
+| Aspecto | Limite |
+|---------|--------|
+| LOC max | 240 (target 120) |
+| Deps nuevas | 0 |
+| Archivos a modificar | `src/gics/format.ts`, `src/gics/codecs.ts`, `src/gics/encode.ts`, `src/gics/decode.ts` |
+| Archivos a crear | `tests/codec-xor-float.test.ts` |
+| Breaking changes | 0 |
+| Tests existentes | 100% green post-cambio |
+
+### Entregables
+
+| # | Entregable | Criterio de aceptacion |
+|---|-----------|----------------------|
+| 1 | Codec XOR_FLOAT | encode/decode correctos y deterministas |
+| 2 | Integracion en VALUE float path | Seleccion best-of-2 activa |
+| 3 | Compatibilidad retro | v1.3.2 sigue decodificando igual |
+| 4 | Test suite | Roundtrip + casos edge + comparativa tamaño |
+
+### Auditoria post-implementacion
+
+```
+CHECKLIST DE AUDITORIA — XOR_FLOAT:
+
+□ ¿InnerCodecId.XOR_FLOAT=8 agregado?
+□ ¿encodeXorFloat/decodeXorFloat implementados y simetricos?
+□ ¿processValueBlocks elige menor entre XOR y FIXED64?
+□ ¿NaN/Infinity/unsafe mantienen fallback a FIXED64?
+□ ¿dispatchCodec reconoce XOR_FLOAT?
+□ ¿0 dependencias nuevas?
+□ ¿Tests existentes pasan 100%?
+□ ¿Tests nuevos cubren roundtrip + edge cases + tamaño?
+```
+
+---
+
+## FASE 2 — FOR Bitpack Codec (Frame-of-Reference)
+
+### System prompt para el agente
+
+```
+ERES UN INGENIERO DE COMPRESION NUMERICA. Tu tarea es URGENTE y va directamente
+a produccion. Vas a implementar FOR (Frame-of-Reference) para enteros de rango
+estrecho en el stream VALUE.
+
+LEE PRIMERO estos archivos (NO escribas nada hasta haberlos leido TODOS):
+- src/gics/format.ts
+- src/gics/codecs.ts
+- src/gics/encode.ts
+- src/gics/decode.ts
+- src/gics-utils.ts
+
+TU TAREA:
+1. Agregar InnerCodecId.FOR_BITPACK = 9
+2. Implementar Codecs.encodeFOR(values:number[]) y decodeFOR(data,count)
+   - formato: [min:varint][bitwidth:u8][residuos bitpacked]
+3. Integrar FOR_BITPACK como candidato en selectBestCodec() para StreamId.VALUE
+4. Agregar case FOR_BITPACK en dispatchCodec()
+
+INVARIANTES QUE DEBES MANTENER:
+- Roundtrip exacto en enteros positivos/negativos
+- Best-of-N existente decide automaticamente cuando FOR gana
+- No degradar rutas TIME ni streams estructurales
+
+CONSTRAINTS:
+- 0 dependencias nuevas
+- ~60 LOC target (max 180)
+- Reutilizar utilidades existentes (varint/bitpack)
+
+CUANDO CREAS QUE HAS TERMINADO:
+1. Relee cada archivo modificado
+2. Verifica casos con min negativo y rango amplio
+3. Ejecuta tests existentes + nuevos de FOR
+```
+
+### Constraints
+
+| Aspecto | Limite |
+|---------|--------|
+| LOC max | 180 (target 60) |
+| Deps nuevas | 0 |
+| Archivos a modificar | `src/gics/format.ts`, `src/gics/codecs.ts`, `src/gics/encode.ts`, `src/gics/decode.ts` |
+| Archivos a crear | `tests/codec-for.test.ts` |
+| Breaking changes | 0 |
+| Tests existentes | 100% green post-cambio |
+
+### Entregables
+
+| # | Entregable | Criterio de aceptacion |
+|---|-----------|----------------------|
+| 1 | Codec FOR_BITPACK | encode/decode correctos |
+| 2 | Integracion en selectBestCodec | FOR aparece como candidato VALUE |
+| 3 | Compatibilidad retro | decode de archivos previos intacto |
+| 4 | Test suite FOR | roundtrip + comparativa de tamaño |
+
+### Auditoria post-implementacion
+
+```
+CHECKLIST DE AUDITORIA — FOR_BITPACK:
+
+□ ¿InnerCodecId.FOR_BITPACK=9 agregado?
+□ ¿encodeFOR/decodeFOR implementados?
+□ ¿Formato [min varint][bitwidth][payload] validado?
+□ ¿selectBestCodec incluye FOR para VALUE?
+□ ¿dispatchCodec reconoce FOR_BITPACK?
+□ ¿Casos negativos/rango amplio cubiertos?
+□ ¿0 dependencias nuevas?
+□ ¿Tests existentes pasan 100%?
+```
+
+---
+
+## FASE 3 — Tests de codecs (gate obligatorio)
+
+### System prompt para el agente
+
+```
+ERES UN INGENIERO DE QA DE COMPRESION. Tu tarea es URGENTE y va directamente
+a produccion. Vas a cerrar el gate de calidad de los codecs nuevos (XOR/FOR)
+antes de continuar con fases de daemon.
+
+LEE PRIMERO:
+- tests existentes de GICS
+- src/gics/codecs.ts
+- src/gics/encode.ts
+- src/gics/decode.ts
+
+TU TAREA:
+1. Crear tests para XOR_FLOAT:
+   - constantes
+   - tendencia lineal
+   - volatiles/random
+   - NaN/Infinity fallback
+   - tamaño XOR < FIXED64 en datos favorables
+2. Crear tests para FOR_BITPACK:
+   - rango estrecho
+   - rango amplio
+   - negativos
+   - tamaño FOR competitivo
+3. Asegurar estabilidad de seleccion de codec y roundtrip completo
+4. Definir tests de CLI como gate de FASE 10 (no bloquear FASE 3 por ausencia de CLI)
+
+INVARIANTES:
+- Tests deben ser deterministas
+- No flakiness
+- No relajar aserciones existentes
+
+CONSTRAINTS:
+- 0 dependencias nuevas
+- Agregar solo tests
+```
+
+### Constraints
+
+| Aspecto | Limite |
+|---------|--------|
+| Deps nuevas | 0 |
+| Archivos a crear | `tests/codec-xor-float.test.ts`, `tests/codec-for.test.ts` |
+| Breaking changes | 0 |
+| Gate | `npm test` completo en verde |
+| Nota | `tests/cli.test.ts` se implementa en FASE 10 junto con el binario |
+
+### Entregables
+
+| # | Entregable | Criterio de aceptacion |
+|---|-----------|----------------------|
+| 1 | Suite XOR | Cobertura de 5 escenarios |
+| 2 | Suite FOR | Cobertura de 4 escenarios |
+| 3 | Gate de regresion | Test suite existente sigue 100% green |
+
+### Auditoria post-implementacion
+
+```
+CHECKLIST DE AUDITORIA — TESTS CODECS:
+
+□ ¿Tests XOR creados y estables?
+□ ¿Tests FOR creados y estables?
+□ ¿Se verifico roundtrip completo encode/decode?
+□ ¿Se verifico comparativa de tamaño en datasets favorables?
+□ ¿Suite existente permanece green?
+```
+
+---
+
+## FASE 4 — WAL v2 (CRC + Checkpointing + Recovery determinista)
+
+### System prompt para el agente
+
+```
+ERES UN INGENIERO DE SISTEMAS DE ALMACENAMIENTO. Tu tarea es URGENTE y va
+directamente a produccion. Vas a implementar WAL v2 para el daemon GICS.
+
+LEE PRIMERO estos archivos (NO escribas nada hasta haberlos leido TODOS):
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 4.1 (WAL v2 invariantes)
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 5.1 (migracion WAL v1→v2)
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 3 (durability guarantees)
+- src/daemon/wal.ts — WAL actual
+- src/daemon/memtable.ts — MemTable actual
+- src/daemon/index.ts — Daemon entry point
+
+TU TAREA:
+Modificar el WAL existente para anadir:
+1. CRC32 por cada entry (verificable independientemente)
+2. Header con magic bytes + version number para compat con WAL v1
+3. Checkpointing: cada 500 ops o 30s, snapshot del MemTable state con SHA-256
+4. Recovery determinista: desde ultimo checkpoint valido + replay
+5. Auto-compaction: WAL no crece mas de maxWalSizeMB (default 50MB)
+6. fsyncOnCommit configurable (default true)
+
+INVARIANTES QUE DEBES MANTENER:
+- lsn(entry_N+1) > lsn(entry_N) SIEMPRE
+- Recovery desde checkpoint + replay = estado identico al pre-crash
+- CRC invalido en recovery → skip entry + warning, NO crash
+- Checkpoint corrupto → buscar anterior, si ninguno → replay completo
+- Write que falla → no se asigna LSN, estado no cambia
+
+CONSTRAINTS:
+- 0 dependencias nuevas. CRC32 y SHA-256 deben usar crypto nativo de Node.js
+- ~200 LOC max. Si superas 400, estas sobre-ingenierizando
+- Compatible con WAL v1: WAL v2 reader DEBE poder leer entries v1
+- NO tocar MemTable. Solo WAL.
+- NO cambiar la API publica del daemon (put/get/scan/delete siguen igual)
+
+CUANDO CREAS QUE HAS TERMINADO:
+1. Relee CADA archivo que modificaste, linea por linea
+2. Verifica que TODOS los tipos TypeScript son correctos
+3. Verifica que las invariantes de arriba se cumplen en CADA path
+4. Verifica que no hay ningun catch vacio o error silenciado
+5. Ejecuta los tests existentes: deben pasar 100%
+6. Escribe tests nuevos para:
+   a. 100 write+crash+recovery cycles → 0 data loss post-fsync
+   b. WAL v1 format → leido correctamente por v2 reader
+   c. CRC corruption detected → entry skipped, recovery continua
+   d. Checkpoint corrupto → fallback a checkpoint anterior
+   e. WAL > maxSize → auto-compact tras checkpoint
+```
+
+### Constraints
+
+| Aspecto | Limite |
+|---------|--------|
+| LOC max | 400 (target 200) |
+| Deps nuevas | 0 |
+| Archivos a modificar | `src/daemon/wal.ts` |
+| Archivos a crear | `tests/daemon-wal-v2.test.ts` |
+| Breaking changes | 0 — WAL v1 entries deben ser leibles |
+| Tests existentes | 100% green post-cambio |
+
+### Entregables
+
+| # | Entregable | Criterio de aceptacion |
+|---|-----------|----------------------|
+| 1 | WAL v2 con CRC + checkpoint + recovery | `npm test` pasa. Invariantes verificadas |
+| 2 | Migracion transparente v1→v2 | WAL v1 existente se lee sin error en primer boot v2 |
+| 3 | Test suite WAL v2 | Min 5 tests cubriendo: crash recovery, CRC detection, checkpoint fallback, auto-compact, v1 compat |
+| 4 | Informe de verificacion | El agente lista CADA archivo modificado + que verifico linea por linea |
+
+### Auditoria post-implementacion
+
+```
+CHECKLIST DE AUDITORIA — WAL v2:
+
+□ ¿Cada WAL entry tiene CRC32 calculado correctamente?
+□ ¿El header tiene magic bytes + version para distinguir v1 de v2?
+□ ¿Los checkpoints se crean cada 500 ops O cada 30s (lo que pase primero)?
+□ ¿El checkpoint incluye SHA-256 del MemTable state?
+□ ¿Recovery encuentra ultimo checkpoint valido y replays desde ahi?
+□ ¿CRC invalido en recovery → skip + warning (no crash)?
+□ ¿Checkpoint corrupto → busca anterior valido?
+□ ¿Si ningun checkpoint valido → replay completo desde inicio?
+□ ¿WAL auto-compacta cuando supera maxWalSizeMB?
+□ ¿fsyncOnCommit=true por defecto?
+□ ¿0 dependencias nuevas anadidas?
+□ ¿Tests existentes pasan 100%?
+□ ¿Tests nuevos cubren los 5 escenarios requeridos?
+□ ¿Ningun catch vacio o error silenciado en todo el codigo nuevo?
+□ ¿LSN siempre monotonicamente creciente?
+```
+
+---
+
+## FASE 5 — GICSSupervisor (Auto-restart + DEGRADED mode)
+
+### System prompt para el agente
+
+```
+ERES UN INGENIERO DE FIABILIDAD DE SISTEMAS. Tu tarea es URGENTE y va
+directamente a produccion. Vas a implementar el GICSSupervisor — un modulo
+TypeScript que gestiona el ciclo de vida del daemon GICS con restart automatico.
+
+GICS es un motor agnostico: no sabe ni le importa quien lo consume.
+El supervisor es parte del propio daemon, no de ningun cliente externo.
+
+LEE PRIMERO estos archivos (NO escribas nada hasta haberlos leido TODOS):
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 4.3 (GICSSupervisor invariantes)
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 3 (durability guarantees, especialmente DEGRADED mode)
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 8 (escenario: fallback degradado)
+- src/daemon/server.ts — Server actual (JSON-RPC, IPC)
+- src/daemon/index.ts — Daemon entry point
+
+TU TAREA:
+Crear un modulo supervisor dentro del daemon GICS:
+1. Health check interno cada 10 segundos (MemTable accessible, WAL writable)
+2. Auto-restart con exponential backoff (1s, 2s, 4s, 8s, 16s) si subsistema falla
+3. DEGRADED mode: si 5 restarts fallan en 5 minutos → modo degradado
+4. En DEGRADED: buffer in-memory para writes, reads del ultimo snapshot
+5. En DEGRADED: emitir señal via JSON-RPC method "getStatus" para que cualquier
+   cliente sepa que GICS esta degradado
+6. Salir de DEGRADED solo con intervencion manual (JSON-RPC method "resetDegraded")
+7. Logging de TODAS las transiciones de estado con timestamp
+
+INVARIANTES QUE DEBES MANTENER:
+- States: STARTING → HEALTHY → (subsystem fails) → RESTARTING → HEALTHY
+                                                   → (5 fails) → DEGRADED → (manual) → STARTING
+- Supervisor NUNCA crashea el daemon completo — peor caso es DEGRADED
+- En DEGRADED, writes van a buffer temporal con sequence IDs monotonicos
+- Flush post-recovery usa idempotency keys (at-least-once)
+- Si conflicto (key en buffer Y en WAL): WAL wins, buffer write descartado + logueado
+
+CONSTRAINTS:
+- 0 dependencias nuevas
+- ~100 LOC max para el supervisor. Si superas 200, estas sobre-ingenierizando
+- Nuevo archivo: src/daemon/supervisor.ts
+- Integrar en src/daemon/index.ts (minimal wiring)
+- Exponer estado via JSON-RPC: "getStatus" y "resetDegraded"
+
+CUANDO CREAS QUE HAS TERMINADO:
+1. Relee CADA linea del supervisor
+2. Verifica que TODAS las transiciones de estado estan logueadas
+3. Verifica que DEGRADED mode cumple las restricciones de arriba
+4. Verifica que el flush post-recovery usa idempotency keys
+5. Verifica que no hay ningun path donde el supervisor crashee el daemon
+6. Ejecuta tests existentes: 100% green
+7. Escribe tests nuevos para:
+   a. Subsistema falla → restart automatico en <2s
+   b. 5 failures en 5min → DEGRADED mode activado
+   c. En DEGRADED: reads funcionan, writes se bufferizan
+   d. Post-recovery: buffer se flushea, conflictos resueltos (WAL wins)
+   e. resetDegraded() → vuelve a STARTING → HEALTHY
+```
+
+### Constraints
+
+| Aspecto | Limite |
+|---------|--------|
+| LOC max | 200 (target 100) |
+| Deps nuevas | 0 |
+| Archivos a crear | `src/daemon/supervisor.ts` |
+| Archivos a modificar | `src/daemon/index.ts` (wiring minimal) |
+| Archivos de test | `tests/daemon-supervisor.test.ts` |
+| Breaking changes | 0 — API JSON-RPC existente no cambia, solo se anaden metodos |
+| Tests existentes | 100% green post-cambio |
+
+### Entregables
+
+| # | Entregable | Criterio de aceptacion |
+|---|-----------|----------------------|
+| 1 | Supervisor con auto-restart + DEGRADED | State machine funcional, logging completo |
+| 2 | Fallback degradado limitado | Reads OK, writes buffered, estado visible via JSON-RPC |
+| 3 | Flush post-recovery | Idempotency keys, WAL wins en conflictos |
+| 4 | Test suite supervisor | Min 5 tests cubriendo los escenarios requeridos |
+| 5 | Informe de verificacion | Cada archivo modificado + que se verifico |
+
+### Auditoria post-implementacion
+
+```
+CHECKLIST DE AUDITORIA — GICSSupervisor:
+
+□ ¿Health check corre cada 10s?
+□ ¿Auto-restart con backoff exponencial (1s, 2s, 4s, 8s, 16s)?
+□ ¿5 restarts en 5 min → DEGRADED?
+□ ¿DEGRADED logueado con timestamp + alerta critica?
+□ ¿En DEGRADED: reads sirven ultimo snapshot?
+□ ¿En DEGRADED: writes van a buffer con sequence IDs?
+□ ¿getStatus() expone el estado actual del daemon via JSON-RPC?
+□ ¿resetDegraded() transiciona a STARTING correctamente?
+□ ¿Flush post-recovery usa idempotency keys?
+□ ¿Conflicto buffer vs WAL → WAL wins + log?
+□ ¿Supervisor NUNCA crashea el daemon en ningun path?
+□ ¿Todos los state transitions logueados?
+□ ¿0 dependencias nuevas?
+□ ¿Tests existentes pasan 100%?
+□ ¿Tests nuevos cubren 5 escenarios?
+```
+
+---
+
+## FASE 6 — ResilienceShell (Circuit Breaker + Retry + Backpressure)
+
+### System prompt para el agente
+
+```
+ERES UN INGENIERO DE RESILIENCIA DE SISTEMAS. Tu tarea es URGENTE y va
+directamente a produccion. Vas a implementar el ResilienceShell — un modulo
+TypeScript que envuelve la capa de ingest del daemon GICS con circuit breaker,
+retry y backpressure.
+
+GICS es agnostico: el ResilienceShell protege al daemon internamente.
+Cualquier cliente (Python, Go, JS) se beneficia sin saber los internals.
+
+LEE PRIMERO estos archivos (NO escribas nada hasta haberlos leido TODOS):
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 4.2 (ResilienceShell invariantes)
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 8 (escenario: daemon crash mid-write)
+- src/daemon/server.ts — Server que procesa comandos JSON-RPC
+
+TU TAREA:
+Implementar ResilienceShell como modulo TypeScript en el daemon:
+1. Circuit Breaker interno: CLOSED → OPEN (5 failures in 60s) → HALF-OPEN (30s) → CLOSED/OPEN
+2. Retry interno con exponential backoff + jitter (factor 0.3) para ops contra WAL/MemTable
+3. Backpressure: highWaterMark=1000 pending writes → rechazar nuevos writes con error tipado
+4. Timeouts por tipo: read=2s, write=5s, scan=10s
+5. Errores tipados en respuesta JSON-RPC: GICSUnavailable, GICSTimeout, GICSCircuitOpen
+6. Metadata en cada error: {attempts, lastError, circuitState, queueDepth}
+
+INVARIANTES QUE DEBES MANTENER:
+- En OPEN: TODAS las calls fallan inmediato con GICSCircuitOpen (NO timeout)
+- Retry NUNCA ocurre si circuit esta OPEN
+- Backpressure: NUNCA pierde writes silenciosamente — siempre responde con error explicito
+- Errores SIEMPRE llevan metadata completa
+- La API JSON-RPC (put/get/scan) NO cambia — el ResilienceShell es transparente
+
+CONSTRAINTS:
+- 0 dependencias nuevas
+- ~150 LOC max. Si superas 300, estas sobre-ingenierizando
+- Nuevo archivo: src/daemon/resilience.ts
+- Integrar en src/daemon/server.ts como middleware/wrapper
+- Estado del circuit breaker visible via "getStatus" JSON-RPC (integrar con Fase 2)
+
+CUANDO CREAS QUE HAS TERMINADO:
+1. Relee CADA linea del ResilienceShell
+2. Verifica que circuit breaker tiene EXACTAMENTE 3 states con transiciones correctas
+3. Verifica que jitter se aplica al retry delay (no fixed backoff)
+4. Verifica que en OPEN state no hay timeout wait (fail-fast inmediato)
+5. Verifica que backpressure responde con error explicito, nunca silencioso
+6. Tests existentes: 100% green
+7. Tests nuevos para:
+   a. 5 failures in 60s → circuit OPEN → calls fail-fast
+   b. After 30s cooldown → HALF-OPEN → 3 probes → CLOSED
+   c. Retry con jitter: delays no son identicos en multiples retries
+   d. Backpressure: >1000 pending → caller recibe error con queueDepth
+   e. Error metadata siempre presente con {attempts, circuitState}
+```
+
+### Constraints
+
+| Aspecto | Limite |
+|---------|--------|
+| LOC max | 300 (target 150) |
+| Deps nuevas | 0 |
+| Archivos a crear | `src/daemon/resilience.ts` |
+| Archivos a modificar | `src/daemon/server.ts` (integrar como middleware) |
+| Archivos de test | `tests/daemon-resilience.test.ts` |
+| Breaking changes | 0 — API JSON-RPC de put/get/scan no cambia |
+| Tests existentes | 100% green post-cambio |
+
+### Entregables
+
+| # | Entregable | Criterio de aceptacion |
+|---|-----------|----------------------|
+| 1 | ResilienceShell completo | Circuit breaker + retry + backpressure funcionales |
+| 2 | Errores tipados | GICSUnavailable, GICSTimeout, GICSCircuitOpen con metadata |
+| 3 | Integracion transparente | put/get/scan siguen funcionando sin cambio en la API |
+| 4 | Test suite | Min 5 tests cubriendo los escenarios requeridos |
+| 5 | Informe de verificacion | Cada archivo modificado + que se verifico |
+
+### Auditoria post-implementacion
+
+```
+CHECKLIST DE AUDITORIA — ResilienceShell:
+
+□ ¿Circuit breaker tiene 3 states: CLOSED, OPEN, HALF_OPEN?
+□ ¿5 failures en 60s → OPEN?
+□ ¿En OPEN: fail-fast inmediato, sin timeout wait?
+□ ¿30s cooldown → HALF_OPEN → max 3 probes?
+□ ¿Probes OK → CLOSED? ¿Probes fail → OPEN?
+□ ¿Retry usa exponential backoff CON jitter (factor 0.3)?
+□ ¿Retry NUNCA ocurre si circuit OPEN?
+□ ¿Backpressure: highWaterMark=1000, lowWaterMark=200?
+□ ¿Backpressure NUNCA pierde writes sin responder error?
+□ ¿Timeouts diferenciados: read=2s, write=5s, scan=10s?
+□ ¿Errores tipados con metadata: {attempts, lastError, circuitState, queueDepth}?
+□ ¿put/get/scan API JSON-RPC no cambia?
+□ ¿0 dependencias nuevas?
+□ ¿Tests existentes pasan 100%?
+```
+
+---
+
+## FASE 7 — AuditChain (Merkle Hash Chain)
+
+### System prompt para el agente
+
+```
+ERES UN INGENIERO DE SEGURIDAD Y COMPLIANCE. Tu tarea es URGENTE y va
+directamente a produccion. Vas a implementar el AuditChain — un log
+append-only con Merkle hash chain que registra TODA mutacion en GICS.
+
+LEE PRIMERO estos archivos (NO escribas nada hasta haberlos leido TODOS):
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 4.4 (AuditChain invariantes)
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 5.2 (migracion AuditChain)
+- src/daemon/index.ts — Daemon entry point (donde hookear put/delete)
+- src/daemon/server.ts — Server que procesa comandos JSON-RPC
+
+TU TAREA:
+Implementar un modulo AuditChain en el daemon GICS (TypeScript):
+1. Cada put() y delete() genera automaticamente un AuditEntry
+2. AuditEntry: {sequence, timestamp, actor, action, target, payload, prevHash, hash}
+3. hash = SHA-256(sequence + timestamp + actor + action + target + payload + prevHash)
+4. Archivo append-only: audit.chain (JSON lines, una entry por linea)
+5. Merkle checkpoint cada 1000 entries: merkle root del batch
+6. Metodo verify(): recorre la chain y verifica integridad de CADA hash
+7. Metodo export(): exporta el audit log como JSON lines para compliance tools
+
+INVARIANTES QUE DEBES MANTENER:
+- APPEND-ONLY: nunca modificar ni borrar una entry existente
+- sequence monotonicamente creciente, SIN gaps
+- Si no se puede escribir audit entry → la operacion original TAMBIEN falla
+  (audit es mandatory, no optional)
+- Tamper-evident: modificar 1 byte de cualquier entry invalida toda la cadena posterior
+- Merkle checkpoint cada 1000 entries con root hash del batch
+
+CONSTRAINTS:
+- 0 dependencias nuevas. SHA-256 via crypto nativo de Node.js
+- ~200 LOC max. Si superas 400, estas sobre-ingenierizando
+- El actor viene como parametro opcional en el JSON-RPC command
+  (si no viene, usar "system:unknown")
+- El payload es el JSON de fields (o su SHA-256 si es muy grande, >1KB)
+- La chain NO se carga en memoria completa — se lee en streaming para verify
+- El audit file vive en el mismo directorio de datos que el WAL
+
+CUANDO CREAS QUE HAS TERMINADO:
+1. Relee CADA linea del AuditChain
+2. Verifica que SHA-256 se calcula con EXACTAMENTE los campos especificados
+3. Verifica que la chain es append-only (no hay write que modifique entries anteriores)
+4. Verifica que si audit write falla, la operacion original tambien falla
+5. Verifica que verify() detecta CUALQUIER tampering (cambiar 1 byte en cualquier field)
+6. Tests existentes: 100% green
+7. Tests nuevos para:
+   a. 10K entries → chain integridad verificada al 100%
+   b. Tamper 1 entry → verify() detecta corruption
+   c. Tamper payload → verify() detecta corruption
+   d. Audit write fails → original put() tambien falla
+   e. Merkle checkpoint cada 1000 entries con root hash correcto
+   f. export() genera JSON lines valido y parseable
+```
+
+### Constraints
+
+| Aspecto | Limite |
+|---------|--------|
+| LOC max | 400 (target 200) |
+| Deps nuevas | 0 |
+| Archivos a crear | `src/daemon/audit-chain.ts` |
+| Archivos a modificar | `src/daemon/index.ts` (hookear put/delete) |
+| Archivos de test | `tests/daemon-audit-chain.test.ts` |
+| Breaking changes | 0 — put/get/scan API no cambia |
+| Tests existentes | 100% green post-cambio |
+
+### Entregables
+
+| # | Entregable | Criterio de aceptacion |
+|---|-----------|----------------------|
+| 1 | AuditChain con Merkle hash chain | Append-only, SHA-256 encadenado, audit.chain file |
+| 2 | Hook en daemon | Cada put/delete genera AuditEntry automaticamente |
+| 3 | verify() | Detecta cualquier tampering con 100% precision |
+| 4 | export() | JSON lines valido para compliance |
+| 5 | Test suite | Min 6 tests cubriendo los escenarios requeridos |
+| 6 | Informe de verificacion | Cada archivo + verificacion linea por linea |
+
+### Auditoria post-implementacion
+
+```
+CHECKLIST DE AUDITORIA — AuditChain:
+
+□ ¿Cada put() y delete() genera AuditEntry automaticamente?
+□ ¿hash = SHA-256(sequence+timestamp+actor+action+target+payload+prevHash)?
+□ ¿Archivo es append-only (no hay seek ni overwrite)?
+□ ¿sequence monotonicamente creciente sin gaps?
+□ ¿Si audit write falla → operacion original falla?
+□ ¿Merkle checkpoint cada 1000 entries?
+□ ¿verify() detecta tampering de 1 byte en cualquier field?
+□ ¿export() genera JSON lines parseable?
+□ ¿Payload > 1KB → se guarda SHA-256 en vez de JSON completo?
+□ ¿Chain no se carga entera en memoria (streaming)?
+□ ¿0 dependencias nuevas?
+□ ¿Tests existentes pasan 100%?
+□ ¿Tests nuevos cubren 6 escenarios?
+```
+
+---
+
+## FASE 8 — PromptDistiller basico (Retention + ZSTD)
+
+### System prompt para el agente
+
+```
+ERES UN INGENIERO DE DATOS Y ALMACENAMIENTO. Tu tarea es URGENTE y va
+directamente a produccion. Vas a implementar el PromptDistiller que comprime
+y limpia datos volatiles (prompts, traces, logs) con retention policy automatica.
+
+LEE PRIMERO estos archivos (NO escribas nada hasta haberlos leido TODOS):
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 4.5 (PromptDistiller invariantes)
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 5.3 (migracion PromptDistiller)
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 8 (escenario: disco lleno)
+- src/daemon/memtable.ts — MemTable actual
+- src/daemon/index.ts — Daemon entry point
+
+TU TAREA:
+Implementar PromptDistiller en el daemon GICS:
+1. Retention policy: Raw (0-7 dias) → Compressed (7-30 dias) → Distilled (30+)
+2. Compresion: ZSTD para capa Compressed (usar zstd-napi o zlib nativo como fallback)
+3. Distillation: extraer solo metadata semantica de records antiguos
+4. Disk usage monitor: check cada 5 minutos
+5. Emergency purge: si disco > 90% del maxDiskUsageMB
+6. Cada purge registrada en AuditChain (si disponible, graceful si no)
+
+INVARIANTES QUE DEBES MANTENER:
+- Transicion entre capas NUNCA pierde metadata (tokenCount, model, success, cost)
+- Raw→Compressed es REVERSIBLE (decompress = original)
+- Compressed→Distilled es IRREVERSIBLE (documentado y aceptado)
+- Si compresion falla → datos permanecen en capa anterior (no se pierden)
+- Si disco lleno durante compresion → modo READ-ONLY
+- Emergency purge: Raw>3d → Compressed>15d → Aggregate distilled weekly
+- Disk check cada 5 minutos
+
+DISTILLED RECORD (lo que queda de cada prompt tras 30 dias):
+{
+  originalKey: string,
+  timestamp: number,
+  contentHash: string (SHA-256 del contenido original),
+  tokenCount: number,
+  modelUsed: string,
+  taskType: string,
+  success: boolean,
+  latencyMs: number,
+  costUsd: number
+}
+Esto ocupa ~200 bytes vs ~5KB del prompt original = 25x reduccion.
+
+CONSTRAINTS:
+- 1 dependencia nueva permitida: zstd-napi. Si no es viable, usar zlib nativo
+  (gzip) como fallback con nota de que ZSTD es preferible
+- ~300 LOC max. Si superas 600, estas sobre-ingenierizando
+- El distiller corre como background task en el daemon (no bloquea put/get)
+- Datos existentes: primera ejecucion escanea y clasifica por edad
+- La primera compresion historica puede ser lenta — hacerla con rate limiter
+  (max N records por segundo para no bloquear el daemon)
+
+CUANDO CREAS QUE HAS TERMINADO:
+1. Relee CADA linea del PromptDistiller
+2. Verifica que la metadata se preserva en CADA transicion de capa
+3. Verifica que Compressed→Distilled es realmente irreversible
+4. Verifica que emergency purge funciona en el orden correcto
+5. Verifica que disk check corre cada 5 min (no mas frecuente, no menos)
+6. Tests existentes: 100% green
+7. Tests nuevos para:
+   a. 30 dias simulados → disk usage < 10% del raw original
+   b. Metadata preservada en cada transicion de capa
+   c. Emergency purge libera > 50% en < 10s
+   d. Compresion falla → datos quedan en capa anterior
+   e. Disco lleno → READ-ONLY mode activado
+   f. Primera ejecucion: datos historicos clasificados correctamente
+```
+
+### Constraints
+
+| Aspecto | Limite |
+|---------|--------|
+| LOC max | 600 (target 300) |
+| Deps nuevas | 1 (zstd-napi o zlib nativo fallback) |
+| Archivos a crear | `src/daemon/prompt-distiller.ts` |
+| Archivos a modificar | `src/daemon/index.ts` (iniciar distiller como bg task) |
+| Archivos de test | `tests/daemon-prompt-distiller.test.ts` |
+| Breaking changes | 0 |
+| Tests existentes | 100% green post-cambio |
+
+### Entregables
+
+| # | Entregable | Criterio de aceptacion |
+|---|-----------|----------------------|
+| 1 | PromptDistiller con 3 capas | Raw → Compressed → Distilled funcionando |
+| 2 | Retention policy automatica | Transiciones por edad correctas |
+| 3 | Emergency purge | Funciona en orden correcto, libera >50% |
+| 4 | Disk monitor | Check cada 5 min, READ-ONLY si lleno |
+| 5 | Test suite | Min 6 tests cubriendo escenarios |
+| 6 | Informe de verificacion | Cada archivo + verificacion |
+
+### Auditoria post-implementacion
+
+```
+CHECKLIST DE AUDITORIA — PromptDistiller:
+
+□ ¿3 capas implementadas: Raw, Compressed, Distilled?
+□ ¿Raw retention = 7 dias por defecto?
+□ ¿Compressed retention = 30 dias por defecto?
+□ ¿Compresion usa ZSTD (o zlib como fallback documentado)?
+□ ¿Metadata preservada en CADA transicion?
+□ ¿Raw→Compressed es reversible?
+□ ¿Compressed→Distilled es irreversible y documentado?
+□ ¿Distilled record tiene: contentHash, tokenCount, model, taskType, success, latency, cost?
+□ ¿Emergency purge: Raw>3d → Compressed>15d → Aggregate distilled?
+□ ¿Disk check cada 5 min?
+□ ¿Disco > 90% → emergency purge?
+□ ¿Disco lleno → READ-ONLY mode?
+□ ¿Compresion falla → datos en capa anterior (no perdidos)?
+□ ¿Background task con rate limiter?
+□ ¿Tests existentes pasan 100%?
+```
+
+---
+
+## FASE 9 — PredictiveSignals + ConfidenceTracker wiring (suggest-only)
+
+### System prompt para el agente
+
+```
+ERES UN INGENIERO DE INTELIGENCIA OPERACIONAL. Tu tarea es URGENTE y va
+directamente a produccion. Vas a conectar el Insight Engine existente de GICS
+para que las recomendaciones sean accesibles via JSON-RPC en modo suggest-only.
+
+GICS es agnostico: expone recomendaciones via JSON-RPC. Cualquier cliente
+puede consultarlas y reportar outcomes. GICS no sabe quien consume.
+
+LEE PRIMERO estos archivos (NO escribas nada hasta haberlos leido TODOS):
+- GICS_1_3_3_ARCHITECTURE.MD — Seccion 4.6 (PredictiveSignals wiring invariantes)
+- src/insight/tracker.ts — InsightTracker API
+- src/insight/signals.ts — PredictiveSignals API
+- src/insight/confidence.ts — ConfidenceTracker API
+- src/daemon/index.ts — Daemon (donde hookear onWrite/onRead)
+- src/daemon/server.ts — Server JSON-RPC (donde exponer nuevos metodos)
+
+TU TAREA:
+Conectar el pipeline de insight que ya existe pero no esta cableado:
+
+1. Cada put() llama InsightTracker.onWrite(key, timestamp, fields)
+2. Cada get() llama InsightTracker.onRead(key, timestamp)
+3. Tras onWrite, si PredictiveSignals.onBehaviorUpdate() genera recomendaciones:
+   → guardarlas en un buffer de recomendaciones activas
+4. Exponer nuevo metodo JSON-RPC: "getRecommendations" → devuelve recomendaciones activas
+5. Exponer nuevo metodo JSON-RPC: "recordOutcome" → registra en ConfidenceTracker
+
+MODO SUGGEST-ONLY:
+- Las recomendaciones se EMITEN y se pueden CONSULTAR via JSON-RPC
+- NUNCA se auto-ejecutan. El cliente decide si seguirlas
+- Auto-act NO se implementa. Punto.
+
+INVARIANTES QUE DEBES MANTENER:
+- Si InsightTracker.onWrite falla → put() original NO falla (insight es best-effort)
+- Cada recomendacion tiene TTL de 24h, auto-expira
+- Si accuracy de un tipo < 50% tras 20+ outcomes → tipo desactivado automaticamente
+- Recomendaciones desactivadas logueadas en AuditChain (si disponible)
+
+CONSTRAINTS:
+- 0 dependencias nuevas
+- ~150 LOC max. Si superas 300, estas sobre-ingenierizando
+- NO modificar InsightTracker, PredictiveSignals, ni ConfidenceTracker
+  (son el engine existente, solo cablear)
+- NO implementar auto-act. Si alguien lo pide, responder "aplazado por riesgo
+  de feedback loops, ver GICS_1_3_3_ARCHITECTURE.MD seccion 4.6"
+
+CUANDO CREAS QUE HAS TERMINADO:
+1. Relee CADA linea modificada en daemon
+2. Verifica que onWrite/onRead NO bloquean ni crashean put/get
+3. Verifica que recomendaciones tienen TTL y se auto-expiran
+4. Verifica que auto-disable funciona tras 20+ outcomes con accuracy < 50%
+5. Tests existentes: 100% green
+6. Tests nuevos para:
+   a. Degradacion simulada → recomendacion emitida en <5s
+   b. Accuracy tracking: seguir recomendacion exitosa → accuracy sube
+   c. Accuracy < 50% tras 20 outcomes → tipo desactivado
+   d. onWrite falla → put() original sigue OK (best-effort)
+   e. TTL 24h → recomendacion expirada no aparece en getRecommendations
+```
+
+### Constraints
+
+| Aspecto | Limite |
+|---------|--------|
+| LOC max | 300 (target 150) |
+| Deps nuevas | 0 |
+| Archivos a modificar | `src/daemon/index.ts`, `src/daemon/server.ts` |
+| Archivos de test | `tests/daemon-insight-wiring.test.ts` |
+| Breaking changes | 0 — solo se anaden metodos JSON-RPC nuevos |
+| Tests existentes | 100% green post-cambio |
+
+### Entregables
+
+| # | Entregable | Criterio de aceptacion |
+|---|-----------|----------------------|
+| 1 | InsightTracker hookeado a put/get | onWrite/onRead llamados automaticamente |
+| 2 | PredictiveSignals → buffer de recomendaciones | Recomendaciones accesibles via JSON-RPC |
+| 3 | getRecommendations + recordOutcome | Metodos JSON-RPC funcionales end-to-end |
+| 4 | Auto-disable por accuracy | < 50% tras 20 outcomes → tipo desactivado |
+| 5 | Test suite | Min 5 tests cubriendo escenarios |
+| 6 | Informe de verificacion | Cada archivo + verificacion |
+
+### Auditoria post-implementacion
+
+```
+CHECKLIST DE AUDITORIA — Insight Wiring:
+
+□ ¿Cada put() llama InsightTracker.onWrite()?
+□ ¿Cada get() llama InsightTracker.onRead()?
+□ ¿onWrite/onRead failure NO bloquea ni crashea put/get?
+□ ¿PredictiveSignals.onBehaviorUpdate() se llama tras onWrite?
+□ ¿Recomendaciones guardadas en buffer accesible via JSON-RPC?
+□ ¿getRecommendations expuesto como metodo JSON-RPC?
+□ ¿recordOutcome expuesto como metodo JSON-RPC?
+□ ¿Recomendaciones tienen TTL 24h?
+□ ¿Auto-disable: accuracy < 50% tras 20 outcomes → tipo off?
+□ ¿Auto-act NO implementado? (verificar que no existe)
+□ ¿0 dependencias nuevas?
+□ ¿Tests existentes pasan 100%?
+```
+
+---
+
+## FASE 10 — CLI Tool standalone (`gics`)
+
+### System prompt para el agente
+
+```
+ERES UN INGENIERO DE PRODUCTIVIDAD DE HERRAMIENTAS. Tu tarea es URGENTE y va
+directamente a produccion. Vas a implementar un CLI standalone de GICS que
+expone encode/decode/verify/info/bench/profile/daemon.
+
+LEE PRIMERO estos archivos (NO escribas nada hasta haberlos leido TODOS):
+- package.json
+- src/index.ts
+- src/gics/encode.ts
+- src/gics/decode.ts
+- src/gics/profiler.ts
+- src/daemon/server.ts
+- tools/verify/verify.ts
+
+TU TAREA:
+1. Crear `src/cli/index.ts` (entrypoint) y `src/cli/commands.ts`
+2. Agregar en package.json:
+   - `"bin": { "gics": "dist/src/cli/index.js" }`
+   - script `"cli": "tsx src/cli/index.ts"`
+3. Subcomandos obligatorios:
+   - `gics encode <input.json> [-o output.gics] [--preset ...] [--password]`
+   - `gics decode <input.gics> [-o output.json] [--password]`
+   - `gics verify <input.gics>`
+   - `gics info <input.gics>`
+   - `gics bench <input.json> [--runs N]`
+   - `gics profile <input.json>`
+   - `gics daemon start|stop|status`
+4. Parser manual con process.argv (sin deps externas)
+
+INVARIANTES QUE DEBES MANTENER:
+- Exit codes: 0=ok, 1=error, 2=usage
+- No romper API publica de libreria (`src/index.ts`)
+- Soporte password para encode/decode cuando aplique
+
+CONSTRAINTS:
+- 0 dependencias nuevas
+- ~200 LOC target (max 400)
+
+CUANDO CREAS QUE HAS TERMINADO:
+1. Relee CLI completo
+2. Verifica help/usage y errores tipicos
+3. Ejecuta roundtrip real encode/decode
+4. Ejecuta tests existentes + nuevos tests de CLI
+```
+
+### Constraints
+
+| Aspecto | Limite |
+|---------|--------|
+| LOC max | 400 (target 200) |
+| Deps nuevas | 0 |
+| Archivos a crear | `src/cli/index.ts`, `src/cli/commands.ts` |
+| Archivos a modificar | `package.json` |
+| Archivos de test | `tests/cli.test.ts` |
+| Breaking changes | 0 |
+| Tests existentes | 100% green post-cambio |
+
+### Entregables
+
+| # | Entregable | Criterio de aceptacion |
+|---|-----------|----------------------|
+| 1 | Binario `gics` | Subcomandos funcionales |
+| 2 | Integracion package.json | `bin` + script `cli` operativos |
+| 3 | Tests de CLI | encode+decode roundtrip, verify valido, info correcto, exit code 1 en archivo invalido |
+| 4 | Documentacion de uso basica | Ejemplos de comandos principales |
+
+### Auditoria post-implementacion
+
+```
+CHECKLIST DE AUDITORIA — CLI:
+
+□ ¿Se crearon index.ts y commands.ts?
+□ ¿package.json incluye bin y script cli?
+□ ¿encode/decode funcionan end-to-end?
+□ ¿verify/info funcionan sobre archivos validos?
+□ ¿bench/profile invocan modulos internos correctos?
+□ ¿daemon start/stop/status responde correctamente?
+□ ¿Exit codes 0/1/2 respetados?
+□ ¿0 dependencias nuevas?
+□ ¿Tests existentes pasan 100%?
+```
+
+---
+
+## FASES 11-13 — Prioridad media (BanditRouter, InsightTracker lifecycle, Health)
+
+> Estas fases se ejecutan SOLO cuando las Fases 1-10 estan completas y estables.
+
+### FASE 11 — BanditRouter (detras de flag)
+
+```
+System prompt resumido (el agente debe leer seccion 4.7 de la architecture doc):
+
+ERES UN INGENIERO DE ML APLICADO. Tarea URGENTE, produccion.
+Implementar Thompson Sampling para model selection DETRAS de feature flag.
+
+LEE: GICS_1_3_3_ARCHITECTURE.MD seccion 4.7 y 5.4.
+
+TAREA:
+- BanditRouter con Beta distributions por arm (modelo+taskType)
+- Thompson Sampling: sample Beta, ajustar por coste/latencia, elegir max
+- Temporal decay: alpha *= 0.995, beta *= 0.995 diario
+- Cold start: Beta(3, 1) para modelos nuevos
+- Feature flag: GICS_BANDIT_ENABLED (default false)
+- Si flag false → blended score actual (zero disruption)
+- Cold start migration: inicializar arms desde datos existentes en MemTable
+
+CONSTRAINTS: 250 LOC max, 0 deps, determinista con seed fijo para tests.
+TEST GATE: A/B 1000 decisions simuladas, bandit debe ganar en reward acumulado.
+
+VERIFICACION: Releer linea por linea. Verificar determinismo con seed.
+Verificar que flag=false no ejecuta NADA del bandit code.
+```
+
+### FASE 12 — InsightTracker lifecycle actions
+
+```
+System prompt resumido:
+
+ERES UN INGENIERO DE SISTEMAS. Tarea URGENTE, produccion.
+Conectar InsightTracker lifecycle transitions a acciones concretas.
+
+LEE: GICS_1_3_3_ARCHITECTURE.MD seccion 4.6 y src/insight/tracker.ts
+
+TAREA:
+- Cuando item lifecycle → 'dormant' o 'dead': trigger PromptDistiller.compress()
+- Cuando item lifecycle → 'resurrected': log alert
+- Wiring en src/daemon/index.ts tras cada InsightTracker.onWrite()
+
+CONSTRAINTS: 50 LOC max, 0 deps.
+TEST GATE: 10K ops → lifecycle transitions correctas, datos dormant comprimidos.
+
+VERIFICACION: Releer. Verificar que lifecycle actions no bloquean put/get.
+```
+
+### FASE 13 — Health endpoint (JSON-RPC)
+
+```
+System prompt resumido:
+
+ERES UN INGENIERO DE OBSERVABILIDAD. Tarea URGENTE, produccion.
+Implementar metodo JSON-RPC "getHealth" con metricas internas del daemon.
+
+LEE: GICS_1_3_3_ARCHITECTURE.MD seccion 6 (presupuesto complejidad).
+
+TAREA:
+- Nuevo metodo JSON-RPC: "getHealth"
+- Metricas: WAL size, circuit breaker state, retention stats, daemon uptime,
+  MemTable count, AuditChain length, active recommendations count,
+  supervisor state (HEALTHY/DEGRADED)
+- Response en <100ms
+- Integrar en src/daemon/server.ts
+
+CONSTRAINTS: 80 LOC max, 0 deps.
+TEST GATE: Metodo responde en <100ms con datos correctos.
+
+VERIFICACION: Releer. Verificar que CADA metrica se obtiene sin timeout.
+```
+
+---
+
+## Protocolo de verificacion global post-todas-las-fases
+
+```
+CUANDO TODAS LAS FASES ESTEN COMPLETAS, EJECUTAR ESTA VERIFICACION:
+
+1. TESTS COMPLETOS
+   □ npm test completo: 575+ tests existentes pasan
+   □ Tests nuevos de GICS 1.3.3 (XOR/FOR/CLI/daemon): todos pasan
+   □ 0 warnings nuevos en test output
+
+1.1 CODECS CORE (NUEVO GATE)
+   □ XOR_FLOAT y FOR_BITPACK roundtrip en verde
+   □ Seleccion de codec estable en VALUE stream
+   □ Backward compatibility: archivos previos decodifican sin cambios
+
+1.2 BENCH COMPARATIVO (NUEVO GATE)
+   □ npm run bench ejecuta sin errores
+   □ Objetivo nominal global: converger hacia ~60x en structured time-series
+   □ TS_TREND_INT mejora esperada hacia ~40-45x
+   □ TS_VOLATILE_INT mejora esperada hacia ~25-30x
+   □ Forensics Structured mejora esperada hacia ~130-150x
+   □ Mixed/HighEntropy mejora esperada hacia ~12-18x
+
+2. INTEGRACION END-TO-END
+   □ Daemon arranca sin error
+   □ Ejecutar 10 operaciones (put/get/scan) via JSON-RPC → todas OK
+   □ Kill daemon → supervisor lo reinicia → operaciones siguen
+   □ AuditChain: verificar que las 10 ops generaron entries
+   □ PromptDistiller: verificar que retention config se carga
+
+3. CRASH RECOVERY
+   □ Kill -9 daemon mid-write → restart → 0 data loss (post-fsync)
+   □ WAL recovery: verificar CRC de todas las entries
+   □ Checkpoint: verificar SHA-256 matches MemTable state
+
+4. DISK MANAGEMENT
+   □ Simular 30 dias de datos → PromptDistiller comprime correctamente
+   □ Simular disco lleno → emergency purge se activa
+   □ Verificar que AuditChain sobrevive al purge (ultima prioridad)
+
+5. RESILIENCIA
+   □ Circuit breaker: 5 failures → OPEN → 30s → HALF-OPEN → probes → CLOSED
+   □ DEGRADED mode: 5 failures en 5min → degraded → reads OK, writes buffered
+   □ Recovery post-DEGRADED: flush buffer → WAL wins conflicts
+
+6. INSIGHT PIPELINE
+   □ Simular degradacion de modelo → recomendacion emitida via JSON-RPC
+   □ recordOutcome → accuracy tracking actualizado
+   □ Accuracy < 50% → tipo desactivado
+
+6.1 CLI END-TO-END (NUEVO GATE)
+   □ gics encode sample.json -o test.gics
+   □ gics decode test.gics -o recovered.json
+   □ diff sample.json recovered.json sin diferencias
+   □ gics verify test.gics devuelve OK
+   □ gics info test.gics imprime header/streams/ratios
+
+7. PRESUPUESTO DE COMPLEJIDAD
+   □ LOC totales nuevas < 2000 (target 1780)
+   □ Deps nuevas = max 1 (zstd)
+   □ Archivos nuevos < 12
+   □ 0 breaking changes
+```
+
+---
+
+## Archivos criticos y funciones a reutilizar (A/B/C/D)
+
+Archivo: `src/gics/codecs.ts`  
+Funcion/Clase: `Codecs`  
+Reutilizar para: `encodeXorFloat`, `decodeXorFloat`, `encodeFOR`, `decodeFOR`
+
+Archivo: `src/gics/format.ts`  
+Funcion/Clase: `InnerCodecId`  
+Reutilizar para: agregar IDs `8` (XOR_FLOAT) y `9` (FOR_BITPACK)
+
+Archivo: `src/gics/encode.ts`  
+Funcion/Clase: `processValueBlocks()`  
+Reutilizar para: insercion de XOR_FLOAT en rama float (best-of-2 vs FIXED64_LE)
+
+Archivo: `src/gics/encode.ts`  
+Funcion/Clase: `selectBestCodec()`  
+Reutilizar para: candidato FOR_BITPACK en stream VALUE
+
+Archivo: `src/gics/decode.ts`  
+Funcion/Clase: `dispatchCodec()`  
+Reutilizar para: cases de XOR_FLOAT y FOR_BITPACK
+
+Archivo: `src/gics-utils.ts`  
+Funcion/Clase: `encodeVarint()`  
+Reutilizar para: serializar `min` en FOR
+
+Archivo: `src/gics/types.ts`  
+Funcion/Clase: `CompressionPreset`  
+Reutilizar para: presets en CLI
+
+Archivo: `src/gics/profiler.ts`  
+Funcion/Clase: `CompressionProfiler`  
+Reutilizar para: subcomando `gics profile`
+
+---
+
+## Constraints globales de integracion
+
+- 0 dependencias nuevas para FASE 1 (XOR) y FASE 2 (FOR).
+- CLI (FASE 10) sin dependencias nuevas.
+- Backward compatible: archivos previos siguen decodificando sin cambios.
+- `GICS_VERSION_BYTE` se mantiene en `0x03`.
+- La suite existente debe permanecer 100% green tras cada fase.
+
+---
+
+## Verificacion de release (A/B/C/D + 1.3.3)
+
+1. `npm run build` — compila sin errores
+2. `npm test` — suite existente + nuevas suites en verde
+3. `npm run verify` — integridad
+4. `npm run bench` — comparativa before/after
+5. CLI roundtrip:
+   - `gics encode sample.json -o test.gics`
+   - `gics decode test.gics -o recovered.json`
+   - `diff sample.json recovered.json`
+
+---
+
+*Documento creado: 15 marzo 2026. Version: 2 (GICS-agnostico). Companion de GICS_1_3_3_ARCHITECTURE.MD rev-2.*
+*Cada fase es ejecutable de forma independiente. Orden integrado obligatorio: 1→2→3→4→5→6→7→8→9→10→11→12→13.*
+*Dependencias clave: (1,2,3) son prerequisito de 4-9; 10 depende de 1-9 estables; 11-13 dependen de 1-10.*
