@@ -16,6 +16,7 @@ import { InsightPersistence } from '../insight/persistence.js';
 import { GICSSupervisor } from './supervisor.js';
 import { AuditChain } from './audit-chain.js';
 import { PromptDistiller } from './prompt-distiller.js';
+import { ResilienceShell, GICSCircuitOpen, GICSTimeout, GICSUnavailable, type ResilienceConfig } from './resilience.js';
 
 export interface GICSDaemonConfig {
     socketPath: string;
@@ -34,6 +35,7 @@ export interface GICSDaemonConfig {
     coldRetentionMs?: number;
     coldEncryption?: boolean;
     coldPasswordEnvVar?: string;
+    resilience?: ResilienceConfig;
 }
 
 export class GICSDaemon {
@@ -65,6 +67,7 @@ export class GICSDaemon {
     private readonly confidenceTracker = new ConfidenceTracker();
     private readonly insightPersistence = new InsightPersistence();
     private readonly supervisor = new GICSSupervisor();
+    private readonly resilience: ResilienceShell;
     private auditChain: AuditChain | null = null;
     private promptDistiller: PromptDistiller | null = null;
     private readonly subscriptions = new Map<string, { socket: net.Socket; events: string[] }>();
@@ -91,6 +94,8 @@ export class GICSDaemon {
         this.coldRetentionMs = config.coldRetentionMs ?? (365 * 24 * 60 * 60 * 1000);
         this.coldEncryption = config.coldEncryption ?? false;
         this.coldPasswordEnvVar = config.coldPasswordEnvVar ?? 'GICS_COLD_KEY';
+
+        this.resilience = new ResilienceShell(config.resilience);
 
         const walFileName = this.walType === 'jsonl' ? 'gics.wal.jsonl' : 'gics.wal';
         const walPath = path.join(config.dataPath, walFileName);
@@ -783,6 +788,18 @@ export class GICSDaemon {
         };
     }
 
+    private static readonly WRITE_OPS = new Set(['put', 'delete', 'flush', 'compact', 'rotate']);
+    private static readonly READ_OPS = new Set([
+        'get', 'getInsight', 'getInsights', 'getAccuracy', 'getCorrelations',
+        'getClusters', 'getLeadingIndicators', 'getSeasonalPatterns', 'getForecast',
+        'getAnomalies', 'getRecommendations', 'verify', 'verifyAudit', 'exportAudit',
+    ]);
+    private static readonly SCAN_OPS = new Set(['scan']);
+    private static readonly CONTROL_OPS = new Set([
+        'ping', 'getStatus', 'getHealth', 'resetDegraded',
+        'subscribe', 'unsubscribe', 'reportOutcome', 'recordOutcome',
+    ]);
+
     private async handleRequest(request: any, socket?: net.Socket): Promise<any> {
         const { method, params, id, token } = request;
 
@@ -799,9 +816,37 @@ export class GICSDaemon {
         }
 
         try {
+            const exec = () => this.executeMethod(method, params, id, socket);
+
+            if (GICSDaemon.CONTROL_OPS.has(method)) {
+                return await exec();
+            } else if (GICSDaemon.WRITE_OPS.has(method)) {
+                return await this.resilience.executeWrite(exec);
+            } else if (GICSDaemon.SCAN_OPS.has(method)) {
+                return await this.resilience.executeScan(exec);
+            } else if (GICSDaemon.READ_OPS.has(method)) {
+                return await this.resilience.executeRead(exec);
+            }
+            return await exec();
+        } catch (e: any) {
+            if (e instanceof GICSCircuitOpen) {
+                return { jsonrpc: '2.0', id, error: { code: -32001, message: e.message, data: e.metadata } };
+            }
+            if (e instanceof GICSTimeout) {
+                return { jsonrpc: '2.0', id, error: { code: -32002, message: e.message, data: e.metadata } };
+            }
+            if (e instanceof GICSUnavailable) {
+                return { jsonrpc: '2.0', id, error: { code: -32003, message: e.message, data: e.metadata } };
+            }
+            return { jsonrpc: '2.0', id, error: { code: -32603, message: e.message } };
+        }
+    }
+
+    private async executeMethod(method: string, params: any, id: any, socket?: net.Socket): Promise<any> {
+        try {
             switch (method) {
                 case 'getStatus':
-                    return { jsonrpc: '2.0', id, result: this.supervisor.getStatus() };
+                    return { jsonrpc: '2.0', id, result: { ...this.supervisor.getStatus(), circuitState: this.resilience.getCircuitState(), pendingOps: this.resilience.getPendingOps() } };
 
                 case 'resetDegraded': {
                     if (!this.supervisor.isDegraded()) {
@@ -976,6 +1021,7 @@ export class GICSDaemon {
                     };
                 }
 
+                case 'recordOutcome':
                 case 'reportOutcome': {
                     const outcomeInsightId = String(params?.insightId ?? '');
                     const outcomeResult = String(params?.result ?? '') as OutcomeResult;
@@ -1233,14 +1279,20 @@ export class GICSDaemon {
                         coldKeys: this.tierIndexCold.size,
                     };
 
-                    // Audit chain metrics
+                    // Audit chain metrics (O(1) — no I/O)
                     if (this.auditChain) {
-                        const auditVerify = await this.auditChain.verify();
+                        const auditStats = this.auditChain.getQuickStats();
                         health.auditChain = {
-                            valid: auditVerify.valid,
-                            entries: auditVerify.totalEntries,
+                            entries: auditStats.totalEntries,
+                            lastVerifyValid: auditStats.lastVerifyValid,
                         };
                     }
+
+                    // Resilience metrics
+                    health.resilience = {
+                        circuitState: this.resilience.getCircuitState(),
+                        pendingOps: this.resilience.getPendingOps(),
+                    };
 
                     // PromptDistiller metrics (if enabled)
                     if (this.promptDistiller) {

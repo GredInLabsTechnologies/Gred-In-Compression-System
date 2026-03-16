@@ -119,10 +119,15 @@ describe('Health Endpoint (Phase 13)', () => {
             expect(health.supervisor).toBeDefined();
             expect(health.supervisor.state).toBeDefined();
 
-            // Verify audit chain metrics
+            // Verify audit chain metrics (O(1) quick stats)
             expect(health.auditChain).toBeDefined();
-            expect(typeof health.auditChain.valid).toBe('boolean');
+            expect(health.auditChain.lastVerifyValid === null || typeof health.auditChain.lastVerifyValid === 'boolean').toBe(true);
             expect(typeof health.auditChain.entries).toBe('number');
+
+            // Verify resilience metrics
+            expect(health.resilience).toBeDefined();
+            expect(typeof health.resilience.circuitState).toBe('string');
+            expect(typeof health.resilience.pendingOps).toBe('number');
 
             await daemon.stop();
         });

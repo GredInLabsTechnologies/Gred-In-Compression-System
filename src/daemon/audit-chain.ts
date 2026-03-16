@@ -71,6 +71,8 @@ export class AuditChain {
     private prevHash = '';
     private batchHashes: string[] = [];
     private initPromise: Promise<void> | null = null;
+    private totalEntries = 0;
+    private lastVerifyResult: { valid: boolean; corrupted: number[] } | null = null;
 
     constructor(config: AuditChainConfig) {
         this.filePath = config.filePath;
@@ -88,9 +90,11 @@ export class AuditChain {
         if (existsSync(this.filePath)) {
             const raw = await fs.readFile(this.filePath, 'utf8');
             const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+            this.totalEntries = 0;
             for (const line of lines) {
                 try {
                     const entry = JSON.parse(line) as AuditEntry;
+                    this.totalEntries++;
                     if (entry.sequence > this.sequence) {
                         this.sequence = entry.sequence;
                         this.prevHash = entry.hash;
@@ -130,6 +134,7 @@ export class AuditChain {
 
         this.prevHash = hash;
         this.batchHashes.push(hash);
+        this.totalEntries++;
 
         return new Promise((resolve, reject) => {
             this.writeStream!.write(JSON.stringify(fullEntry) + '\n', (err) => {
@@ -196,11 +201,20 @@ export class AuditChain {
             }
         }
 
-        return {
+        const result = {
             valid: corrupted.length === 0 && !chainBroken,
             totalEntries: lines.length,
             corrupted,
             chainBroken,
+        };
+        this.lastVerifyResult = { valid: result.valid, corrupted: [...result.corrupted] };
+        return result;
+    }
+
+    getQuickStats(): { totalEntries: number; lastVerifyValid: boolean | null } {
+        return {
+            totalEntries: this.totalEntries,
+            lastVerifyValid: this.lastVerifyResult?.valid ?? null,
         };
     }
 

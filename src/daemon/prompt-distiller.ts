@@ -14,7 +14,7 @@
  */
 
 import * as fs from 'fs/promises';
-import { existsSync, statSync } from 'fs';
+import { existsSync, statSync, readdirSync } from 'fs';
 import * as path from 'path';
 import { createHash } from 'crypto';
 import { gzipSync, gunzipSync } from 'zlib';
@@ -53,6 +53,7 @@ export interface PromptDistillerConfig {
     diskThresholdPercent?: number;  // 90% default
     emergencyPurgeEnabled?: boolean; // true default
     autoClassifyOnInit?: boolean;    // true default - classify existing data on initialize
+    maxDiskUsageMB?: number;         // 500 default - fallback limit for own directories
 }
 
 export interface TierStats {
@@ -88,6 +89,7 @@ export class PromptDistiller {
     private readonly diskThresholdPercent: number;
     private readonly emergencyPurgeEnabled: boolean;
     private readonly autoClassifyOnInit: boolean;
+    private readonly maxDiskUsageMB: number;
     private isReadOnly = false;
     private diskCheckTimer: NodeJS.Timeout | null = null;
     private lastDiskCheck = 0;
@@ -102,6 +104,7 @@ export class PromptDistiller {
         this.diskThresholdPercent = config.diskThresholdPercent ?? DISK_THRESHOLD_PERCENT;
         this.emergencyPurgeEnabled = config.emergencyPurgeEnabled ?? true;
         this.autoClassifyOnInit = config.autoClassifyOnInit ?? true;
+        this.maxDiskUsageMB = config.maxDiskUsageMB ?? 500;
     }
 
     async initialize(): Promise<void> {
@@ -522,14 +525,37 @@ export class PromptDistiller {
 
     private async getDiskUsagePercent(): Promise<number> {
         try {
-            // Use df or similar to get disk usage
-            // For simplicity, estimate based on directory size vs available space
-            const stats = statSync(this.rawDir);
-            // This is a simplified version - in production, use system calls
-            return 0; // Placeholder - requires platform-specific implementation
+            // Primary: use fs.statfs (Node 18.15+)
+            const fsStats = await fs.statfs(this.rawDir);
+            if (fsStats.blocks > 0) {
+                return (1 - fsStats.bfree / fsStats.blocks) * 100;
+            }
+        } catch {
+            // statfs not available or failed — fall through to fallback
+        }
+
+        try {
+            // Fallback: sum own directory sizes vs maxDiskUsageMB
+            const totalBytes = this.sumDirSizeSync(this.rawDir)
+                + this.sumDirSizeSync(this.compressedDir)
+                + this.sumDirSizeSync(this.distilledDir);
+            const limitBytes = this.maxDiskUsageMB * 1024 * 1024;
+            if (limitBytes <= 0) return 0;
+            return (totalBytes / limitBytes) * 100;
         } catch {
             return 0;
         }
+    }
+
+    private sumDirSizeSync(dir: string): number {
+        if (!existsSync(dir)) return 0;
+        let total = 0;
+        for (const file of readdirSync(dir)) {
+            try {
+                total += statSync(path.join(dir, file)).size;
+            } catch { /* skip unreadable files */ }
+        }
+        return total;
     }
 
     private sanitizeKey(key: string): string {
