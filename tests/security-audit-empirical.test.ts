@@ -1641,7 +1641,37 @@ describe('§15 — Compression Ratio Empirical Data', () => {
         verifyBitExactRoundtrip(snapshots, decoded);
     });
 
-    it('PROBE 117: Encrypted vs unencrypted overhead — bounded and proportional', async () => {
+    it('PROBE 117: Massive multi-item — 10 snapshots, 50,000 items each → bit-exact roundtrip', async () => {
+        const count = 10;
+        const itemsPerSnapshot = 50_000;
+        const snapshots: Snapshot[] = [];
+        const baseTime = 1700000000;
+        for (let i = 0; i < count; i++) {
+            const items = new Map<number, { price: number; quantity: number }>();
+            for (let j = 1; j <= itemsPerSnapshot; j++) {
+                items.set(j, {
+                    price: 1000 + (j % 500) + i * 3,
+                    quantity: 10 + (j % 100) + i,
+                });
+            }
+            snapshots.push({ timestamp: baseTime + i * 60, items });
+        }
+
+        const rawSize = rawJsonSize(snapshots);
+        const encoded = await encodeSnapshots(snapshots);
+        const ratio = rawSize / encoded.length;
+
+        console.log(`[§15] Massive 50K items: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x) — ${count}×${itemsPerSnapshot} = ${count * itemsPerSnapshot} items`);
+        // 50k items × 10 snapshots — ratio depends on cross-snapshot redundancy.
+        // With only 10 snapshots, temporal compression is limited. >10x is realistic.
+        expect(ratio).toBeGreaterThan(10);
+
+        // Bit-exact roundtrip of ALL 500,000 items
+        const decoded = await decodeSnapshots(encoded);
+        verifyBitExactRoundtrip(snapshots, decoded);
+    }, 30_000); // 30s timeout for 50k items
+
+    it('PROBE 118: Encrypted vs unencrypted overhead — bounded and proportional', async () => {
         // Use a larger dataset where fixed enc header (67 bytes) is amortized
         const snapshots = makeTrendingSnapshots(1000, 20);
 
