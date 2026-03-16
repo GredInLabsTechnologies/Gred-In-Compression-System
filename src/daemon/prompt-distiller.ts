@@ -56,6 +56,23 @@ async function zstdDecompress(data: Uint8Array): Promise<Uint8Array> {
     return decompressed;
 }
 
+/**
+ * Decompress data, auto-detecting format (zstd or legacy gzip).
+ * Zstd magic: 0x28 0xB5 0x2F 0xFD
+ * Gzip magic: 0x1F 0x8B
+ */
+async function decompressAuto(data: Uint8Array): Promise<Uint8Array> {
+    if (data.length >= 4 && data[0] === 0x28 && data[1] === 0xB5 && data[2] === 0x2F && data[3] === 0xFD) {
+        return zstdDecompress(data);
+    }
+    if (data.length >= 2 && data[0] === 0x1F && data[1] === 0x8B) {
+        // Legacy gzip format — decompress using zlib
+        const { gunzipSync } = await import('zlib');
+        return new Uint8Array(gunzipSync(Buffer.from(data)));
+    }
+    throw new Error('Unknown compressed format (neither zstd nor gzip)');
+}
+
 export interface DistilledRecord {
     originalKey: string;
     timestamp: number;
@@ -435,7 +452,7 @@ export class PromptDistiller {
     private async distillRecord(compressedFilePath: string): Promise<void> {
         try {
             const compressed = await fs.readFile(compressedFilePath);
-            const decompressed = await zstdDecompress(new Uint8Array(compressed));
+            const decompressed = await decompressAuto(new Uint8Array(compressed));
             const content = Buffer.from(decompressed).toString('utf8');
             const record = JSON.parse(content) as PromptRecord;
 
@@ -451,8 +468,9 @@ export class PromptDistiller {
                 costUsd: record.metadata.costUsd
             };
 
-            // Preserve timestamp in filename
-            const baseName = path.basename(compressedFilePath, '.zst');
+            // Preserve timestamp in filename — strip both .zst and legacy .gz
+            const ext = compressedFilePath.endsWith('.gz') ? '.gz' : '.zst';
+            const baseName = path.basename(compressedFilePath, ext);
             const fileName = `${baseName}.distilled.json`;
             const distilledPath = path.join(this.distilledDir, fileName);
 
@@ -484,7 +502,7 @@ export class PromptDistiller {
                     return JSON.parse(content) as PromptRecord;
                 } else if (tier === 'compressed') {
                     const compressed = await fs.readFile(filePath);
-                    const decompressed = await zstdDecompress(new Uint8Array(compressed));
+                    const decompressed = await decompressAuto(new Uint8Array(compressed));
                     const content = Buffer.from(decompressed).toString('utf8');
                     return JSON.parse(content) as PromptRecord;
                 } else {
@@ -511,7 +529,7 @@ export class PromptDistiller {
         // Filter files by tier type
         const files = allFiles.filter(f => {
             if (tier === 'raw') return f.endsWith('.json') && !f.includes('aggregated') && !f.includes('distilled');
-            if (tier === 'compressed') return f.endsWith('.zst');
+            if (tier === 'compressed') return f.endsWith('.zst') || f.endsWith('.gz');
             if (tier === 'distilled') return f.endsWith('.distilled.json') || f.includes('aggregated');
             return false;
         });

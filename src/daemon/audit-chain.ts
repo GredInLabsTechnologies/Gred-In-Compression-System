@@ -7,7 +7,7 @@
 
 import * as fs from 'fs/promises';
 import { createHash } from 'crypto';
-import { existsSync, createWriteStream, WriteStream, fdatasyncSync } from 'fs';
+import { existsSync, createWriteStream, WriteStream } from 'fs';
 
 export interface AuditEntry {
     sequence: number;
@@ -141,15 +141,21 @@ export class AuditChain {
         this.totalEntries++;
 
         return new Promise((resolve, reject) => {
-            this.writeStream!.write(JSON.stringify(fullEntry) + '\n', (err) => {
+            this.writeStream!.write(JSON.stringify(fullEntry) + '\n', async (err) => {
                 if (err) return reject(err);
                 if (this.fsyncOnCommit) {
-                    try { fdatasyncSync((this.writeStream as any).fd); } catch { /* best-effort */ }
+                    await this.fsyncFile().catch(() => {}); // best-effort
                 }
                 this.maybeCheckpoint().catch(() => {}); // Best-effort
                 resolve(fullEntry);
             });
         });
+    }
+
+    /** Durable fsync of the audit log file via open/datasync/close (no fragile fd access). */
+    private async fsyncFile(): Promise<void> {
+        const fh = await fs.open(this.filePath, 'r');
+        try { await fh.datasync(); } finally { await fh.close(); }
     }
 
     private async maybeCheckpoint(): Promise<void> {

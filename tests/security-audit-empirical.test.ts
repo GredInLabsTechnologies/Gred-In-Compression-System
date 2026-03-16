@@ -434,6 +434,26 @@ describe('AUDIT §3 — AuditChain Tamper Evidence (ISO 27001 A.8.15)', () => {
         expect(result.valid).toBe(true);
         expect(result.totalEntries).toBe(500);
     });
+
+    it('PROBE: fsyncOnCommit=true — appends succeed and chain is valid', async () => {
+        const fsyncDir = tmpDir();
+        const fsyncChain = new AuditChain({
+            filePath: path.join(fsyncDir, 'audit-fsync.jsonl'),
+            fsyncOnCommit: true,
+        });
+        await fsyncChain.initialize();
+
+        for (let i = 0; i < 10; i++) {
+            await fsyncChain.append('fsync-test', 'write', `key${i}`, { i });
+        }
+
+        const result = await fsyncChain.verify();
+        expect(result.valid).toBe(true);
+        expect(result.totalEntries).toBe(10);
+
+        await fsyncChain.close();
+        cleanup(fsyncDir);
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1056,6 +1076,29 @@ describe('AUDIT §9 — PromptDistiller Data Lifecycle (GDPR Art.5)', () => {
     it('PROBE: readOnly flag is initially false', () => {
         expect(distiller.readOnly).toBe(false);
     });
+
+    it('PROBE: legacy gzip files are readable after zstd migration', async () => {
+        // Simulate a legacy .gz file in the compressed tier
+        const { gzipSync } = await import('zlib');
+        const record: PromptRecord = {
+            key: 'legacy-test',
+            content: 'This was compressed with gzip before migration',
+            metadata: {
+                tokenCount: 42, modelUsed: 'test', taskType: 'audit',
+                success: true, latencyMs: 10, costUsd: 0.001,
+            },
+            timestamp: Date.now() - 20 * 24 * 60 * 60 * 1000, // 20 days ago
+        };
+        const gzData = gzipSync(Buffer.from(JSON.stringify(record), 'utf8'));
+        const legacyPath = path.join(dir, 'distiller-compressed',
+            `${record.timestamp}-legacy-test.gz`);
+        writeFileSync(legacyPath, gzData);
+
+        // The distiller should be able to read it via searchTier
+        const retrieved = await distiller.retrieve('legacy-test');
+        expect(retrieved).not.toBeNull();
+        expect((retrieved as PromptRecord).content).toBe(record.content);
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1513,7 +1556,22 @@ describe('§15 — Compression Ratio Empirical Data', () => {
         return snapshots;
     }
 
-    it('PROBE 110: Trending integers — 500 snapshots, 10 items → ratio > 25x', async () => {
+    /** Verify bit-exact roundtrip of ALL fields across ALL snapshots */
+    function verifyBitExactRoundtrip(original: Snapshot[], decoded: Snapshot[]) {
+        expect(decoded.length).toBe(original.length);
+        for (let i = 0; i < original.length; i++) {
+            expect(decoded[i].timestamp).toBe(original[i].timestamp);
+            expect(decoded[i].items.size).toBe(original[i].items.size);
+            for (const [id, item] of original[i].items) {
+                const decodedItem = decoded[i].items.get(id);
+                expect(decodedItem).toBeDefined();
+                expect(decodedItem!.price).toBe(item.price);
+                expect(decodedItem!.quantity).toBe(item.quantity);
+            }
+        }
+    }
+
+    it('PROBE 112: Trending integers — 500 snapshots, 10 items → ratio > 25x', async () => {
         const snapshots = makeTrendingSnapshots(500, 10);
         const rawSize = rawJsonSize(snapshots);
         const encoded = await encodeSnapshots(snapshots);
@@ -1522,12 +1580,12 @@ describe('§15 — Compression Ratio Empirical Data', () => {
         console.log(`[§15] Trending: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x)`);
         expect(ratio).toBeGreaterThan(25);
 
-        // Verify roundtrip
+        // Bit-exact roundtrip — every timestamp, every item, every price, every quantity
         const decoded = await decodeSnapshots(encoded);
-        expect(decoded.length).toBe(500);
+        verifyBitExactRoundtrip(snapshots, decoded);
     });
 
-    it('PROBE 111: Volatile integers — 1000 snapshots, 50 items → ratio > 55x', async () => {
+    it('PROBE 113: Volatile integers — 1000 snapshots, 50 items → ratio > 55x', async () => {
         const snapshots = makeVolatileSnapshots(1000, 50);
         const rawSize = rawJsonSize(snapshots);
         const encoded = await encodeSnapshots(snapshots);
@@ -1536,12 +1594,12 @@ describe('§15 — Compression Ratio Empirical Data', () => {
         console.log(`[§15] Volatile: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x)`);
         expect(ratio).toBeGreaterThan(55);
 
-        // Verify roundtrip
+        // Bit-exact roundtrip — every field of every item
         const decoded = await decodeSnapshots(encoded);
-        expect(decoded.length).toBe(1000);
+        verifyBitExactRoundtrip(snapshots, decoded);
     });
 
-    it('PROBE 112: Multi-item dense — 200 snapshots, 50 items → ratio > 40x', async () => {
+    it('PROBE 114: Multi-item dense — 200 snapshots, 50 items → ratio > 40x', async () => {
         const snapshots = makeTrendingSnapshots(200, 50);
         const rawSize = rawJsonSize(snapshots);
         const encoded = await encodeSnapshots(snapshots);
@@ -1550,13 +1608,12 @@ describe('§15 — Compression Ratio Empirical Data', () => {
         console.log(`[§15] Multi-item dense: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x)`);
         expect(ratio).toBeGreaterThan(40);
 
-        // Verify roundtrip
+        // Bit-exact roundtrip — 200×50 = 10,000 items verified
         const decoded = await decodeSnapshots(encoded);
-        expect(decoded.length).toBe(200);
-        expect(decoded[0].items.size).toBe(50);
+        verifyBitExactRoundtrip(snapshots, decoded);
     });
 
-    it('PROBE 113: Single snapshot — binary overhead dominates on tiny data', async () => {
+    it('PROBE 115: Single snapshot — binary overhead dominates on tiny data', async () => {
         const snapshots = makeSnapshots(1, 3);
         const rawSize = rawJsonSize(snapshots);
         const encoded = await encodeSnapshots(snapshots);
@@ -1570,7 +1627,7 @@ describe('§15 — Compression Ratio Empirical Data', () => {
         expect(encoded.length).toBeLessThan(2000); // But overhead is bounded
     });
 
-    it('PROBE 114: Large dataset (60x target) — 2000 snapshots, 20 items → ratio > 50x', async () => {
+    it('PROBE 116: Large dataset (60x target) — 2000 snapshots, 20 items → ratio > 50x', async () => {
         const snapshots = makeRegularSnapshots(2000, 20);
         const rawSize = rawJsonSize(snapshots);
         const encoded = await encodeSnapshots(snapshots);
@@ -1579,12 +1636,12 @@ describe('§15 — Compression Ratio Empirical Data', () => {
         console.log(`[§15] Large regular: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x)`);
         expect(ratio).toBeGreaterThan(50);
 
-        // Verify roundtrip
+        // Bit-exact roundtrip — 2000×20 = 40,000 items verified
         const decoded = await decodeSnapshots(encoded);
-        expect(decoded.length).toBe(2000);
+        verifyBitExactRoundtrip(snapshots, decoded);
     });
 
-    it('PROBE 115: Encrypted vs unencrypted overhead — bounded and proportional', async () => {
+    it('PROBE 117: Encrypted vs unencrypted overhead — bounded and proportional', async () => {
         // Use a larger dataset where fixed enc header (67 bytes) is amortized
         const snapshots = makeTrendingSnapshots(1000, 20);
 
@@ -1600,5 +1657,9 @@ describe('§15 — Compression Ratio Empirical Data', () => {
         // On large data the percentage overhead is small.
         expect(overhead).toBeLessThan(0.10); // < 10%
         expect(fixedOverhead).toBeGreaterThan(0); // Encryption always adds some bytes
+
+        // Verify encrypted roundtrip is also bit-exact
+        const decryptedSnapshots = await decodeSnapshots(encrypted, { password: 'audit-overhead-test' });
+        verifyBitExactRoundtrip(snapshots, decryptedSnapshots);
     });
 });

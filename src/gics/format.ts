@@ -63,7 +63,7 @@ export interface EncryptionHeaderV3 {
     salt: Uint8Array;    // 16 bytes
     authVerify: Uint8Array; // 32 bytes (HMAC of a known constant to verify password)
     kdfId: number;       // 1: PBKDF2
-    iterations: number;  // e.g. 100000
+    iterations: number;  // default: 600000 (OWASP 2023), min 100000
     digestId: number;    // 1: SHA-256
     fileNonce: Uint8Array; // 12 bytes
 }
