@@ -332,11 +332,27 @@ export class GICSv2Encoder {
             blockStats.push(result.stats as BlockStats);
         };
 
+        // When item-major layout is active, align block boundaries to item
+        // temporal boundaries.  In item-major order the VALUE/QUANTITY/ITEM_ID
+        // streams are laid out as [item1_s1…item1_sN, item2_s1…item2_sN, …].
+        // Using a block size that is a multiple of snapshotCount ensures no
+        // block ever straddles two items, which keeps delta chains coherent and
+        // dramatically improves compression ratios at scale (Gorilla-style
+        // per-series blocking).
+        let itemBlockSize = this.blockSize;
+        if (features.itemMajorLayout && features.itemsPerSnapshot > 0) {
+            const sc = features.timestamps.length; // snapshotCount
+            if (sc > 0) {
+                const itemsPerBlock = Math.max(1, Math.floor(this.blockSize / sc));
+                itemBlockSize = itemsPerBlock * sc;
+            }
+        }
+
         this.processTimeBlocks(ctx, features.timestamps, processBlockWrapper);
         this.processSnapshotLenBlocks(features.snapshotLengths, addToStream, blockStats);
-        this.processItemIdBlocks(features.itemIds, addToStream, blockStats);
-        this.processValueBlocks(ctx, features.prices, processBlockWrapper, addToStream, blockStats);
-        this.processQuantityBlocks(features.quantities, addToStream, blockStats);
+        this.processItemIdBlocks(features.itemIds, addToStream, blockStats, itemBlockSize);
+        this.processValueBlocks(ctx, features.prices, processBlockWrapper, addToStream, blockStats, itemBlockSize);
+        this.processQuantityBlocks(features.quantities, addToStream, blockStats, itemBlockSize);
     }
 
     private async wrapSections(
@@ -679,9 +695,10 @@ export class GICSv2Encoder {
         }
     }
 
-    private processItemIdBlocks(itemIds: number[], addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void, stats: BlockStats[]) {
-        for (let i = 0; i < itemIds.length; i += this.blockSize) {
-            const chunk = itemIds.slice(i, i + this.blockSize);
+    private processItemIdBlocks(itemIds: number[], addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void, stats: BlockStats[], bs?: number) {
+        const blockSz = bs ?? this.blockSize;
+        for (let i = 0; i < itemIds.length; i += blockSz) {
+            const chunk = itemIds.slice(i, i + blockSz);
             this.processStructuralBlock(StreamId.ITEM_ID, chunk, [
                 { id: InnerCodecId.VARINT_DELTA, encode: (data) => encodeVarint(data) },
                 { id: InnerCodecId.BITPACK_DELTA, encode: (data) => Codecs.encodeBitPack(data) },
@@ -695,10 +712,12 @@ export class GICSv2Encoder {
         prices: number[],
         processBlock: BlockProcessor,
         addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void,
-        stats: BlockStats[]
+        stats: BlockStats[],
+        bs?: number
     ) {
-        for (let i = 0; i < prices.length; i += this.blockSize) {
-            const chunk = prices.slice(i, i + this.blockSize);
+        const blockSz = bs ?? this.blockSize;
+        for (let i = 0; i < prices.length; i += blockSz) {
+            const chunk = prices.slice(i, i + blockSz);
             if (this.hasNonIntegerValues(chunk)) {
                 const last = ctx.lastValue ?? 0;
                 if (this.hasUnsafeValueDeltas(chunk, last) || this.hasLossyFiniteDeltas(chunk, last)) {
@@ -776,9 +795,10 @@ export class GICSv2Encoder {
         return false;
     }
 
-    private processQuantityBlocks(quantities: number[], addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void, stats: BlockStats[]) {
-        for (let i = 0; i < quantities.length; i += this.blockSize) {
-            const chunk = quantities.slice(i, i + this.blockSize);
+    private processQuantityBlocks(quantities: number[], addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void, stats: BlockStats[], bs?: number) {
+        const blockSz = bs ?? this.blockSize;
+        for (let i = 0; i < quantities.length; i += blockSz) {
+            const chunk = quantities.slice(i, i + blockSz);
             if (this.hasNonIntegerValues(chunk)) {
                 const encoded = Codecs.encodeFixed64(chunk);
                 addToStream(StreamId.QUANTITY, { innerCodecId: InnerCodecId.FIXED64_LE, nItems: chunk.length, payloadLen: encoded.length, flags: 0 }, encoded);

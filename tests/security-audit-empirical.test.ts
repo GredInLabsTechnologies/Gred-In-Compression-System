@@ -1641,35 +1641,42 @@ describe('§15 — Compression Ratio Empirical Data', () => {
         verifyBitExactRoundtrip(snapshots, decoded);
     });
 
-    it('PROBE 117: Massive multi-item — 10 snapshots, 50,000 items each → bit-exact roundtrip', async () => {
-        const count = 10;
-        const itemsPerSnapshot = 50_000;
+    it('PROBE 117: Production scale — 500 snapshots × 1,000 items (500K items, ~21 days of data) → ratio > 60x', async () => {
+        // Simulates ~21 days at 24 snapshots/day with 1,000 tracked items.
+        // This is the real production scenario where GICS must deliver 60x+.
+        const count = 500;
+        const itemsPerSnapshot = 1_000;
         const snapshots: Snapshot[] = [];
         const baseTime = 1700000000;
+        let seed = 7;
+        const nextRand = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed; };
+
+        const prices = Array.from({ length: itemsPerSnapshot }, (_, j) => 1000 + j * 5);
+        const quantities = Array.from({ length: itemsPerSnapshot }, () => 50);
         for (let i = 0; i < count; i++) {
             const items = new Map<number, { price: number; quantity: number }>();
-            for (let j = 1; j <= itemsPerSnapshot; j++) {
-                items.set(j, {
-                    price: 1000 + (j % 500) + i * 3,
-                    quantity: 10 + (j % 100) + i,
-                });
+            for (let j = 0; j < itemsPerSnapshot; j++) {
+                // Tick-level walk: ±0-3 per step (realistic)
+                prices[j] += (nextRand() % 7) - 3;
+                if (prices[j] < 1) prices[j] = 1;
+                quantities[j] += (nextRand() % 3) - 1;
+                if (quantities[j] < 1) quantities[j] = 1;
+                items.set(j + 1, { price: prices[j], quantity: quantities[j] });
             }
-            snapshots.push({ timestamp: baseTime + i * 60, items });
+            snapshots.push({ timestamp: baseTime + i * 3600, items }); // hourly
         }
 
         const rawSize = rawJsonSize(snapshots);
         const encoded = await encodeSnapshots(snapshots);
         const ratio = rawSize / encoded.length;
 
-        console.log(`[§15] Massive 50K items: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x) — ${count}×${itemsPerSnapshot} = ${count * itemsPerSnapshot} items`);
-        // 50k items × 10 snapshots — ratio depends on cross-snapshot redundancy.
-        // With only 10 snapshots, temporal compression is limited. >10x is realistic.
-        expect(ratio).toBeGreaterThan(10);
+        console.log(`[§15] Production scale: ${rawSize} → ${encoded.length} bytes (${ratio.toFixed(2)}x) — ${count}×${itemsPerSnapshot} = ${(count * itemsPerSnapshot).toLocaleString()} items`);
+        expect(ratio).toBeGreaterThan(60);
 
-        // Bit-exact roundtrip of ALL 500,000 items
+        // Bit-exact roundtrip of ALL 500,000 items — every price, every quantity
         const decoded = await decodeSnapshots(encoded);
         verifyBitExactRoundtrip(snapshots, decoded);
-    }, 30_000); // 30s timeout for 50k items
+    }, 60_000); // 60s timeout
 
     it('PROBE 118: Encrypted vs unencrypted overhead — bounded and proportional', async () => {
         // Use a larger dataset where fixed enc header (67 bytes) is amortized
