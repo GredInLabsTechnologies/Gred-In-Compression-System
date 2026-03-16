@@ -1,281 +1,49 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<testsuites name="vitest tests" tests="115" failures="0" errors="0" time="3.679242754">
-    <testsuite name="tests/security-audit-empirical.test.ts" timestamp="2026-03-16T09:00:51.119Z" hostname="(none)" tests="115" failures="0" errors="0" skipped="0" time="3.679242754">
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.1 — Key Derivation (PBKDF2-SHA256) &gt; PROBE: determinism — same password+salt → same key" time="0.03117096">
+<testsuites name="vitest tests" tests="20" failures="0" errors="0" time="1.057073425">
+    <testsuite name="tests/daemon-audit-chain.test.ts" timestamp="2026-03-16T09:07:40.193Z" hostname="(none)" tests="6" failures="0" errors="0" skipped="0" time="0.536897053">
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; 10K entries → chain integridad verificada al 100%" time="0.50869117">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.1 — Key Derivation (PBKDF2-SHA256) &gt; PROBE: different passwords → different keys" time="0.029752086">
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; tamper 1 entry → verify() detecta corruption" time="0.003281626">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.1 — Key Derivation (PBKDF2-SHA256) &gt; PROBE: different salts → different keys" time="0.029652464">
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; tamper payload → verify() detecta corruption" time="0.002522577">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.1 — Key Derivation (PBKDF2-SHA256) &gt; PROBE: key is exactly 256 bits (32 bytes) per FIPS 140-3" time="0.015206186">
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; audit write fails → original put() tambien falla (integración)" time="0.002621911">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.1 — Key Derivation (PBKDF2-SHA256) &gt; PROBE: 100k iterations takes &gt;10ms (brute-force resistance)" time="0.01526067">
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; merkle checkpoint cada 1000 entries con root hash correcto" time="0.014542421">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.1 — Key Derivation (PBKDF2-SHA256) &gt; PROBE: empty password does not crash (boundary)" time="0.015113744">
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; export() genera JSON lines valido y parseable" time="0.003059876">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.2 — AES-256-GCM Encryption &gt; PROBE: encrypt→decrypt is bit-exact" time="0.01582796">
+    </testsuite>
+    <testsuite name="tests/daemon-prompt-distiller.test.ts" timestamp="2026-03-16T09:07:40.195Z" hostname="(none)" tests="8" failures="0" errors="0" skipped="0" time="0.076967542">
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should store and retrieve records from RAW tier" time="0.005931164">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.2 — AES-256-GCM Encryption &gt; PROBE: ciphertext ≠ plaintext (not passthrough)" time="0.015036343">
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should compress RAW → COMPRESSED after retention period" time="0.040412637">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.2 — AES-256-GCM Encryption &gt; PROBE: different stream IDs → different ciphertexts (IV separation)" time="0.015320778">
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should distill COMPRESSED → DISTILLED after 30+ days" time="0.004509846">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.2 — AES-256-GCM Encryption &gt; PROBE: tampered ciphertext → IntegrityError" time="0.015282673">
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should preserve metadata across all tier transitions" time="0.002398029">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.2 — AES-256-GCM Encryption &gt; PROBE: tampered auth tag → IntegrityError" time="0.015477366">
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should show significant disk usage reduction after 30 days" time="0.013729862">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.2 — AES-256-GCM Encryption &gt; PROBE: wrong key → IntegrityError" time="0.029889829">
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should handle compression failure gracefully - data stays in previous tier" time="0.002823165">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.2 — AES-256-GCM Encryption &gt; PROBE: tampered AAD → IntegrityError (AEAD guarantee)" time="0.015096615">
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should run emergency purge when triggered manually" time="0.002623671">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.2 — AES-256-GCM Encryption &gt; PROBE: GCM tag is 128-bit (16 bytes)" time="0.015040371">
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should correctly classify existing data on first initialization" time="0.002306823">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.2 — AES-256-GCM Encryption &gt; PROBE: encrypting empty plaintext works" time="0.015006708">
+    </testsuite>
+    <testsuite name="tests/gics-security-crypto.test.ts" timestamp="2026-03-16T09:07:40.196Z" hostname="(none)" tests="6" failures="0" errors="0" skipped="0" time="0.44320883">
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; PBKDF2 key derivation is deterministic for same password/salt/iterations" time="0.030858546">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.3 — Auth Verification (Timing-Safe) &gt; PROBE: correct key verifies" time="0.01512818">
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; auth verification succeeds for correct key and fails for wrong key" time="0.030679482">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.3 — Auth Verification (Timing-Safe) &gt; PROBE: wrong key fails" time="0.029844751">
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; auth verification has bounded timing delta between match/mismatch paths" time="0.041818495">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.3 — Auth Verification (Timing-Safe) &gt; PROBE: mismatched length → false (not crash)" time="0.015065342">
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; stream IV domain separation produces different ciphertext/tag across stream IDs" time="0.016307484">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.3 — Auth Verification (Timing-Safe) &gt; PROBE: 1-bit difference → still rejected" time="0.015083704">
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; tampered ciphertext/tag is rejected by decryptSection" time="0.016271846">
         </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.4 — Salt &amp; Nonce Generation &gt; PROBE: salt=16 bytes, fileNonce=12 bytes (GCM standard)" time="0.000140535">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §1 — Cryptographic Integrity (NIST SP 800-57 / FIPS 140-3) &gt; §1.4 — Salt &amp; Nonce Generation &gt; PROBE: 1000 generations have zero collisions (CSPRNG)" time="0.021866212">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §2 — Data Integrity Chain (ISO 27001 A.8.24) &gt; §2.1 — IntegrityChain (SHA-256) &gt; PROBE: deterministic across instances" time="0.000413035">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §2 — Data Integrity Chain (ISO 27001 A.8.24) &gt; §2.1 — IntegrityChain (SHA-256) &gt; PROBE: order-dependent (A,B ≠ B,A)" time="0.000129799">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §2 — Data Integrity Chain (ISO 27001 A.8.24) &gt; §2.1 — IntegrityChain (SHA-256) &gt; PROBE: 10,000 updates — zero collisions, always 32 bytes" time="0.18588347">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §2 — Data Integrity Chain (ISO 27001 A.8.24) &gt; §2.1 — IntegrityChain (SHA-256) &gt; PROBE: empty data update does not break chain" time="0.000178891">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §2 — Data Integrity Chain (ISO 27001 A.8.24) &gt; §2.2 — CRC32 &gt; PROBE: detects every single-bit error in a 28-byte block" time="0.000319822">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §2 — Data Integrity Chain (ISO 27001 A.8.24) &gt; §2.2 — CRC32 &gt; PROBE: deterministic" time="0.000098192">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §2 — Data Integrity Chain (ISO 27001 A.8.24) &gt; §2.2 — CRC32 &gt; PROBE: empty data → valid number" time="0.000048943">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §3 — AuditChain Tamper Evidence (ISO 27001 A.8.15) &gt; PROBE: 1000 entries → verify = 100% valid" time="0.061089476">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §3 — AuditChain Tamper Evidence (ISO 27001 A.8.15) &gt; PROBE: tamper 1 entry payload → hash mismatch detected" time="0.010440817">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §3 — AuditChain Tamper Evidence (ISO 27001 A.8.15) &gt; PROBE: deleted entry → chain continuity broken" time="0.004278101">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §3 — AuditChain Tamper Evidence (ISO 27001 A.8.15) &gt; PROBE: sequence is strictly monotonic" time="0.006775793">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §3 — AuditChain Tamper Evidence (ISO 27001 A.8.15) &gt; PROBE: payload &gt;1024 bytes is SHA-256 hashed (no raw leak)" time="0.000902368">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §3 — AuditChain Tamper Evidence (ISO 27001 A.8.15) &gt; PROBE: hash includes ALL fields (canonical)" time="0.000774455">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §3 — AuditChain Tamper Evidence (ISO 27001 A.8.15) &gt; PROBE: 500 rapid concurrent appends → still valid chain" time="0.005406315">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §4 — WAL Crash Safety &amp; Recovery &gt; §4.1 — Binary WAL v2 &gt; PROBE: 100 writes → recovery produces identical state" time="0.04339812">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §4 — WAL Crash Safety &amp; Recovery &gt; §4.1 — Binary WAL v2 &gt; PROBE: CRC detects corruption, skips bad entry, recovers rest" time="0.008843435">
-            <system-err>
-[WAL] CRC mismatch at offset 149. Skipping corrupted entry.
-
-[WAL] CRC mismatch at offset 149. Skipping corrupted entry.
-
-            </system-err>
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §4 — WAL Crash Safety &amp; Recovery &gt; §4.1 — Binary WAL v2 &gt; PROBE: DELETE operations survive recovery" time="0.003320613">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §4 — WAL Crash Safety &amp; Recovery &gt; §4.1 — Binary WAL v2 &gt; PROBE: LSN continuity across restart (session1 → close → session2)" time="0.043267266">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §4 — WAL Crash Safety &amp; Recovery &gt; §4.2 — Binary vs JSONL WAL equivalence &gt; PROBE: same ops → identical recovered state" time="0.008247051">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §4 — WAL Crash Safety &amp; Recovery &gt; §4.3 — Checkpoint &amp; Compaction &gt; PROBE: checkpoint survives compaction, all data recoverable" time="0.011668218">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §4 — WAL Crash Safety &amp; Recovery &gt; §4.3 — Checkpoint &amp; Compaction &gt; PROBE: corrupted checkpoint → falls back to full replay" time="0.008469868">
-            <system-err>
-[WAL] Invalid checkpoint entry. Falling back to previous checkpoint.
-
-            </system-err>
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §4 — WAL Crash Safety &amp; Recovery &gt; §4.4 — WAL edge cases (where it could silently fail) &gt; PROBE: special chars in keys/values survive roundtrip" time="0.003958737">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §4 — WAL Crash Safety &amp; Recovery &gt; §4.4 — WAL edge cases (where it could silently fail) &gt; PROBE: overwrite same key 100x → only last value survives" time="0.035467573">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §4 — WAL Crash Safety &amp; Recovery &gt; §4.4 — WAL edge cases (where it could silently fail) &gt; PROBE: empty payload survives roundtrip" time="0.002323702">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §5 — Resilience Shell Failure Modes &gt; PROBE: CLOSED → 5 failures in window → OPEN (fail-fast)" time="0.253059499">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §5 — Resilience Shell Failure Modes &gt; PROBE: OPEN → cooldown → HALF_OPEN → probes succeed → CLOSED" time="0.250590338">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §5 — Resilience Shell Failure Modes &gt; PROBE: backpressure rejects at highWaterMark" time="1.001179482">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §5 — Resilience Shell Failure Modes &gt; PROBE: all errors carry metadata (attempts, circuitState, queueDepth)" time="0.010665873">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §5 — Resilience Shell Failure Modes &gt; PROBE: HALF_OPEN failure → back to OPEN (no infinite retry loop)" time="0.140370701">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §6 — Supervisor Degradation &amp; Recovery (ISO 22301) &gt; PROBE: starts HEALTHY, transitions logged" time="0.001172439">
-            <system-out>
-[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T09:00:49.908Z)
-
-            </system-out>
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §6 — Supervisor Degradation &amp; Recovery (ISO 22301) &gt; PROBE: buffered writes have monotonic sequence IDs" time="0.000179717">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §6 — Supervisor Degradation &amp; Recovery (ISO 22301) &gt; PROBE: flush — WAL wins conflicts, non-conflicts applied" time="0.000974056">
-            <system-out>
-[Supervisor] Conflict: WAL wins for key=&quot;conflict&quot;, buffer write discarded.
-
-            </system-out>
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §6 — Supervisor Degradation &amp; Recovery (ISO 22301) &gt; PROBE: resetDegraded from non-DEGRADED state → returns false" time="0.000369537">
-            <system-out>
-[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-16T09:00:49.910Z)
-
-            </system-out>
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §6 — Supervisor Degradation &amp; Recovery (ISO 22301) &gt; PROBE: isDegraded initially false" time="0.000074896">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: put/get/delete/overwrite cycle correct" time="0.000265538">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: overwrite replaces ALL fields (no stale-field leakage)" time="0.0001259">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: size estimation grows with data" time="0.000234021">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: shouldFlush triggers at size threshold" time="0.000199505">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: shouldFlush triggers at dirty threshold" time="0.000067826">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: resetDirty clears dirty count" time="0.000086774">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: scan prefix returns correct subset" time="0.000121013">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: empty string key works" time="0.000042082">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: unicode keys work" time="0.000055266">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: delete non-existent key returns false, no crash" time="0.000041964">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: get on empty table returns undefined" time="0.000034704">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: accessCount increments on get" time="0.000041922">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §7 — MemTable Boundary Conditions &gt; PROBE: 1000 concurrent put/get — no state corruption" time="0.001293928">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §8 — BanditRouter Determinism &amp; Safety &gt; PROBE: disabled by default → safe fallback" time="0.000209642">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §8 — BanditRouter Determinism &amp; Safety &gt; PROBE: seeded → fully deterministic" time="0.001788039">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §8 — BanditRouter Determinism &amp; Safety &gt; PROBE: recordOutcome updates alpha/beta correctly" time="0.000222551">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §8 — BanditRouter Determinism &amp; Safety &gt; PROBE: empty arms → safe fallback" time="0.000059822">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §8 — BanditRouter Determinism &amp; Safety &gt; PROBE: high-performing arm selected &gt; 70% after 100 observations" time="0.000605048">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §8 — BanditRouter Determinism &amp; Safety &gt; PROBE: reset clears all arms" time="0.000099898">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §8 — BanditRouter Determinism &amp; Safety &gt; PROBE: disabled router ignores recordOutcome" time="0.000047636">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §9 — PromptDistiller Data Lifecycle (GDPR Art.5) &gt; PROBE: store → retrieve from RAW tier" time="0.003868">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §9 — PromptDistiller Data Lifecycle (GDPR Art.5) &gt; PROBE: retention compresses old RAW data" time="0.02714222">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §9 — PromptDistiller Data Lifecycle (GDPR Art.5) &gt; PROBE: distillation is irreversible — original content gone" time="0.254588609">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §9 — PromptDistiller Data Lifecycle (GDPR Art.5) &gt; PROBE: tier stats are accurate" time="0.001734021">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §9 — PromptDistiller Data Lifecycle (GDPR Art.5) &gt; PROBE: readOnly flag is initially false" time="0.000538276">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §10 — File Locking &amp; Concurrency &gt; PROBE: exclusive lock — max 1 concurrent" time="0.100856886">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §10 — File Locking &amp; Concurrency &gt; PROBE: shared locks allow concurrent reads" time="0.05093618">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §10 — File Locking &amp; Concurrency &gt; PROBE: exclusive waiter blocks new shared (write-preferring)" time="0.030736452">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §10 — File Locking &amp; Concurrency &gt; PROBE: lock timeout fires" time="0.051161327">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §11 — Compression Core Roundtrip &gt; PROBE: 100 snapshots, 5 items each — bit-exact roundtrip" time="0.036918534">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §11 — Compression Core Roundtrip &gt; PROBE: encrypted roundtrip preserves data" time="0.034040437">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §11 — Compression Core Roundtrip &gt; PROBE: wrong password → IntegrityError (not garbage)" time="0.031260551">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §11 — Compression Core Roundtrip &gt; PROBE: truncated file → error thrown (not silent corruption)" time="0.002202932">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §11 — Compression Core Roundtrip &gt; PROBE: single bit-flip → detected (integrity chain or CRC)" time="0.00185398">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §11 — Compression Core Roundtrip &gt; PROBE: compression ratio &gt; 1 for realistic data" time="0.029737335">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §11 — Compression Core Roundtrip &gt; PROBE: determinism — same input → same output bytes" time="0.002233637">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §11 — Compression Core Roundtrip &gt; PROBE: single snapshot roundtrip" time="0.0016882">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §11 — Compression Core Roundtrip &gt; PROBE: 1000 snapshots stress test" time="0.027852947">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §11 — Compression Core Roundtrip &gt; PROBE: empty snapshots list → does not crash" time="0.000185282">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §12 — Adversarial &amp; Edge Cases (OWASP) &gt; PROBE: massive items per snapshot (100 items)" time="0.004072223">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §12 — Adversarial &amp; Edge Cases (OWASP) &gt; PROBE: price=0 and quantity=0 survive roundtrip" time="0.000837307">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §12 — Adversarial &amp; Edge Cases (OWASP) &gt; PROBE: very large price values survive roundtrip" time="0.000694185">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §12 — Adversarial &amp; Edge Cases (OWASP) &gt; PROBE: negative price values survive roundtrip" time="0.000717634">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §12 — Adversarial &amp; Edge Cases (OWASP) &gt; PROBE: non-sequential timestamps survive" time="0.000850757">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §12 — Adversarial &amp; Edge Cases (OWASP) &gt; PROBE: random garbage bytes → error (not crash or hang)" time="0.00042856">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §12 — Adversarial &amp; Edge Cases (OWASP) &gt; PROBE: GICS magic bytes followed by garbage → error" time="0.00024992">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §13 — Determinism Guarantees &gt; PROBE: IntegrityChain deterministic across instances" time="0.000151084">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §13 — Determinism Guarantees &gt; PROBE: CRC32 is fully deterministic" time="0.000383083">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §13 — Determinism Guarantees &gt; PROBE: encoder output is byte-identical across runs" time="0.003793902">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §14 — Cross-Module Integration Seams &gt; PROBE: WAL + MemTable consistency after write cycle" time="0.031476073">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §14 — Cross-Module Integration Seams &gt; PROBE: AuditChain records WAL operations faithfully" time="0.001597179">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §14 — Cross-Module Integration Seams &gt; PROBE: Supervisor buffer → MemTable flush preserves data" time="0.000234744">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §14 — Cross-Module Integration Seams &gt; PROBE: ResilienceShell wraps operations correctly" time="0.000148584">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="AUDIT §14 — Cross-Module Integration Seams &gt; PROBE: Encoder output → Decoder → verify all stream sections" time="0.020568394">
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="§15 — Compression Ratio Empirical Data &gt; PROBE 110: Trending integers — 500 snapshots, 10 items → ratio &gt; 25x" time="0.019685257">
-            <system-out>
-[§15] Trending: 202500 → 1098 bytes (184.43x)
-
-            </system-out>
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="§15 — Compression Ratio Empirical Data &gt; PROBE 111: Volatile integers — 1000 snapshots, 50 items → ratio &gt; 55x" time="0.166384255">
-            <system-out>
-[§15] Volatile: 1902701 → 30498 bytes (62.39x)
-
-            </system-out>
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="§15 — Compression Ratio Empirical Data &gt; PROBE 112: Multi-item dense — 200 snapshots, 50 items → ratio &gt; 40x" time="0.028960719">
-            <system-out>
-[§15] Multi-item dense: 385000 → 1561 bytes (246.64x)
-
-            </system-out>
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="§15 — Compression Ratio Empirical Data &gt; PROBE 113: Single snapshot — binary overhead dominates on tiny data" time="0.000810127">
-            <system-out>
-[§15] Single snapshot: 139 → 716 bytes (0.19x)
-
-            </system-out>
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="§15 — Compression Ratio Empirical Data &gt; PROBE 114: Large dataset (60x target) — 2000 snapshots, 20 items → ratio &gt; 50x" time="0.09025975">
-            <system-out>
-[§15] Large regular: 1530000 → 2307 bytes (663.20x)
-
-            </system-out>
-        </testcase>
-        <testcase classname="tests/security-audit-empirical.test.ts" name="§15 — Compression Ratio Empirical Data &gt; PROBE 115: Encrypted vs unencrypted overhead — bounded and proportional" time="0.115367769">
-            <system-out>
-[§15] Encryption overhead: plain=1655, encrypted=1802, delta=147 bytes, overhead=8.88%
-
-            </system-out>
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; encrypted pack/unpack succeeds with correct password and fails with wrong password" time="0.300675506">
         </testcase>
     </testsuite>
 </testsuites>
