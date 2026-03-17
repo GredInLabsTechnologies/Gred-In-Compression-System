@@ -1,11 +1,1430 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<testsuites name="vitest tests" tests="3" failures="0" errors="0" time="0.1718424">
-    <testsuite name="tests/gics-rotating-session.test.ts" timestamp="2026-03-17T00:57:57.023Z" hostname="DESKTOP-28NKMQD" tests="3" failures="0" errors="0" skipped="0" time="0.1718424">
-        <testcase classname="tests/gics-rotating-session.test.ts" name="GICS rotating sessions &gt; rotates files deterministically, keeps continuity, and reads the full session" time="0.095839">
+<testsuites name="vitest tests" tests="267" failures="1" errors="0" time="110.6806816">
+    <testsuite name="tests/cli.test.ts" timestamp="2026-03-17T04:03:39.941Z" hostname="DESKTOP-28NKMQD" tests="5" failures="1" errors="0" skipped="0" time="1.8411028">
+        <testcase classname="tests/cli.test.ts" name="CLI Tool (Phase 10) &gt; encode + decode roundtrip preserves data" time="0.4247397">
         </testcase>
-        <testcase classname="tests/gics-rotating-session.test.ts" name="GICS rotating sessions &gt; supports adaptive rotation triggers without breaking verification" time="0.0369805">
+        <testcase classname="tests/cli.test.ts" name="CLI Tool (Phase 10) &gt; verify returns 0 for valid file" time="0.4526277">
         </testcase>
-        <testcase classname="tests/gics-rotating-session.test.ts" name="GICS rotating sessions &gt; resumes sessions and marks invalid tail files as orphaned" time="0.0362802">
+        <testcase classname="tests/cli.test.ts" name="CLI Tool (Phase 10) &gt; info displays file metadata" time="0.5956652">
+            <failure message="expected &apos;╭─────────────┬────────────────╮\n│ P…&apos; to contain &apos;Snapshots: 2&apos;" type="AssertionError">
+AssertionError: expected &apos;╭─────────────┬────────────────╮\n│ P…&apos; to contain &apos;Snapshots: 2&apos;
+
+- Expected
++ Received
+
+- Snapshots: 2
++ ╭─────────────┬────────────────╮
++ │ Property    │ Value          │
++ ├─────────────┼────────────────┤
++ │ File        │ output.gics    │
++ │ Size        │ 769 B          │
++ │ Schema      │ info_test (v1) │
++ │ Fields      │ 1              │
++ │ Snapshots   │ 2              │
++ │ Total Items │ 2              │
++ ╰─────────────┴────────────────╯
++
+
+ ❯ tests/cli.test.ts:124:28
+ ❯ withTempDir tests/cli.test.ts:22:9
+ ❯ tests/cli.test.ts:102:9
+            </failure>
+        </testcase>
+        <testcase classname="tests/cli.test.ts" name="CLI Tool (Phase 10) &gt; returns exit code 1 on invalid file" time="0.1864718">
+        </testcase>
+        <testcase classname="tests/cli.test.ts" name="CLI Tool (Phase 10) &gt; returns exit code 2 for usage errors" time="0.1750413">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/codec-for.test.ts" timestamp="2026-03-17T04:03:39.947Z" hostname="DESKTOP-28NKMQD" tests="7" failures="0" errors="0" skipped="0" time="0.1456068">
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; roundtrips integer arrays with negatives and wide ranges" time="0.0048836">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; encodes constant blocks with bitWidth=0 and decodes exactly" time="0.0011296">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; is competitive on favorable narrow-range VALUE integer deltas" time="0.0008034">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; keeps full roundtrip integrity when FOR_BITPACK is used in VALUE stream" time="0.0863636">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; beats plain varint size on narrow residual distributions" time="0.0009435">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; keeps roundtrip correctness on wide-range values where FOR may not be best" time="0.0074358">
+        </testcase>
+        <testcase classname="tests/codec-for.test.ts" name="Codec FOR_BITPACK &gt; keeps deterministic VALUE codec selection sequence across repeated runs" time="0.0098191">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/codec-xor-float.test.ts" timestamp="2026-03-17T04:03:39.948Z" hostname="DESKTOP-28NKMQD" tests="9" failures="0" errors="0" skipped="1" time="0.229942">
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; roundtrips constant float deltas exactly" time="0.0100776">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; roundtrips linear-trend float deltas exactly" time="0.0112904">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; roundtrips volatile/random deterministic float deltas exactly" time="0.0463948">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; roundtrips float deltas bit-a-bit for finite values" time="0.0007489">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; produces smaller payload than FIXED64 on favorable float deltas" time="0.0066532">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; uses XOR_FLOAT for favorable finite float sequences" time="0.0905029">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; falls back to absolute FIXED64 for non-finite sequences" time="0.0098234">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; keeps deterministic codec selection sequence for float blocks" time="0.0048149">
+        </testcase>
+        <testcase classname="tests/codec-xor-float.test.ts" name="Codec XOR_FLOAT &gt; FASE 10: CLI e2e se valida en tests/cli.test.ts (no bloquea FASE 3 de codecs)" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-audit-chain.test.ts" timestamp="2026-03-17T04:03:39.949Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="2.4985051">
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; 10K entries → chain integridad verificada al 100%" time="2.3026404">
+        </testcase>
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; tamper 1 entry → verify() detecta corruption" time="0.0087176">
+        </testcase>
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; tamper payload → verify() detecta corruption" time="0.0083594">
+        </testcase>
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; audit write fails → original put() tambien falla (integración)" time="0.0058334">
+        </testcase>
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; merkle checkpoint cada 1000 entries con root hash correcto" time="0.1576914">
+        </testcase>
+        <testcase classname="tests/daemon-audit-chain.test.ts" name="AuditChain (fase 7) &gt; export() genera JSON lines valido y parseable" time="0.0085883">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-bandit-router.test.ts" timestamp="2026-03-17T04:03:39.951Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="0.0351395">
+        <testcase classname="tests/daemon-bandit-router.test.ts" name="BanditRouter (Phase 11) &gt; feature flag OFF → always returns blended score" time="0.0068112">
+        </testcase>
+        <testcase classname="tests/daemon-bandit-router.test.ts" name="BanditRouter (Phase 11) &gt; Thompson Sampling converges to best arm" time="0.0071939">
+        </testcase>
+        <testcase classname="tests/daemon-bandit-router.test.ts" name="BanditRouter (Phase 11) &gt; temporal decay reduces old alpha/beta over time" time="0.000805">
+        </testcase>
+        <testcase classname="tests/daemon-bandit-router.test.ts" name="BanditRouter (Phase 11) &gt; deterministic with seed" time="0.0017749">
+        </testcase>
+        <testcase classname="tests/daemon-bandit-router.test.ts" name="BanditRouter (Phase 11) &gt; A/B test: bandit outperforms random selection (1000 trials)" time="0.0076564">
+        </testcase>
+        <testcase classname="tests/daemon-bandit-router.test.ts" name="BanditRouter (Phase 11) &gt; cold start with Beta(3,1) prior" time="0.0003678">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-file-lock.test.ts" timestamp="2026-03-17T04:03:39.952Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.4350055">
+        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; permite múltiples locks compartidos simultáneos" time="0.0191138">
+        </testcase>
+        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; bloquea lock exclusivo cuando existe lock compartido y respeta timeout" time="0.0940952">
+        </testcase>
+        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; bloquea lock compartido cuando existe lock exclusivo y respeta timeout" time="0.0984826">
+        </testcase>
+        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; permite lock exclusivo una vez liberados locks compartidos" time="0.1107858">
+        </testcase>
+        <testcase classname="tests/daemon-file-lock.test.ts" name="FileLock (Roadmap v1.3.2 - Fase 1.5) &gt; helpers withSharedLock/withExclusiveLock aplican semántica correcta" time="0.1049779">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-health.test.ts" timestamp="2026-03-17T04:03:39.954Z" hostname="DESKTOP-28NKMQD" tests="3" failures="0" errors="0" skipped="0" time="0.3013263">
+        <testcase classname="tests/daemon-health.test.ts" name="Health Endpoint (Phase 13) &gt; getHealth returns comprehensive metrics in &lt;100ms" time="0.1419032">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-health-test-v2h6Zk\token.txt
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.132Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-health-test-1773720145120
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-health.test.ts" name="Health Endpoint (Phase 13) &gt; getHealth with PromptDistiller enabled includes distiller metrics" time="0.0785301">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-health-test-I9nt0a\token.txt
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.275Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-health-distiller-1773720145261
+
+[GICS] Daemon stopped.
+
+            </system-out>
+        </testcase>
+        <testcase classname="tests/daemon-health.test.ts" name="Health Endpoint (Phase 13) &gt; getHealth works even with minimal data" time="0.0742706">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-health-test-d0BNFe\token.txt
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.346Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-health-minimal-1773720145339
+
+[GICS] Daemon stopped.
+
+            </system-out>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-insight-wiring.test.ts" timestamp="2026-03-17T04:03:39.956Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.1933178">
+        <testcase classname="tests/daemon-insight-wiring.test.ts" name="Insight Engine Wiring (Phase 9) &gt; degradation simulated → recommendation emitted in &lt;5s" time="0.0043141">
+        </testcase>
+        <testcase classname="tests/daemon-insight-wiring.test.ts" name="Insight Engine Wiring (Phase 9) &gt; accuracy tracking: follow successful rec → accuracy increases" time="0.001355">
+        </testcase>
+        <testcase classname="tests/daemon-insight-wiring.test.ts" name="Insight Engine Wiring (Phase 9) &gt; accuracy &lt; 50% after 20 outcomes → type disabled" time="0.0043115">
+        </testcase>
+        <testcase classname="tests/daemon-insight-wiring.test.ts" name="Insight Engine Wiring (Phase 9) &gt; onWrite fails → put() operation succeeds (best-effort)" time="0.0003995">
+        </testcase>
+        <testcase classname="tests/daemon-insight-wiring.test.ts" name="Insight Engine Wiring (Phase 9) &gt; TTL 24h → expired recommendation not returned" time="0.1552632">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-lifecycle-actions.test.ts" timestamp="2026-03-17T04:03:39.957Z" hostname="DESKTOP-28NKMQD" tests="3" failures="0" errors="0" skipped="0" time="75.7722447">
+        <testcase classname="tests/daemon-lifecycle-actions.test.ts" name="Lifecycle Actions (Phase 12) &gt; item becomes dormant → retention policy triggered (if distiller enabled)" time="0.6821727">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-lifecycle-test-yigsNI\token.txt
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.162Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-lifecycle-test-1773720144142
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-lifecycle-actions.test.ts" name="Lifecycle Actions (Phase 12) &gt; item resurrected → alert logged to console and audit chain" time="0.080097">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-lifecycle-test-r6Russ\token.txt
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.830Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-lifecycle-test-res-1773720144824
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-lifecycle-actions.test.ts" name="Lifecycle Actions (Phase 12) &gt; 10K operations → lifecycle transitions work correctly" time="75.0058846">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-lifecycle-test-vXGqw7\token.txt
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.913Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-lifecycle-10k-1773720144904
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-memtable.test.ts" timestamp="2026-03-17T04:03:39.959Z" hostname="DESKTOP-28NKMQD" tests="8" failures="0" errors="0" skipped="0" time="0.0255303">
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; inserta y recupera registros con created/updated/accessCount" time="0.0033228">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; reemplaza fields en updates, incrementa updated y no duplica dirtyCount" time="0.0119732">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; scan(prefix) filtra por prefijo" time="0.0018805">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; delete elimina registro y ajusta count/dirty/size" time="0.0008046">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; resetDirty limpia dirty flags y dirtyCount" time="0.0005137">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; expone thresholds por defecto del roadmap" time="0.0002646">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; shouldFlush por dirtyCount cuando supera maxDirtyRecords" time="0.0003621">
+        </testcase>
+        <testcase classname="tests/daemon-memtable.test.ts" name="MemTable (Roadmap v1.3.2 - Fase 1.1) &gt; shouldFlush por size cuando supera maxMemTableBytes" time="0.0002572">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-prompt-distiller.test.ts" timestamp="2026-03-17T04:03:39.960Z" hostname="DESKTOP-28NKMQD" tests="8" failures="0" errors="0" skipped="0" time="0.3188347">
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should store and retrieve records from RAW tier" time="0.0139378">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should compress RAW → COMPRESSED after retention period" time="0.0143205">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should distill COMPRESSED → DISTILLED after 30+ days" time="0.0253508">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should preserve metadata across all tier transitions" time="0.019784">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should show significant disk usage reduction after 30 days" time="0.1512425">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should handle compression failure gracefully - data stays in previous tier" time="0.0118024">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should run emergency purge when triggered manually" time="0.0478534">
+        </testcase>
+        <testcase classname="tests/daemon-prompt-distiller.test.ts" name="PromptDistiller &gt; should correctly classify existing data on first initialization" time="0.0253789">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-realworld-soak.test.ts" timestamp="2026-03-17T04:03:39.962Z" hostname="DESKTOP-28NKMQD" tests="2" failures="0" errors="0" skipped="0" time="6.5667227">
+        <testcase classname="tests/daemon-realworld-soak.test.ts" name="GICSDaemon real-world soak / fault-line test &gt; survive mixed continuous load + maintenance + restart (binary)" time="4.1140757">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-soak-kjn6Wv\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.161Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-soak-a-binary-1773720144144-7gsqcu0ikmi
+
+[GICS] Daemon stopped.
+
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[GICS] Restored insights from segments: behavioral=147, confidence=0
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:27.230Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-soak-b-binary-1773720146315-zoykzgawz2s
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-realworld-soak.test.ts" name="GICSDaemon real-world soak / fault-line test &gt; survive mixed continuous load + maintenance + restart (jsonl)" time="2.4483676">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-soak-Dx5edZ\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:28.278Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-soak-a-jsonl-1773720148263-32kfbam3pmt
+
+[GICS] Daemon stopped.
+
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[GICS] Restored insights from segments: behavioral=147, confidence=0
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:30.576Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-soak-b-jsonl-1773720150542-s2ms22zstu8
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-recovery.test.ts" timestamp="2026-03-17T04:03:39.963Z" hostname="DESKTOP-28NKMQD" tests="14" failures="0" errors="0" skipped="0" time="2.0416788">
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; reconstruye MemTable tras reinicio usando WAL (binary)" time="0.1860834">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-wV7wUx\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.164Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-recovery-a-binary-1773720144145-x3rbufoxd9o
+
+[GICS] Daemon stopped.
+
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 2 records loaded (2 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.260Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-recovery-b-binary-1773720144246-8lvp4uofbuk
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; reconstruye MemTable tras reinicio usando WAL (jsonl)" time="0.1667506">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-BG5BKS\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.343Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-recovery-a-jsonl-1773720144329-gr29t9agkf
+
+[GICS] Daemon stopped.
+
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 2 records loaded (2 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.422Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-recovery-b-jsonl-1773720144412-f1wuc2ls8nm
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; flush limpia dirtyCount y trunca WAL" time="0.15785">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-3Kulbu\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.503Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-flush-binary-1773720144496-fz2k5vesndn
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; put puede disparar auto-flush por threshold de dirtyCount" time="0.106968">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-rG1XBv\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.665Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-autoflush-dirty-threshold-1773720144655-04xdx7e1uzde
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; compact fusiona segmentos WARM y aplica last-writer-wins por key" time="0.2033226">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-JwvAuo\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.788Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-compact-warm-segments-1773720144762-2db36bseb9x
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; rotate mueve segmentos WARM a COLD y actualiza ping.tiers" time="0.111389">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-mR57gm\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:24.979Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-rotate-warm-cold-1773720144971-bmfsmcetcwk
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; rotate con coldEncryption escribe archivo COLD cifrado" time="0.1727233">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-H8Ft9R\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.092Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-rotate-cold-encryption-1773720145083-o8qofdqp09
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; get enruta HOT→WARM→COLD según disponibilidad" time="0.2095797">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-OEv3Hx\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.271Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-tier-routing-get-1773720145255-t4kgyeckv3d
+
+[GICS] Daemon stopped.
+
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[GICS] Restored insights from segments: behavioral=1, confidence=0
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.390Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-tier-routing-get-1773720145255-t4kgyeckv3d
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; ping reporta walFsyncMode configurado" time="0.0900137">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-MJaDiq\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.479Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-fsync-mode-1773720145463-5qayc0x7kkp
+
+[GICS] Daemon stopped.
+
+            </system-out>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; IPC responde JSON-RPC 2.0 y errores estándar de protocolo" time="0.1190137">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-APsgCy\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.568Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-ipc-jsonrpc-1773720145556-yn0tczs7kms
+
+[GICS] Daemon stopped.
+
+            </system-out>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; IPC exige token para escritura pero permite ping sin token" time="0.1038907">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-9svUnM\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.710Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-ipc-auth-1773720145676-bgsep9gxdg7
+
+[GICS] Daemon stopped.
+
+            </system-out>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; IPC acepta múltiples readers simultáneos (ping concurrente)" time="0.0870701">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-Xo8Tdl\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.789Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-ipc-concurrency-readers-1773720145777-q2t4xdebvcp
+
+[GICS] Daemon stopped.
+
+            </system-out>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; Insight API base: getInsight/getInsights/reportOutcome/getAccuracy/subscribe/unsubscribe" time="0.0974875">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-zH3YLw\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.878Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-api-base-1773720145865-fyrhfjjoy2u
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-recovery.test.ts" name="GICSDaemon WAL recovery (Phase 1.2 bootstrap) &gt; persiste insights en segmentos y los restaura tras reinicio" time="0.2111201">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-daemon-recovery-WYLhC8\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.974Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-persistence-a-1773720145963-xru7fqioazf
+
+[GICS] Daemon stopped.
+
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[GICS] Restored insights from segments: behavioral=1, confidence=1
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:26.081Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-persistence-b-1773720146063-94ld3ghcszt
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-resilience.test.ts" timestamp="2026-03-17T04:03:39.973Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="2.0129666">
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; 5 failures en 60s → circuit OPEN → calls fail-fast" time="0.3086796">
+        </testcase>
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; 30s cooldown → HALF-OPEN → 3 probes OK → CLOSED" time="0.2746097">
+        </testcase>
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; retry con jitter: delays no son idénticos en múltiples retries" time="0.4998351">
+        </testcase>
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; backpressure: &gt;highWaterMark pending → caller recibe error con queueDepth" time="0.1101472">
+        </testcase>
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; error metadata siempre presente: {attempts, circuitState, queueDepth}" time="0.5283304">
+        </testcase>
+        <testcase classname="tests/daemon-resilience.test.ts" name="ResilienceShell (fase 6) &gt; circuitState transitions: CLOSED → OPEN → HALF_OPEN → CLOSED" time="0.281421">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-supervisor.test.ts" timestamp="2026-03-17T04:03:39.974Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="4.0145619">
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; subsystem falla → restart automático en &lt;2s" time="1.5104086">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:23.794Z)
+
+[Supervisor] HEALTHY -&gt; RESTARTING: subsystem failure (memOk=false, walOk=false) (2026-03-17T04:02:23.898Z)
+
+[Supervisor] RESTARTING -&gt; HEALTHY: restart succeeded after 50ms backoff (2026-03-17T04:02:23.959Z)
+
+            </system-out>
+        </testcase>
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; 5 failures en 5min → DEGRADED mode activado" time="1.5368752">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.305Z)
+
+[Supervisor] HEALTHY -&gt; RESTARTING: subsystem failure (memOk=false, walOk=false) (2026-03-17T04:02:25.362Z)
+
+            </system-out>
+            <system-err>
+[Supervisor] RESTARTING -&gt; DEGRADED: 5 restarts in 300s window (2026-03-17T04:02:25.677Z)
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; en DEGRADED: writes se bufferizan, reads del snapshot" time="0.1060354">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:26.842Z)
+
+            </system-out>
+        </testcase>
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; post-recovery: buffer se flushea, conflictos resueltos (WAL wins)" time="0.003118">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:26.948Z)
+[Supervisor] Conflict: WAL wins for key=&quot;k2&quot;, buffer write discarded.
+
+            </system-out>
+        </testcase>
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; resetDegraded() → vuelve a STARTING → HEALTHY" time="0.812351">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:26.951Z)
+
+[Supervisor] HEALTHY -&gt; RESTARTING: subsystem failure (memOk=false, walOk=false) (2026-03-17T04:02:27.052Z)
+
+[Supervisor] DEGRADED -&gt; STARTING: manual reset from DEGRADED (2026-03-17T04:02:27.762Z)
+
+[Supervisor] STARTING -&gt; HEALTHY: subsystem restarted after manual reset (2026-03-17T04:02:27.763Z)
+
+            </system-out>
+            <system-err>
+[Supervisor] RESTARTING -&gt; DEGRADED: 3 restarts in 300s window (2026-03-17T04:02:27.175Z)
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-supervisor.test.ts" name="GICSSupervisor (fase 5) &gt; state transitions logueados con timestamp" time="0.0016968">
+            <system-out>
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:27.763Z)
+
+            </system-out>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-wal-v2.test.ts" timestamp="2026-03-17T04:03:39.976Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="1.4348276">
+        <testcase classname="tests/daemon-wal-v2.test.ts" name="WAL v2 (fase 4) &gt; 100 ciclos write+recovery mantienen consistencia post-fsync" time="0.9886746">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal-v2.test.ts" name="WAL v2 (fase 4) &gt; lector v2 migra y replays WAL v1 binario" time="0.020166">
+        </testcase>
+        <testcase classname="tests/daemon-wal-v2.test.ts" name="WAL v2 (fase 4) &gt; corrupción CRC en recovery: salta entry corrupta y continúa" time="0.0113435">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] CRC mismatch at offset 5. Skipping corrupted entry.
+
+[WAL] CRC mismatch at offset 5. Skipping corrupted entry.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal-v2.test.ts" name="WAL v2 (fase 4) &gt; checkpoint corrupto: fallback a checkpoint anterior válido" time="0.0181405">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] Invalid checkpoint hash detected. Falling back to previous checkpoint.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal-v2.test.ts" name="WAL v2 (fase 4) &gt; auto-compact mantiene WAL acotado al superar maxWalSizeMB" time="0.390256">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/daemon-wal.test.ts" timestamp="2026-03-17T04:03:39.980Z" hostname="DESKTOP-28NKMQD" tests="8" failures="0" errors="0" skipped="0" time="0.2130362">
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; append + replay roundtrip (binary)" time="0.0828732">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; append + replay roundtrip (jsonl)" time="0.0273692">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; truncate limpia el archivo WAL (binary)" time="0.0154552">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; truncate limpia el archivo WAL (jsonl)" time="0.0126272">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; replay ignora entry corrupta y continúa con las siguientes (binary)" time="0.0241385">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] CRC mismatch at offset 5. Skipping corrupted entry.
+
+[WAL] CRC mismatch at offset 5. Skipping corrupted entry.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; replay ignora entry corrupta y continúa con las siguientes (jsonl)" time="0.0175343">
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+[WAL] JSONL CRC mismatch. Skipping corrupted entry.
+
+[WAL] JSONL CRC mismatch. Skipping corrupted entry.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; fsync strict se comporta como fail-closed en errores de sync (binary)" time="0.0118471">
+        </testcase>
+        <testcase classname="tests/daemon-wal.test.ts" name="WAL providers (binary/jsonl) &gt; fsync strict se comporta como fail-closed en errores de sync (jsonl)" time="0.0146585">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-adversarial.test.ts" timestamp="2026-03-17T04:03:39.982Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.4525781">
+        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 1. Fuzz Roundtrip (50 iterations) &gt; should roundtrip 50 randomized datasets without error" time="0.3627727">
+        </testcase>
+        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 2. Systematic Truncation &gt; should throw IncompleteDataError for every truncated length" time="0.0228272">
+        </testcase>
+        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 3. Systematic Bit-Flipping &gt; should detect bit flips in header and payload" time="0.0051159">
+        </testcase>
+        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 4. Decompression Bomb Protection &gt; should reject StreamSection claiming huge uncompressed size" time="0.003811">
+        </testcase>
+        <testcase classname="tests/gics-adversarial.test.ts" name="Advorsarial Suite (Fase 8) &gt; 5. Concurrency &gt; should handle 10 parallel encoder/decoder instances without pollution" time="0.0300419">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-chm.test.ts" timestamp="2026-03-17T04:03:39.984Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="0.0101164">
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; starts in NORMAL state" time="0.0019689">
+        </testcase>
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; routes to CORE in normal conditions" time="0.0009855">
+        </testcase>
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; triggers ENTROPY_GATE when entropy is too high" time="0.0003027">
+        </testcase>
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; detects RATIO_DROP anomaly and switches to QUARANTINE" time="0.0005794">
+        </testcase>
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; detects ENTROPY_BURST" time="0.0003765">
+        </testcase>
+        <testcase classname="tests/gics-chm.test.ts" name="HealthMonitor (CHM) &gt; recovers from QUARANTINE after M_RECOVERY_BLOCKS successes" time="0.0007027">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-float-edge-cases.test.ts" timestamp="2026-03-17T04:03:39.985Z" hostname="DESKTOP-28NKMQD" tests="2" failures="0" errors="0" skipped="0" time="0.1170779">
+        <testcase classname="tests/gics-float-edge-cases.test.ts" name="GICS float edge-cases &gt; roundtrips special IEEE-754 values (NaN, ±Infinity, -0)" time="0.0903738">
+        </testcase>
+        <testcase classname="tests/gics-float-edge-cases.test.ts" name="GICS float edge-cases &gt; roundtrips extreme finite floats (MAX_VALUE, MIN_VALUE/subnormal)" time="0.0037188">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-generic-roundtrip.test.ts" timestamp="2026-03-17T04:03:39.986Z" hostname="DESKTOP-28NKMQD" tests="12" failures="0" errors="0" skipped="0" time="0.3222414">
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Trust schema (string keys + categorical) &gt; round-trips trust snapshots with identical data" time="0.1562927">
+        </testcase>
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Trust schema (string keys + categorical) &gt; categorical fields round-trip as strings, not numbers" time="0.0060952">
+        </testcase>
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Trust schema (string keys + categorical) &gt; string keys are preserved exactly" time="0.0156249">
+        </testcase>
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Numeric schema (no categorical) &gt; round-trips sensor data" time="0.013773">
+        </testcase>
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Minimal schema &gt; single-field schema round-trips" time="0.0016463">
+        </testcase>
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; queryGeneric() &gt; query by string key returns matching snapshots" time="0.0053644">
+        </testcase>
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; queryGeneric() &gt; query by numeric key on numeric schema" time="0.0034912">
+        </testcase>
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; queryGeneric() &gt; query by non-existent key returns empty" time="0.0024527">
+        </testcase>
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Legacy compatibility via getAllGenericSnapshots() &gt; legacy files return { price, quantity } records" time="0.0050827">
+        </testcase>
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Integrity &gt; verify() passes on schema-encoded files" time="0.0037739">
+        </testcase>
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Integrity &gt; getAllSnapshots() on legacy files still works" time="0.0027915">
+        </testcase>
+        <testcase classname="tests/gics-generic-roundtrip.test.ts" name="Generic Encoder/Decoder Round-Trip &gt; Large dataset &gt; 1000 trust snapshots round-trip correctly" time="0.0874526">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-golden-corpus.test.ts" timestamp="2026-03-17T04:03:39.990Z" hostname="DESKTOP-28NKMQD" tests="7" failures="0" errors="0" skipped="0" time="0.4189377">
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; legacy_plain: sha256 matches, verify ok, unpack matches expected" time="0.1119914">
+        </testcase>
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; legacy_multisegment: verify ok, unpack matches expected" time="0.0262889">
+        </testcase>
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; legacy_encrypted: verify ok, unpack requires password and matches expected" time="0.0664141">
+        </testcase>
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; schema_trust_events_plain: verify ok, schema is readable and generic query works" time="0.0576308">
+        </testcase>
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; tamper: 1-bit flip must fail (IntegrityError)" time="0.0200781">
+        </testcase>
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; truncation: missing EOS must fail (IncompleteDataError)" time="0.0408646">
+        </testcase>
+        <testcase classname="tests/gics-golden-corpus.test.ts" name="GICS v1.3 Golden Corpus &gt; wrong password: encrypted file rejects" time="0.0717068">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-item-major.test.ts" timestamp="2026-03-17T04:03:39.991Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="5.0484771">
+        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; roundtrip: stable multi-item (20 items x 100 snapshots)" time="0.2346144">
+        </testcase>
+        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; segment flag is set for stable multi-item data" time="0.0097477">
+        </testcase>
+        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; fallback: varying item counts stay snapshot-major" time="0.0191867">
+        </testcase>
+        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; single-item data does not activate item-major" time="0.0068585">
+        </testcase>
+        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; roundtrip: large multi-item (20 items x 500 snapshots)" time="0.2919156">
+        </testcase>
+        <testcase classname="tests/gics-item-major.test.ts" name="Item-Major Layout &gt; keeps temporal depth for wide stable books instead of fragmenting into shallow segments" time="4.4600375">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-limits.test.ts" timestamp="2026-03-17T04:03:39.992Z" hostname="DESKTOP-28NKMQD" tests="4" failures="0" errors="0" skipped="1" time="0.7322491">
+        <testcase classname="tests/gics-limits.test.ts" name="GICS system limits &gt; handles a high snapshot count without integrity loss" time="0.5030753">
+        </testcase>
+        <testcase classname="tests/gics-limits.test.ts" name="GICS system limits &gt; handles snapshots with thousands of items" time="0.1836927">
+        </testcase>
+        <testcase classname="tests/gics-limits.test.ts" name="GICS system limits &gt; supports configurable heavy stress for snapshot and item counts" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="tests/gics-limits.test.ts" name="GICS system limits &gt; rejects malicious section length tampering (limit or integrity path)" time="0.0130484">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-multiitem.test.ts" timestamp="2026-03-17T04:03:39.993Z" hostname="DESKTOP-28NKMQD" tests="8" failures="0" errors="0" skipped="0" time="0.2196451">
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should roundtrip multi-item snapshots exactly" time="0.0835318">
+        </testcase>
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should preserve item IDs correctly" time="0.0096495">
+        </testcase>
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should preserve quantities correctly" time="0.0226581">
+        </testcase>
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should roundtrip floating point price/quantity without precision loss in legacy mode" time="0.0122214">
+        </testcase>
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should handle variable item counts per snapshot" time="0.0186342">
+        </testcase>
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should handle empty items (snapshot with 0 items)" time="0.0022598">
+        </testcase>
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should produce deterministic output (sorted by itemId)" time="0.0361201">
+        </testcase>
+        <testcase classname="tests/gics-multiitem.test.ts" name="GICS Multi-Item Roundtrip &gt; should reject data without EOS marker" time="0.018022">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-profiler.test.ts" timestamp="2026-03-17T04:03:39.994Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="0.252181">
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; profiles trend data (quick mode)" time="0.0988995">
+        </testcase>
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; profiles volatile data (quick mode)" time="0.0248902">
+        </testcase>
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; profiles multi-item data (quick mode)" time="0.0813623">
+        </testcase>
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; best trial has highest ratio among all trials" time="0.0096598">
+        </testcase>
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; rejects empty sample" time="0.0027717">
+        </testcase>
+        <testcase classname="tests/gics-profiler.test.ts" name="CompressionProfiler &gt; preset matching works when config aligns" time="0.0105636">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-quarantine-cap.test.ts" timestamp="2026-03-17T04:03:39.995Z" hostname="DESKTOP-28NKMQD" tests="2" failures="0" errors="0" skipped="0" time="0.1718348">
+        <testcase classname="tests/gics-quarantine-cap.test.ts" name="GICS Phase 11: Quarantine Cap (FIXED64_LE) &gt; should trigger quarantine and use FIXED64_LE for noisy data" time="0.1579291">
+        </testcase>
+        <testcase classname="tests/gics-quarantine-cap.test.ts" name="GICS Phase 11: Quarantine Cap (FIXED64_LE) &gt; reconstructs values correctly when using FIXED64_LE" time="0.003003">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-rotating-session.test.ts" timestamp="2026-03-17T04:03:39.995Z" hostname="DESKTOP-28NKMQD" tests="3" failures="0" errors="0" skipped="0" time="0.3865221">
+        <testcase classname="tests/gics-rotating-session.test.ts" name="GICS rotating sessions &gt; rotates files deterministically, keeps continuity, and reads the full session" time="0.1494966">
+        </testcase>
+        <testcase classname="tests/gics-rotating-session.test.ts" name="GICS rotating sessions &gt; supports adaptive rotation triggers without breaking verification" time="0.1220501">
+        </testcase>
+        <testcase classname="tests/gics-rotating-session.test.ts" name="GICS rotating sessions &gt; resumes sessions and marks invalid tail files as orphaned" time="0.1064141">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-schema-retrocompat.test.ts" timestamp="2026-03-17T04:03:39.996Z" hostname="DESKTOP-28NKMQD" tests="16" failures="0" errors="0" skipped="0" time="0.1643635">
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; FieldDef has correct shape" time="0.0018943">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; FieldDef supports categorical with enumMap" time="0.0003352">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; SchemaProfile has correct shape" time="0.0012402">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; GenericSnapshot supports custom item types" time="0.0002322">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Type definitions &gt; GenericSnapshot default type matches legacy Snapshot" time="0.000211">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Format constants &gt; HAS_SCHEMA flag is defined and does not conflict" time="0.0002543">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Format constants &gt; SCHEMA_STREAM_BASE is 100" time="0.000435">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Format constants &gt; VERSION_BYTE remains 0x03" time="0.0001817">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Predefined schemas &gt; MARKET_DATA schema exists and has price+quantity" time="0.00053">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Predefined schemas &gt; TRUST_EVENTS schema exists with 6 fields" time="0.0005556">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Byte-identical encoding without schema &gt; pack() without schema produces identical bytes across two calls" time="0.0785412">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Byte-identical encoding without schema &gt; header version byte is 0x03 when no schema" time="0.001569">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Byte-identical encoding without schema &gt; header flags do NOT include HAS_SCHEMA when no schema given" time="0.0019331">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Round-trip without schema (legacy path) &gt; encode → decode produces identical data" time="0.0477201">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Round-trip without schema (legacy path) &gt; verify() passes on files without schema" time="0.0029151">
+        </testcase>
+        <testcase classname="tests/gics-schema-retrocompat.test.ts" name="Schema Profiles — Retrocompatibility &gt; Round-trip without schema (legacy path) &gt; query() works on files without schema" time="0.0026461">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-schema-section.test.ts" timestamp="2026-03-17T04:03:39.998Z" hostname="DESKTOP-28NKMQD" tests="7" failures="0" errors="0" skipped="0" time="0.1990385">
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Schema encoding/decoding round-trip &gt; encoder with schema → decoder reads same schema via parseHeader()" time="0.1225506">
+        </testcase>
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Schema encoding/decoding round-trip &gt; schema with categorical field preserves enum map" time="0.0031667">
+        </testcase>
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Schema encoding/decoding round-trip &gt; all field properties survive round-trip" time="0.0112478">
+        </testcase>
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Legacy files (no schema) &gt; decoder returns legacy schema for v1.3 files without HAS_SCHEMA" time="0.0074868">
+        </testcase>
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Header flags &gt; HAS_SCHEMA flag is set when schema provided" time="0.0054507">
+        </testcase>
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Header flags &gt; HAS_SCHEMA flag is NOT set without schema" time="0.0185918">
+        </testcase>
+        <testcase classname="tests/gics-schema-section.test.ts" name="Schema Section in Header &gt; Integrity &gt; verify() passes on files with schema" time="0.0140514">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-security-crypto.test.ts" timestamp="2026-03-17T04:03:40.000Z" hostname="DESKTOP-28NKMQD" tests="6" failures="0" errors="0" skipped="0" time="0.4521285">
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; PBKDF2 key derivation is deterministic for same password/salt/iterations" time="0.0483464">
+        </testcase>
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; auth verification succeeds for correct key and fails for wrong key" time="0.0624883">
+        </testcase>
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; auth verification has bounded timing delta between match/mismatch paths" time="0.1046846">
+        </testcase>
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; stream IV domain separation produces different ciphertext/tag across stream IDs" time="0.030625">
+        </testcase>
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; tampered ciphertext/tag is rejected by decryptSection" time="0.0333552">
+        </testcase>
+        <testcase classname="tests/gics-security-crypto.test.ts" name="GICS cryptographic security checks &gt; encrypted pack/unpack succeeds with correct password and fails with wrong password" time="0.1624099">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-streaming-flush.test.ts" timestamp="2026-03-17T04:03:40.001Z" hostname="DESKTOP-28NKMQD" tests="4" failures="0" errors="0" skipped="0" time="1.4057875">
+        <testcase classname="tests/gics-streaming-flush.test.ts" name="GICS streaming flush behavior &gt; keeps in-memory flush backward compatible by returning full flush bytes" time="0.0833483">
+        </testcase>
+        <testcase classname="tests/gics-streaming-flush.test.ts" name="GICS streaming flush behavior &gt; autoFlushThreshold triggers an internal flush once the threshold is reached" time="0.0124441">
+        </testcase>
+        <testcase classname="tests/gics-streaming-flush.test.ts" name="GICS streaming flush behavior &gt; streams file-mode flushes directly to disk without aggregating all segment bytes" time="0.0596229">
+        </testcase>
+        <testcase classname="tests/gics-streaming-flush.test.ts" name="GICS streaming flush behavior &gt; keeps peak heap growth below 100MB for 10K+ snapshots in streaming file mode" time="1.2383071">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-string-dict.test.ts" timestamp="2026-03-17T04:03:40.002Z" hostname="DESKTOP-28NKMQD" tests="16" failures="0" errors="0" skipped="0" time="0.0496969">
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; build() &gt; builds from unique keys, sorted" time="0.0163305">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; build() &gt; deduplicates keys" time="0.0003793">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; build() &gt; handles empty input" time="0.0002696">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips simple keys" time="0.00104">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips keys with common prefixes" time="0.000539">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips with decodeForward" time="0.0004781">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips empty dictionary" time="0.0003134">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips single entry" time="0.0003491">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; round-trips unicode strings" time="0.0016341">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; encode/decode round-trip &gt; should throw when decoding truncated data" time="0.0012636">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; compression efficiency &gt; common prefix keys compress smaller than naive" time="0.0007621">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="StringDictionary &gt; large dictionary &gt; handles 1000 entries" time="0.0052489">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; round-trips SegmentIndex WITHOUT string dict (backward compat)" time="0.0014775">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; round-trips SegmentIndex WITH string dict" time="0.0008046">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; containsString() works via string dict lookup" time="0.0003586">
+        </testcase>
+        <testcase classname="tests/gics-string-dict.test.ts" name="SegmentIndex with StringDictionary &gt; containsString() returns false when no string dict" time="0.0001686">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-v1.3-forensics.test.ts" timestamp="2026-03-17T04:03:40.005Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.1596342">
+        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should verify file integrity without decompression" time="0.0980868">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should fail verification if CRC is tampered" time="0.0032651">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; verifyIntegrityOnly should return false for corrupt data (no throw)" time="0.0019936">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should fail if cross-stream lengths mismatch (Manual Trigger)" time="0.0088397">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-forensics.test.ts" name="GICS v1.3 Forensics &amp; Verification &gt; should detect sum(snapshotLen) != itemIds.length" time="0.015494">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-v1.3-format.test.ts" timestamp="2026-03-17T04:03:40.006Z" hostname="DESKTOP-28NKMQD" tests="12" failures="0" errors="0" skipped="0" time="0.1712176">
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Version Byte &gt; should encode with version byte 0x03" time="0.0573239">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Version Byte &gt; should decode v1.3 format successfully" time="0.0082245">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Hash Chain Integrity &gt; should detect payload tampering" time="0.0053708">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Hash Chain Integrity &gt; should detect hash field tampering" time="0.0168041">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Hash Chain Integrity &gt; should verify multiple stream sections" time="0.0132206">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Roundtrip Integrity &gt; should roundtrip single snapshot correctly" time="0.0068339">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Roundtrip Integrity &gt; should roundtrip multi-item snapshots" time="0.0135666">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Roundtrip Integrity &gt; should roundtrip large dataset with trends" time="0.0164817">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Backward Compatibility &gt; should accept v1.2 format (version 0x02)" time="0.0002082">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Backward Compatibility &gt; should reject unsupported version with clear error" time="0.0011023">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Stream Section Format &gt; should encode all mandatory streams" time="0.0020503">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-format.test.ts" name="GICS v1.3 Format &gt; Stream Section Format &gt; should use outer compression (Zstd)" time="0.0119758">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/gics-v1.3-segments.test.ts" timestamp="2026-03-17T04:03:40.008Z" hostname="DESKTOP-28NKMQD" tests="5" failures="0" errors="0" skipped="0" time="0.1379687">
+        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should encode and decode multiple segments using size limit" time="0.0944536">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should append to an existing GICS file" time="0.0254875">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should perform optimized query using segment index" time="0.0068617">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should verify file-level integrity chain" time="0.00357">
+        </testcase>
+        <testcase classname="tests/gics-v1.3-segments.test.ts" name="GICS v1.3 Segments &amp; Append &gt; should throw IntegrityError on decodeNextSegment with corrupt data" time="0.0020982">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/insight-engine.test.ts" timestamp="2026-03-17T04:03:40.008Z" hostname="DESKTOP-28NKMQD" tests="16" failures="0" errors="0" skipped="0" time="0.5029514">
+        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; tracks entropy, volatility, streak, and streakRecord" time="0.003641">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; computes per-field trends with ema, direction, zScore" time="0.0011408">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; resets streak on direction change" time="0.0006379">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; computes Shannon entropy approaching 1.0 for equal up/down" time="0.0003758">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="InsightTracker (Phase 3.1) &gt; lifecycle classification works with new fields present" time="0.0013554">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; detects positive correlation between co-moving items" time="0.0030463">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; forms clusters from correlated items" time="0.0026172">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; getLeadingIndicators returns indicators with lag" time="0.0022106">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="CorrelationAnalyzer (Phase 3.2) &gt; getSeasonalPatterns returns array" time="0.0007505">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; detects anomaly when z-score exceeds threshold" time="0.0027843">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; generates lifecycle-based recommendations" time="0.0008872">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; getForecast returns projection with decaying confidence" time="0.0006722">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="PredictiveSignals (Phase 3.3) &gt; getAnomalies filters by since timestamp" time="0.0007461">
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="Daemon Insight IPC (Phase 3 integration) &gt; getCorrelations, getClusters, getLeadingIndicators, getSeasonalPatterns via IPC" time="0.2259436">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-insight-test-cv6ihK\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:25.917Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-insight-ipc-corr-1773720145904-gv7hpt9apad
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="Daemon Insight IPC (Phase 3 integration) &gt; getForecast, getAnomalies, getRecommendations via IPC" time="0.1187441">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-insight-test-iHswCt\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:26.139Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-insight-ipc-pred-1773720146129-xx2cng6lcfc
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+        <testcase classname="tests/insight-engine.test.ts" name="Daemon Insight IPC (Phase 3 integration) &gt; put response includes behavior with new fields" time="0.1075208">
+            <system-out>
+[GICS] Generated new security token at C:\Users\shilo\AppData\Local\Temp\gics-insight-test-JRVSmq\.gics_token
+[GICS] Replaying WAL...
+
+[GICS] WAL replayed. 0 records loaded (0 entries replayed).
+
+[Supervisor] STARTING -&gt; HEALTHY: supervisor started (2026-03-17T04:02:26.259Z)
+
+[GICS] Daemon listening on \\.\pipe\gics-insight-insight-ipc-put-behavior-1773720146248-wseqjcwd1yq
+
+[GICS] Daemon stopped.
+
+            </system-out>
+            <system-err>
+[WAL] fsync not supported/allowed on this filesystem. Continuing without durable sync.
+
+            </system-err>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/phase4-deep-deep.test.ts" timestamp="2026-03-17T04:03:40.012Z" hostname="DESKTOP-28NKMQD" tests="4" failures="0" errors="0" skipped="0" time="0.1813705">
+        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies SNAPSHOT_LEN trial selection chooses the most efficient codec" time="0.0702105">
+        </testcase>
+        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies ITEM_ID uses DICT_VARINT when item IDs repeat" time="0.0145948">
+        </testcase>
+        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies context isolation: one stream must NOT affect another in trial" time="0.0067364">
+        </testcase>
+        <testcase classname="tests/phase4-deep-deep.test.ts" name="Deep Dive Phase 4: Structural and CHM Validation &gt; verifies CHM transition for TIME stream under high jitter" time="0.0169862">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/smoke-globals.test.ts" timestamp="2026-03-17T04:03:40.012Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0081928">
+        <testcase classname="tests/smoke-globals.test.ts" name="smoke-globals &gt; vitest runs (globals)" time="0.0014707">
+            <system-out>
+[smoke-globals] test executed
+
+            </system-out>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/smoke.test.ts" timestamp="2026-03-17T04:03:40.013Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0068521">
+        <testcase classname="tests/smoke.test.ts" name="smoke &gt; vitest runs" time="0.0015323">
+            <system-out>
+[smoke] test executed
+
+            </system-out>
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/regression/codec-selection-stability.test.ts" timestamp="2026-03-17T04:03:40.013Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.1748495">
+        <testcase classname="tests/regression/codec-selection-stability.test.ts" name="Regression: codec selection stability &gt; produces deterministic telemetry codec sequence for same input" time="0.1521725">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/regression/eos_missing.test.ts" timestamp="2026-03-17T04:03:40.014Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.086098">
+        <testcase classname="tests/regression/eos_missing.test.ts" name="Regression: EOS Missing &gt; should throw IncompleteDataError if EOS marker is missing" time="0.0599677">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/regression/eos_trailing.test.ts" timestamp="2026-03-17T04:03:40.014Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0773823">
+        <testcase classname="tests/regression/eos_trailing.test.ts" name="Regression: EOS Trailing Bytes &gt; should throw if bytes exist after EOS" time="0.0667418">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/regression/float-precision-loss.test.ts" timestamp="2026-03-17T04:03:40.015Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.0791431">
+        <testcase classname="tests/regression/float-precision-loss.test.ts" name="Regression: float precision stability &gt; keeps IEEE-754 semantics for challenging floating values" time="0.0689476">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/regression/integrity_mismatch.test.ts" timestamp="2026-03-17T04:03:40.015Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.13684">
+        <testcase classname="tests/regression/integrity_mismatch.test.ts" name="Regression: Integrity Mismatch &gt; should roundtrip bit-exact with seed 12345" time="0.1088315">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/regression/quarantine-trigger.test.ts" timestamp="2026-03-17T04:03:40.016Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.1420887">
+        <testcase classname="tests/regression/quarantine-trigger.test.ts" name="Regression: quarantine trigger stability &gt; keeps triggering quarantine on noisy bursts and remains decodable" time="0.108548">
+        </testcase>
+    </testsuite>
+    <testsuite name="tests/regression/truncation.test.ts" timestamp="2026-03-17T04:03:40.016Z" hostname="DESKTOP-28NKMQD" tests="1" failures="0" errors="0" skipped="0" time="0.3328678">
+        <testcase classname="tests/regression/truncation.test.ts" name="Regression: Truncation Silent Success &gt; should throw IncompleteDataError for truncated streams" time="0.2694453">
         </testcase>
     </testsuite>
 </testsuites>
