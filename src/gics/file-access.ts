@@ -34,10 +34,31 @@ export class FileAccess {
     }
 
     /**
-     * Writes data to the end of the file.
+     * Writes data at the provided file offset and returns the new offset.
      */
-    static async appendData(handle: FileHandle, data: Uint8Array): Promise<void> {
-        const stats = await handle.stat();
-        await handle.write(data, 0, data.length, stats.size);
+    static async appendData(handle: FileHandle, data: Uint8Array, offset: number): Promise<number> {
+        try {
+            return await FileAccess.writeFully(handle, data, offset);
+        } catch {
+            const stats = await handle.stat();
+            return await FileAccess.writeFully(handle, data, stats.size);
+        }
+    }
+
+    private static async writeFully(handle: FileHandle, data: Uint8Array, offset: number): Promise<number> {
+        let written = 0;
+        while (written < data.length) {
+            const { bytesWritten } = await handle.write(
+                data,
+                written,
+                data.length - written,
+                offset + written,
+            );
+            if (bytesWritten <= 0) {
+                throw new Error('Failed to append data: zero bytes written.');
+            }
+            written += bytesWritten;
+        }
+        return offset + written;
     }
 }

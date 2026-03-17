@@ -37,6 +37,8 @@
         "bench:security": "tsx bench/scripts/empirical-security.ts",
         "bench:edge-cases": "tsx bench/scripts/empirical-edge-cases.ts",
         "bench:codec-stats": "tsx bench/scripts/empirical-codec-stats.ts",
+        "bench:long-horizon": "tsx bench/scripts/long-horizon.ts",
+        "bench:long-horizon:forensics": "tsx bench/scripts/long-horizon-forensics.ts",
         "bench:forensics": "tsx bench/forensics/postfreeze/harness.postfreeze.ts",
         "bench:forensics:verify": "tsx bench/forensics/postfreeze/verifier.postfreeze.ts",
         "bench:forensics:summary": "tsx bench/forensics/postfreeze/summary.postfreeze.ts",

@@ -1,5 +1,5 @@
 import { GICS, Snapshot } from '../src/index.js';
-import { SEGMENT_FLAGS } from '../src/gics/format.js';
+import { FILE_EOS_SIZE, GICS_HEADER_SIZE_V3, SEGMENT_FLAGS } from '../src/gics/format.js';
 import { SegmentHeader } from '../src/gics/segment.js';
 
 function makeStableMultiItemSnapshots(snapshotCount: number, itemCount: number): Snapshot[] {
@@ -16,6 +16,23 @@ function makeStableMultiItemSnapshots(snapshotCount: number, itemCount: number):
         snapshots.push({ timestamp: baseTime + s * 60, items });
     }
     return snapshots;
+}
+
+function countSegments(encoded: Uint8Array): number {
+    let count = 0;
+    let pos = GICS_HEADER_SIZE_V3;
+    const dataEnd = encoded.length - FILE_EOS_SIZE;
+
+    while (pos + 14 <= dataEnd) {
+        const header = SegmentHeader.deserialize(encoded.subarray(pos, pos + 14));
+        if (header.totalLength <= 0) {
+            break;
+        }
+        count++;
+        pos += header.totalLength;
+    }
+
+    return count;
 }
 
 describe('Item-Major Layout', () => {
@@ -130,6 +147,26 @@ describe('Item-Major Layout', () => {
             expect(decoded[s].timestamp).toBe(snapshots[s].timestamp);
             for (const [id, original] of snapshots[s].items) {
                 expect(decoded[s].items.get(id)).toEqual(original);
+            }
+        }
+    });
+
+    it('keeps temporal depth for wide stable books instead of fragmenting into shallow segments', async () => {
+        const snapshots = makeStableMultiItemSnapshots(96, 10_000);
+
+        const encoded = await GICS.pack(snapshots);
+        const decoded = await GICS.unpack(encoded);
+
+        expect(countSegments(encoded)).toBe(1);
+        expect(decoded.length).toBe(snapshots.length);
+
+        const sampleSnapshots = [0, 47, 95];
+        const sampleItems = [1, 5000, 10000];
+        for (const s of sampleSnapshots) {
+            expect(decoded[s].timestamp).toBe(snapshots[s].timestamp);
+            expect(decoded[s].items.size).toBe(snapshots[s].items.size);
+            for (const id of sampleItems) {
+                expect(decoded[s].items.get(id)).toEqual(snapshots[s].items.get(id));
             }
         }
     });

@@ -6,16 +6,27 @@
 
 import { GICSv2Encoder } from './gics/encode.js';
 import { GICSv2Decoder } from './gics/decode.js';
+import { GICSv2RotatingEncoder, readSession, verifySession } from './gics/rotating-encoder.js';
 import type { Snapshot } from './gics-types.js';
-import type { GICSv2EncoderOptions, GICSv2DecoderOptions } from './gics/types.js';
+import type { GICSv2EncoderOptions, GICSv2DecoderOptions, GICSSessionReadOptions } from './gics/types.js';
 
 // Re-export specific types and errors
 export type { Snapshot, GenericSnapshot, SchemaProfile, FieldDef } from './gics-types.js';
-export type { GICSv2EncoderOptions as EncoderOptions, GICSv2DecoderOptions as DecoderOptions, GICSv2Logger as Logger, CompressionPreset } from './gics/types.js';
+export type {
+    GICSv2EncoderOptions as EncoderOptions,
+    GICSv2DecoderOptions as DecoderOptions,
+    GICSv2Logger as Logger,
+    CompressionPreset,
+    GICSv2RotationOptions as RotationOptions,
+    GICSv2AdaptiveRotationOptions as AdaptiveRotationOptions,
+    GICSSessionManifest as SessionManifest,
+    GICSSessionReadOptions as SessionReadOptions
+} from './gics/types.js';
 export { COMPRESSION_PRESETS } from './gics/types.js';
 export { IncompleteDataError, IntegrityError } from './gics/errors.js';
 export { CompressionProfiler } from './gics/profiler.js';
 export type { ProfileResult, ProfileMode, TrialResult, ProfileMeta } from './gics/profiler.js';
+export { GICSv2RotatingEncoder };
 
 import type { SchemaProfile } from './gics-types.js';
 
@@ -75,9 +86,28 @@ export const GICS = {
     },
 
     /**
+     * Reads a rotated session manifest and returns concatenated snapshots.
+     */
+    readSession: async (manifestPath: string, options?: GICSSessionReadOptions): Promise<Snapshot[]> => {
+        return await readSession(manifestPath, options);
+    },
+
+    /**
+     * Verifies rotated session integrity without full decode.
+     */
+    verifySession: async (manifestPath: string, options?: GICSSessionReadOptions): Promise<boolean> => {
+        return await verifySession(manifestPath, options);
+    },
+
+    /**
      * GICS Encoder class for streaming/append operations.
      */
     Encoder: GICSv2Encoder,
+
+    /**
+     * GICS Rotating Encoder for indefinite sessions.
+     */
+    RotatingEncoder: GICSv2RotatingEncoder,
 
     /**
      * GICS Decoder class for advanced reading/querying.

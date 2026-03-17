@@ -36,6 +36,7 @@ interface DataFeatures {
     quantities: number[];
     itemMajorLayout: boolean;
     itemsPerSnapshot: number;
+    snapshotsPerItem: number;
 }
 
 /** Extended features for schema-based encoding */
@@ -75,6 +76,8 @@ export class GICSv2Encoder {
     private readonly compressionLevel: number;
     private integrity: IntegrityChain;
     private fileHandle: FileHandle | null = null;
+    private fileOffset = 0;
+    private lastFlushSegmentCount = 0;
     private readonly accumulatedBytes: Uint8Array[] = [];
     private readonly encryptionKey: Buffer | null = null;
     private readonly encryptionSalt: Uint8Array | null = null;
@@ -93,6 +96,8 @@ export class GICSv2Encoder {
         const encoder = new GICSv2Encoder(options);
         encoder.fileHandle = handle;
         const prevHash = await FileAccess.prepareForAppend(handle);
+        const stats = await handle.stat();
+        encoder.fileOffset = stats.size;
         if (prevHash) {
             encoder.integrity = new IntegrityChain(prevHash);
             encoder.hasEmittedHeader = true;
@@ -111,6 +116,10 @@ export class GICSv2Encoder {
             sidecarWriter: null,
             logger: null,
             segmentSizeLimit: 1024 * 1024, // 1MB
+            minSnapshotsPerSegment: 256,
+            maxSnapshotsPerSegment: 1024,
+            maxItemsPerSegment: 1_000_000,
+            autoFlushThreshold: 0,
             password: '',
             schema: undefined as unknown as import('../gics-types.js').SchemaProfile,
             preset: options.preset ?? 'balanced',
@@ -145,6 +154,9 @@ export class GICSv2Encoder {
     async addSnapshot(snapshot: Snapshot | GenericSnapshot<Record<string, number | string>>): Promise<void> {
         if (this.isFinalized) throw new Error("GICSv2Encoder: Cannot append after finalize()");
         this.snapshots.push(snapshot);
+        if (this.options.autoFlushThreshold > 0 && this.snapshots.length >= this.options.autoFlushThreshold) {
+            await this.flush();
+        }
     }
 
     async push(snapshot: Snapshot | GenericSnapshot<Record<string, number | string>>): Promise<void> {
@@ -153,6 +165,18 @@ export class GICSv2Encoder {
 
     getTelemetry() {
         return this.lastTelemetry;
+    }
+
+    getBufferedSnapshotCount(): number {
+        return this.snapshots.length;
+    }
+
+    getLastFlushSegmentCount(): number {
+        return this.lastFlushSegmentCount;
+    }
+
+    getFileOffset(): number {
+        return this.fileOffset;
     }
 
     private emitFileHeader(): Uint8Array {
@@ -214,33 +238,35 @@ export class GICSv2Encoder {
      */
     async flush(): Promise<Uint8Array> {
         if (this.isFinalized) throw new Error("GICSv2Encoder: Cannot flush after finalize()");
-        if (this.snapshots.length === 0) return new Uint8Array(0);
-
-        const builder = new SegmentBuilder(this.options.segmentSizeLimit);
-        type AnySnapshot = Snapshot | GenericSnapshot<Record<string, number | string>>;
-        const groups: AnySnapshot[][] = [];
-
-        for (const s of this.snapshots) {
-            if (builder.push(s as Snapshot)) {
-                groups.push(builder.seal());
-            }
+        if (this.snapshots.length === 0) {
+            this.lastFlushSegmentCount = 0;
+            return new Uint8Array(0);
         }
-        if (builder.pendingCount > 0) {
-            groups.push(builder.seal());
-        }
+
+        const groups = this.buildSegmentGroups(this.snapshots);
+        this.lastFlushSegmentCount = groups.length;
         this.snapshots = [];
 
-        const allBytes: Uint8Array[] = [];
+        const allBytes: Uint8Array[] | null = this.fileHandle ? null : [];
+        let lastEmittedChunk: Uint8Array = new Uint8Array(0);
         if (!this.hasEmittedHeader) {
             const header = this.emitFileHeader();
-            allBytes.push(header);
-            if (this.fileHandle) await FileAccess.appendData(this.fileHandle, header);
+            if (allBytes) {
+                allBytes.push(header);
+            } else {
+                await this.appendToFile(header);
+                lastEmittedChunk = header;
+            }
 
             // Emit schema section after header if HAS_SCHEMA
             if (this.options.schema) {
                 const schemaSection = await this.emitSchemaSection();
-                allBytes.push(schemaSection);
-                if (this.fileHandle) await FileAccess.appendData(this.fileHandle, schemaSection);
+                if (allBytes) {
+                    allBytes.push(schemaSection);
+                } else {
+                    await this.appendToFile(schemaSection);
+                    lastEmittedChunk = schemaSection;
+                }
             }
 
             this.hasEmittedHeader = true;
@@ -250,14 +276,22 @@ export class GICSv2Encoder {
         for (const group of groups) {
             const { segment, stats } = await this.encodeSegment(group);
             const bytes = segment.serialize();
-            allBytes.push(bytes);
-            if (this.fileHandle) await FileAccess.appendData(this.fileHandle, bytes);
+            if (allBytes) {
+                allBytes.push(bytes);
+            } else {
+                await this.appendToFile(bytes);
+                lastEmittedChunk = bytes;
+            }
             blockStats.push(...stats);
         }
 
         this.computeTelemetry(blockStats);
+        if (!allBytes) {
+            return lastEmittedChunk;
+        }
+
         const finalBytes = this.concatArrays(allBytes);
-        if (!this.fileHandle) this.accumulatedBytes.push(finalBytes);
+        this.accumulatedBytes.push(finalBytes);
         return finalBytes;
     }
 
@@ -319,6 +353,10 @@ export class GICSv2Encoder {
         addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void,
         blockStats: BlockStats[]
     ) {
+        const itemAlignedBlockSize = features.itemMajorLayout
+            ? this.getItemAlignedBlockSize(features.snapshotsPerItem)
+            : this.blockSize;
+
         const processBlockWrapper = (streamId: StreamId, chunk: number[], inputData: number[], stateSnapshot: ContextSnapshot, chm: HealthMonitor) => {
             const result = this.processStreamBlock(ctx, streamId, chunk, inputData, stateSnapshot, chm);
             addToStream(streamId, result.manifest, result.payload);
@@ -327,9 +365,9 @@ export class GICSv2Encoder {
 
         this.processTimeBlocks(ctx, features.timestamps, processBlockWrapper);
         this.processSnapshotLenBlocks(features.snapshotLengths, addToStream, blockStats);
-        this.processItemIdBlocks(features.itemIds, addToStream, blockStats);
-        this.processValueBlocks(ctx, features.prices, processBlockWrapper, addToStream, blockStats);
-        this.processQuantityBlocks(features.quantities, addToStream, blockStats);
+        this.processItemIdBlocks(features.itemIds, addToStream, blockStats, itemAlignedBlockSize);
+        this.processValueBlocks(ctx, features.prices, processBlockWrapper, addToStream, blockStats, itemAlignedBlockSize);
+        this.processQuantityBlocks(features.quantities, addToStream, blockStats, itemAlignedBlockSize);
     }
 
     private async wrapSections(
@@ -497,12 +535,22 @@ export class GICSv2Encoder {
                         quantities: transpose(quantities),
                         itemMajorLayout: true,
                         itemsPerSnapshot: n,
+                        snapshotsPerItem: sc,
                     };
                 }
             }
         }
 
-        return { timestamps, snapshotLengths, itemIds, prices, quantities, itemMajorLayout: false, itemsPerSnapshot: 0 };
+        return {
+            timestamps,
+            snapshotLengths,
+            itemIds,
+            prices,
+            quantities,
+            itemMajorLayout: false,
+            itemsPerSnapshot: 0,
+            snapshotsPerItem: snapshotLengths.length,
+        };
     }
 
     // ── Schema-aware feature extraction ─────────────────────────────────────
@@ -672,9 +720,10 @@ export class GICSv2Encoder {
         }
     }
 
-    private processItemIdBlocks(itemIds: number[], addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void, stats: BlockStats[]) {
-        for (let i = 0; i < itemIds.length; i += this.blockSize) {
-            const chunk = itemIds.slice(i, i + this.blockSize);
+    private processItemIdBlocks(itemIds: number[], addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void, stats: BlockStats[], blockSizeOverride?: number) {
+        const chunkSize = blockSizeOverride ?? this.blockSize;
+        for (let i = 0; i < itemIds.length; i += chunkSize) {
+            const chunk = itemIds.slice(i, i + chunkSize);
             this.processStructuralBlock(StreamId.ITEM_ID, chunk, [
                 { id: InnerCodecId.VARINT_DELTA, encode: (data) => encodeVarint(data) },
                 { id: InnerCodecId.BITPACK_DELTA, encode: (data) => Codecs.encodeBitPack(data) },
@@ -688,10 +737,12 @@ export class GICSv2Encoder {
         prices: number[],
         processBlock: BlockProcessor,
         addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void,
-        stats: BlockStats[]
+        stats: BlockStats[],
+        blockSizeOverride?: number,
     ) {
-        for (let i = 0; i < prices.length; i += this.blockSize) {
-            const chunk = prices.slice(i, i + this.blockSize);
+        const chunkSize = blockSizeOverride ?? this.blockSize;
+        for (let i = 0; i < prices.length; i += chunkSize) {
+            const chunk = prices.slice(i, i + chunkSize);
             if (this.hasNonIntegerValues(chunk)) {
                 const last = ctx.lastValue ?? 0;
                 if (this.hasUnsafeValueDeltas(chunk, last) || this.hasLossyFiniteDeltas(chunk, last)) {
@@ -769,9 +820,10 @@ export class GICSv2Encoder {
         return false;
     }
 
-    private processQuantityBlocks(quantities: number[], addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void, stats: BlockStats[]) {
-        for (let i = 0; i < quantities.length; i += this.blockSize) {
-            const chunk = quantities.slice(i, i + this.blockSize);
+    private processQuantityBlocks(quantities: number[], addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void, stats: BlockStats[], blockSizeOverride?: number) {
+        const chunkSize = blockSizeOverride ?? this.blockSize;
+        for (let i = 0; i < quantities.length; i += chunkSize) {
+            const chunk = quantities.slice(i, i + chunkSize);
             if (this.hasNonIntegerValues(chunk)) {
                 const encoded = Codecs.encodeFixed64(chunk);
                 addToStream(StreamId.QUANTITY, { innerCodecId: InnerCodecId.FIXED64_LE, nItems: chunk.length, payloadLen: encoded.length, flags: 0 }, encoded);
@@ -842,6 +894,103 @@ export class GICSv2Encoder {
             metrics: metrics,
             regime: classifyRegime(metrics)
         });
+    }
+
+    private buildSegmentGroups(
+        snapshots: Array<Snapshot | GenericSnapshot<Record<string, number | string>>>
+    ): Array<Array<Snapshot | GenericSnapshot<Record<string, number | string>>>> {
+        if (snapshots.length === 0) {
+            return [];
+        }
+
+        if (!this.options.schema) {
+            const stable = this.detectStableMultiItemSnapshots(snapshots as Snapshot[]);
+            if (stable) {
+                return this.buildStableMultiItemGroups(snapshots, stable.itemsPerSnapshot);
+            }
+        }
+
+        const builder = new SegmentBuilder(this.options.segmentSizeLimit);
+        const groups: Array<Array<Snapshot | GenericSnapshot<Record<string, number | string>>>> = [];
+        let pendingItems = 0;
+
+        for (const s of snapshots) {
+            const snapshotItems = this.estimateSnapshotItemCount(s);
+            if (builder.pendingCount > 0 && pendingItems + snapshotItems > this.options.maxItemsPerSegment) {
+                groups.push(builder.seal());
+                pendingItems = 0;
+            }
+
+            pendingItems += snapshotItems;
+            if (builder.push(s as Snapshot)) {
+                groups.push(builder.seal());
+                pendingItems = 0;
+            }
+        }
+        if (builder.pendingCount > 0) {
+            groups.push(builder.seal());
+        }
+        return groups;
+    }
+
+    private buildStableMultiItemGroups(
+        snapshots: Array<Snapshot | GenericSnapshot<Record<string, number | string>>>,
+        itemsPerSnapshot: number
+    ): Array<Array<Snapshot | GenericSnapshot<Record<string, number | string>>>> {
+        const estimatedBytesPerSnapshot = 12 + itemsPerSnapshot * 12;
+        const naturalDepth = Math.max(1, Math.floor(this.options.segmentSizeLimit / Math.max(1, estimatedBytesPerSnapshot)));
+        const depthByItems = Math.max(1, Math.floor(this.options.maxItemsPerSegment / Math.max(1, itemsPerSnapshot)));
+        const targetDepth = Math.min(
+            this.options.maxSnapshotsPerSegment,
+            Math.max(this.options.minSnapshotsPerSegment, naturalDepth),
+            depthByItems,
+        );
+
+        const groups: Array<Array<Snapshot | GenericSnapshot<Record<string, number | string>>>> = [];
+        for (let i = 0; i < snapshots.length; i += targetDepth) {
+            groups.push(snapshots.slice(i, i + targetDepth));
+        }
+        return groups;
+    }
+
+    private estimateSnapshotItemCount(snapshot: Snapshot | GenericSnapshot<Record<string, number | string>>): number {
+        return snapshot.items.size;
+    }
+
+    private detectStableMultiItemSnapshots(snapshots: Snapshot[]): { itemsPerSnapshot: number } | null {
+        if (snapshots.length < 2) {
+            return null;
+        }
+
+        const firstSize = snapshots[0].items.size;
+        if (firstSize <= 1) {
+            return null;
+        }
+
+        const referenceIds = [...snapshots[0].items.keys()].sort((a, b) => a - b);
+        for (let s = 1; s < snapshots.length; s++) {
+            if (snapshots[s].items.size !== firstSize) {
+                return null;
+            }
+            const ids = [...snapshots[s].items.keys()].sort((a, b) => a - b);
+            for (let i = 0; i < referenceIds.length; i++) {
+                if (ids[i] !== referenceIds[i]) {
+                    return null;
+                }
+            }
+        }
+
+        return { itemsPerSnapshot: firstSize };
+    }
+
+    private getItemAlignedBlockSize(snapshotsPerItem: number): number {
+        if (snapshotsPerItem <= 0) {
+            return this.blockSize;
+        }
+        if (snapshotsPerItem >= this.blockSize) {
+            return snapshotsPerItem;
+        }
+        return Math.max(snapshotsPerItem, Math.floor(this.blockSize / snapshotsPerItem) * snapshotsPerItem);
     }
 
     private processStreamBlock(
@@ -926,7 +1075,7 @@ export class GICSv2Encoder {
         await this.flush();
         const eosBytes = this.emitFileEOS();
         if (this.fileHandle) {
-            await FileAccess.appendData(this.fileHandle, eosBytes);
+            await this.appendToFile(eosBytes);
         } else {
             this.accumulatedBytes.push(eosBytes);
         }
@@ -1091,5 +1240,12 @@ export class GICSv2Encoder {
             offset += arr.length;
         }
         return result;
+    }
+
+    private async appendToFile(data: Uint8Array): Promise<void> {
+        if (!this.fileHandle) {
+            return;
+        }
+        this.fileOffset = await FileAccess.appendData(this.fileHandle, data, this.fileOffset);
     }
 }

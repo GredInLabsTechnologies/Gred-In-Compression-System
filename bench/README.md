@@ -9,6 +9,7 @@ This directory contains complementary benchmark paths:
 5. **Security benchmark** (`bench/scripts/empirical-security.ts`) for crypto integrity controls.
 6. **Edge-case benchmark** (`bench/scripts/empirical-edge-cases.ts`) for IEEE-754 and mixed-entropy cases.
 7. **Codec-stats benchmark** (`bench/scripts/empirical-codec-stats.ts`) for codec selection and quarantine telemetry distribution.
+8. **Long-horizon benchmark** (`bench/scripts/long-horizon.ts`) for 1/3/5/10/20/100-year retention scenarios with streaming encode.
 
 ---
 
@@ -97,6 +98,24 @@ Outputs:
 - `bench/results/latest/empirical-codec-stats-report.json`
 - `bench/results/latest/empirical-codec-stats-report.md`
 
+### 2.g) Long-horizon benchmark
+
+```bash
+npm run bench:long-horizon
+```
+
+Outputs:
+- `bench/results/latest/long-horizon-report.json`
+- `bench/results/latest/long-horizon-report.md`
+
+Environment knobs:
+- `GICS_LONG_HORIZON_YEARS` default `1,3,5,10,20,100`
+- `GICS_LONG_HORIZON_ITEMS` default `256`
+- `GICS_LONG_HORIZON_SNAPSHOTS_PER_DAY` default `24`
+- `GICS_LONG_HORIZON_FLUSH_EVERY` default `1024`
+- `GICS_LONG_HORIZON_FULL_DECODE_MAX` default `50000`
+- `GICS_LONG_HORIZON_PRESET` default `balanced`
+
 ### 3) Legacy exploratory benchmark + report
 
 ```bash
@@ -138,4 +157,5 @@ Or:
 | `bench:security` | Cryptographic and tamper controls | All checks must pass | `empirical-security-report.json` |
 | `bench:edge-cases` | Float/IEEE-754 and entropy edge behavior | Verify + roundtrip semantics | `empirical-edge-cases-report.json` |
 | `bench:codec-stats` | Codec/stream distribution + quarantine observability | Report generated + integrity pass | `empirical-codec-stats-report.json` |
+| `bench:long-horizon` | Multi-year retention under streaming append/flush | Raw ratio + segment count + verification mode by horizon | `long-horizon-report.json` |
 | `bench:forensics:verify` | Postfreeze deterministic verification | Determinism and KPI consistency | forensics verifier artifacts |
