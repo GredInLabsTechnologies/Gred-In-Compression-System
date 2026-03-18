@@ -7,7 +7,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.3.3-pre] - 2026-03-18
+## [1.3.3] - 2026-03-18
 
 ### Added
 
@@ -23,10 +23,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Inference CLI surface**: added `gics inference infer|profile|recommendations|health|flush`.
 - **Machine-readable automation surface**: added/extended JSON-oriented CLI paths such as `gics rpc ...`, `gics daemon status --json` and `gics module status --json`.
 - **Python client inference methods**: added `infer()`, `get_profile()`, `get_recommendations()`, `get_inference_runtime()` and `flush_inference()`.
-- **Pre-release documentation pack**:
-  - `docs/releases/2026-03-18_GICS_v1_3_3_PRE_RELEASE.md`
-  - `docs/API_v1_3_3_PRE_RELEASE.md`
-  - `docs/FAILURE_MODES_v1_3_3_PRE_RELEASE.md`
+- **Release documentation pack**:
+  - `docs/releases/2026-03-18_GICS_v1_3_3.md`
+  - `docs/API_v1_3_3.md`
+  - `docs/FAILURE_MODES_v1_3_3.md`
 
 ### Changed
 
