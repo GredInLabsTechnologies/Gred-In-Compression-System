@@ -6,7 +6,7 @@
  */
 
 import type { InsightTracker, ItemBehavior } from './tracker.js';
-import type { CorrelationAnalyzer, Correlation } from './correlation.js';
+import type { CorrelationAnalyzer } from './correlation.js';
 import type { ConfidenceTracker } from './confidence.js';
 import type { SchemaProfile } from '../gics-types.js';
 

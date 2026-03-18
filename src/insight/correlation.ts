@@ -179,7 +179,7 @@ export class CorrelationAnalyzer {
         const clusters: Cluster[] = [];
         for (const membersRaw of groups.values()) {
             if (membersRaw.length < 2) continue;
-            const members = membersRaw.sort();
+            const members = [...membersRaw].sort((a, b) => a.localeCompare(b));
 
             const intra = edges.filter((edge) => members.includes(edge.itemA) && members.includes(edge.itemB));
             const cohesion = intra.length > 0
@@ -202,7 +202,7 @@ export class CorrelationAnalyzer {
             });
         }
 
-        return clusters.sort((a, b) => b.cohesion - a.cohesion);
+        return [...clusters].sort((a, b) => b.cohesion - a.cohesion);
     }
 
     getLeadingIndicators(key?: string): LeadingIndicator[] {
@@ -225,7 +225,7 @@ export class CorrelationAnalyzer {
             });
         }
 
-        return indicators.sort((a, b) => b.predictiveStrength - a.predictiveStrength);
+        return [...indicators].sort((a, b) => b.predictiveStrength - a.predictiveStrength);
     }
 
     getSeasonalPatterns(key?: string): SeasonalPattern[] {
@@ -271,7 +271,7 @@ export class CorrelationAnalyzer {
             });
         }
 
-        return output.sort((a, b) => b.confidence - a.confidence);
+        return [...output].sort((a, b) => b.confidence - a.confidence);
     }
 
     /**
@@ -303,7 +303,7 @@ export class CorrelationAnalyzer {
             }
         }
 
-        return scored
+        return [...scored]
             .sort((a, b) => b.score - a.score)
             .slice(0, maxResults)
             .map((s) => s.key);

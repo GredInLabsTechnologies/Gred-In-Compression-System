@@ -131,7 +131,7 @@ export class NativeInsightModule implements DaemonModule {
             ctx.emitEvent('recommendation_new', recommendation);
         }
 
-        const nextCorrelations = new Set(this.correlationAnalyzer.getCorrelations().map((corr) => `${corr.itemA}|${corr.itemB}`));
+
         for (const correlation of this.correlationAnalyzer.getCorrelations()) {
             const key = `${correlation.itemA}|${correlation.itemB}`;
             if (!prevCorrelations.has(key)) {

@@ -1,4 +1,4 @@
-import * as fs from 'fs/promises';
+import * as fs from 'node:fs/promises';
 import { wait } from '../gics-utils.js';
 
 /**
@@ -85,15 +85,13 @@ export class AsyncRWLock {
                     next.resolve();
                 }
                 return; // Exclusive waiter blocks all subsequent grants.
+            } else if (this.writer) {
+                return;
             } else {
-                if (!this.writer) {
-                    this.queue.shift()!;
-                    this.readers++;
-                    next.resolve();
-                    // Continue — grant consecutive shared waiters.
-                } else {
-                    return;
-                }
+                this.queue.shift()!;
+                this.readers++;
+                next.resolve();
+                // Continue — grant consecutive shared waiters.
             }
         }
     }
@@ -171,6 +169,7 @@ export class FileLock {
         }
 
         await this.ensureLockDir();
+        // eslint-disable-next-line sonarjs/pseudo-random
         const candidatePath = `${this.lockDirPath}/shared-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.lock`;
 
         try {

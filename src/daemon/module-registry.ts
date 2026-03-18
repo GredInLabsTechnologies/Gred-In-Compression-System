@@ -1,4 +1,4 @@
-import type { StateIndexEntry, StateIndexScanItem, StateIndexScanResult } from './state-index.js';
+import type { StateIndexEntry, StateIndexScanResult } from './state-index.js';
 
 export interface ModuleManifest {
     id: string;

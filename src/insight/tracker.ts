@@ -172,7 +172,7 @@ export class InsightTracker {
         const filtered = filter?.lifecycle
             ? items.filter((i) => i.lifecycle === filter.lifecycle)
             : items;
-        return filtered
+        return [...filtered]
             .sort((a, b) => b.lastWrite - a.lastWrite)
             .map((i) => this.toPublic(i));
     }
@@ -277,6 +277,7 @@ export class InsightTracker {
             : 0;
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private updateFieldTrends(item: InternalItemBehavior, fields: Record<string, number | string>): void {
         let aggregateDelta = 0;
         let numericFieldCount = 0;
@@ -321,7 +322,9 @@ export class InsightTracker {
 
         // Update streak based on aggregate delta direction
         if (numericFieldCount > 0) {
-            const sign = aggregateDelta > 0 ? 1 : aggregateDelta < 0 ? -1 : 0;
+            let sign = 0;
+            if (aggregateDelta > 0) sign = 1;
+            else if (aggregateDelta < 0) sign = -1;
 
             // Push to entropy window
             if (sign !== 0) {

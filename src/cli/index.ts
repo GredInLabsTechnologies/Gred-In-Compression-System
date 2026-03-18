@@ -57,7 +57,7 @@ ${c.bold('Examples:')}
   ${c.dim('gics verify data.gics')}
   ${c.dim('gics info data.gics')}
   ${c.dim('gics bench data.json --runs 5')}
-  ${c.dim('gics rpc scan --params-json "{\"prefix\":\"orders:\"}" --pretty')}
+  ${c.dim(`gics rpc scan --params-json '{"prefix":"orders:"}' --pretty`)}
   ${c.dim('gics daemon start')}
 
 Run ${c.cyan('gics <command> --help')} for detailed usage of each command.
@@ -97,9 +97,10 @@ async function main(): Promise<number> {
     }
 }
 
-main().then((code) => {
+try {
+    const code = await main();
     process.exit(code);
-}).catch((err) => {
+} catch (err: any) {
     console.error(`Unhandled error: ${err.message}`);
     process.exit(1);
-});
+}

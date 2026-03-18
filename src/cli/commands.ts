@@ -12,7 +12,7 @@ import * as os from 'os';
 import { existsSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
 import { GICSv2Encoder } from '../gics/encode.js';
 import { GICSv2Decoder } from '../gics/decode.js';
-import type { GenericSnapshot } from '../gics-types.js';
+// removed
 import type { CompressionPreset } from '../gics/types.js';
 import { CompressionProfiler } from '../gics/profiler.js';
 import { Spinner, c, table, formatBytes, colorRatio, daemonBanner, mapReplacer } from './ui.js';
@@ -457,7 +457,7 @@ ${c.bold('Options:')}
         const results: Array<{ ratio: number; encodeMs: number; decodeMs: number }> = [];
 
         for (let i = 0; i < runs; i++) {
-            process.stdout.write(`\r  ${c.dim(`Run ${i + 1}/${runs}...`)}`);
+            process.stdout.write('\\r  ' + c.dim(`Run ${i + 1}/${runs}...`));
 
             const encStart = Date.now();
             const encoder = new GICSv2Encoder({ schema: data.schema });
@@ -792,9 +792,12 @@ ${c.bold('Examples:')}
     try {
         const { socketPath, token } = await resolveDaemonTarget(ctx.args);
         const response = await daemonRpcCall(socketPath, token, method, params);
-        const payload = hasFlag(ctx.args, '--envelope')
-            ? response
-            : (response.error ? { error: response.error } : (response.result ?? null));
+        let payload: any;
+        if (hasFlag(ctx.args, '--envelope')) {
+            payload = response;
+        } else {
+            payload = response.error ? { error: response.error } : (response.result ?? null);
+        }
         writeJson(payload, wantsPrettyJson(ctx.args));
         return response.error ? 1 : 0;
     } catch (err: any) {

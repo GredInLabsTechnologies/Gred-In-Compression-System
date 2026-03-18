@@ -1,0 +1,217 @@
+
+> @gredinlabstechnologies/gics-core@1.3.3 lint
+> eslint src/**/*.ts
+
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\cli\commands.ts
+    87:12  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   125:31  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   164:9   warning  Unexpected console statement                                   no-console
+   178:9   warning  Unexpected console statement                                   no-console
+   183:9   warning  Unexpected console statement                                   no-console
+   189:42  warning  Define a constant instead of duplicating this literal 4 times  sonarjs/no-duplicate-string
+   203:21  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   222:9   warning  Unexpected console statement                                   no-console
+   225:13  warning  Unexpected console statement                                   no-console
+   228:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   239:9   warning  Unexpected console statement                                   no-console
+   252:9   warning  Unexpected console statement                                   no-console
+   257:9   warning  Unexpected console statement                                   no-console
+   284:13  warning  Unexpected console statement                                   no-console
+   287:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   298:9   warning  Unexpected console statement                                   no-console
+   310:9   warning  Unexpected console statement                                   no-console
+   315:9   warning  Unexpected console statement                                   no-console
+   342:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   357:9   warning  Unexpected console statement                                   no-console
+   369:9   warning  Unexpected console statement                                   no-console
+   374:9   warning  Unexpected console statement                                   no-console
+   404:9   warning  Unexpected console statement                                   no-console
+   417:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   418:9   warning  Unexpected console statement                                   no-console
+   428:9   warning  Unexpected console statement                                   no-console
+   439:9   warning  Unexpected console statement                                   no-console
+   444:9   warning  Unexpected console statement                                   no-console
+   453:21  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   502:9   warning  Unexpected console statement                                   no-console
+   505:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   506:9   warning  Unexpected console statement                                   no-console
+   516:9   warning  Unexpected console statement                                   no-console
+   527:9   warning  Unexpected console statement                                   no-console
+   532:9   warning  Unexpected console statement                                   no-console
+   545:21  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   566:44  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   578:9   warning  Unexpected console statement                                   no-console
+   579:9   warning  Unexpected console statement                                   no-console
+   582:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   600:9   warning  Unexpected console statement                                   no-console
+   644:9   warning  Unexpected console statement                                   no-console
+   677:9   warning  Unexpected console statement                                   no-console
+   688:17  warning  Unexpected console statement                                   no-console
+   706:17  warning  Unexpected console statement                                   no-console
+   723:9   warning  Unexpected console statement                                   no-console
+   765:9   warning  Unexpected console statement                                   no-console
+   787:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   788:9   warning  Unexpected console statement                                   no-console
+   795:22  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   803:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   816:9   warning  Unexpected console statement                                   no-console
+   828:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   829:9   warning  Unexpected console statement                                   no-console
+   847:13  warning  Unexpected console statement                                   no-console
+   851:9   warning  Unexpected console statement                                   no-console
+   861:63  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   867:9   warning  Unexpected console statement                                   no-console
+   869:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   873:13  warning  Unexpected console statement                                   no-console
+   889:13  warning  Unexpected console statement                                   no-console
+   892:9   warning  Unexpected console statement                                   no-console
+   894:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   898:13  warning  Unexpected console statement                                   no-console
+   921:13  warning  Unexpected console statement                                   no-console
+   924:9   warning  Unexpected console statement                                   no-console
+   926:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   930:13  warning  Unexpected console statement                                   no-console
+   945:13  warning  Unexpected console statement                                   no-console
+   948:9   warning  Unexpected console statement                                   no-console
+   950:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   954:13  warning  Unexpected console statement                                   no-console
+   969:13  warning  Unexpected console statement                                   no-console
+   972:9   warning  Unexpected console statement                                   no-console
+   974:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+   978:13  warning  Unexpected console statement                                   no-console
+   995:5   warning  Unexpected console statement                                   no-console
+  1022:9   warning  Unexpected console statement                                   no-console
+  1032:9   warning  Unexpected console statement                                   no-console
+  1033:9   warning  Unexpected console statement                                   no-console
+  1037:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+  1038:9   warning  Unexpected console statement                                   no-console
+  1046:9   warning  Unexpected console statement                                   no-console
+  1052:9   warning  Unexpected console statement                                   no-console
+  1064:9   warning  Unexpected console statement                                   no-console
+  1066:9   warning  Unexpected console statement                                   no-console
+  1081:17  warning  Unexpected console statement                                   no-console
+  1092:9   warning  Unexpected console statement                                   no-console
+  1106:19  warning  Unexpected any. Specify a different type                       @typescript-eslint/no-explicit-any
+  1110:13  warning  Unexpected console statement                                   no-console
+  1112:13  warning  Unexpected console statement                                   no-console
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\cli\index.ts
+   38:5   warning  Unexpected console statement              no-console
+   76:9   warning  Unexpected console statement              no-console
+   82:9   warning  Unexpected console statement              no-console
+   94:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   95:9   warning  Unexpected console statement              no-console
+  103:5   warning  Unexpected console statement              no-console
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\daemon\audit-chain.ts
+  115:33  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\daemon\file-lock.ts
+  150:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  160:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  181:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  208:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  259:27  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  265:27  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\daemon\prompt-distiller.ts
+  148:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  395:13  warning  Unexpected console statement              no-console
+  426:13  warning  Unexpected console statement              no-console
+  634:17  warning  Unexpected console statement              no-console
+  636:17  warning  Unexpected console statement              no-console
+  642:21  warning  Unexpected console statement              no-console
+  647:17  warning  Unexpected console statement              no-console
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\daemon\resilience.ts
+  161:31  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\daemon\server.ts
+   178:9    warning  Unexpected console statement                                                                     no-console
+   190:9    warning  Unexpected console statement                                                                     no-console
+   205:9    warning  Unexpected console statement                                                                     no-console
+   232:17   warning  Unexpected console statement                                                                     no-console
+   244:17   warning  Unexpected console statement                                                                     no-console
+   279:30   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   294:29   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   349:23   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   350:13   warning  Unexpected console statement                                                                     no-console
+   771:5    warning  Unused eslint-disable directive (no problems were reported from 'sonarjs/cognitive-complexity')
+   878:33   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   878:46   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   878:60   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   926:33   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   926:46   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   926:60   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   957:36   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   957:49   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   957:63   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   980:34   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   980:47   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+   980:61   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1004:43   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1004:56   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1004:70   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1022:92   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1049:45   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1049:58   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1049:72   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1061:35   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1061:48   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1061:62   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1076:40   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1076:53   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1076:67   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1082:49   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1082:63   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1090:44   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1090:58   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1114:42   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1114:77   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1144:21   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1158:5    warning  Unused eslint-disable directive (no problems were reported from 'sonarjs/cognitive-complexity')
+  1159:57   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1159:66   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1159:101  warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1280:45   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1322:35   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+  1410:21   warning  Unexpected any. Specify a different type                                                         @typescript-eslint/no-explicit-any
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\daemon\state-index.ts
+  77:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\daemon\supervisor.ts
+  122:17  warning  Unexpected console statement  no-console
+  165:9   warning  Unexpected console statement  no-console
+  218:13  warning  Unexpected console statement  no-console
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\daemon\wal.ts
+  160:17  warning  Unexpected console statement  no-console
+  217:21  warning  Unexpected console statement  no-console
+  222:17  warning  Unexpected console statement  no-console
+  314:13  warning  Unexpected console statement  no-console
+  322:13  warning  Unexpected console statement  no-console
+  355:13  warning  Unexpected console statement  no-console
+  362:13  warning  Unexpected console statement  no-console
+  521:21  warning  Unexpected console statement  no-console
+  529:17  warning  Unexpected console statement  no-console
+  554:21  warning  Unexpected console statement  no-console
+  559:17  warning  Unexpected console statement  no-console
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\gics-utils.ts
+  99:9  warning  Unexpected console statement  no-console
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\inference\engine.ts
+  159:28  warning  Define a constant instead of duplicating this literal 5 times  sonarjs/no-duplicate-string
+  163:35  warning  Define a constant instead of duplicating this literal 4 times  sonarjs/no-duplicate-string
+  167:35  warning  Define a constant instead of duplicating this literal 3 times  sonarjs/no-duplicate-string
+  173:35  warning  Define a constant instead of duplicating this literal 5 times  sonarjs/no-duplicate-string
+  365:27  warning  Define a constant instead of duplicating this literal 5 times  sonarjs/no-duplicate-string
+
+C:\Users\shilo\Documents\Github\Gred-In-Compression-System\src\inference\module.ts
+  294:23  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 183 problems (0 errors, 183 warnings)
+  0 errors and 2 warnings potentially fixable with the `--fix` option.
+

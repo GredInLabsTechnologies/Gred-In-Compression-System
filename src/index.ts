@@ -7,11 +7,17 @@
 import { GICSv2Encoder } from './gics/encode.js';
 import { GICSv2Decoder } from './gics/decode.js';
 import { GICSv2RotatingEncoder, readSession, verifySession } from './gics/rotating-encoder.js';
-import type { Snapshot } from './gics-types.js';
+// removed dup import
 import type { GICSv2EncoderOptions, GICSv2DecoderOptions, GICSSessionReadOptions } from './gics/types.js';
 
 // Re-export specific types and errors
-export type { Snapshot, GenericSnapshot, SchemaProfile, FieldDef } from './gics-types.js';
+export type { GenericSnapshot, FieldDef } from './gics-types.js';
+import type { Snapshot as ISnapshot, SchemaProfile as ISchemaProfile } from './gics-types.js';
+export type Snapshot = ISnapshot;
+export type SchemaProfile = ISchemaProfile;
+// removed
+// removed
+// removed
 export type {
     GICSv2EncoderOptions as EncoderOptions,
     GICSv2DecoderOptions as DecoderOptions,
@@ -26,9 +32,9 @@ export { COMPRESSION_PRESETS } from './gics/types.js';
 export { IncompleteDataError, IntegrityError } from './gics/errors.js';
 export { CompressionProfiler } from './gics/profiler.js';
 export type { ProfileResult, ProfileMode, TrialResult, ProfileMeta } from './gics/profiler.js';
-export { GICSv2RotatingEncoder };
+export { GICSv2RotatingEncoder } from './gics/rotating-encoder.js';
 
-import type { SchemaProfile } from './gics-types.js';
+// removed dup import
 
 /** Predefined schema profiles */
 const PREDEFINED_SCHEMAS: Record<string, SchemaProfile> = {

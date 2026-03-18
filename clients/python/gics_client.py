@@ -160,12 +160,12 @@ class GICSClient:
 
                             response_line = buffer.split(b'\n')[0]
                             return json.loads(response_line.decode('utf-8'))
-                        except (OSError, ConnectionError, TimeoutError, json.JSONDecodeError):
+                        except (OSError, json.JSONDecodeError):
                             healthy = False
                             raise
                     finally:
                         self._release_unix_socket(s, healthy=healthy)
-            except (FileNotFoundError, ConnectionRefusedError, OSError, json.JSONDecodeError) as e:
+            except (OSError, json.JSONDecodeError) as e:
                 last_error = e
                 if attempt < self._max_retries:
                     time.sleep(self._retry_delay)
@@ -341,7 +341,7 @@ class GICSClient:
         resp = self._call("getAccuracy", params)
         return self._unwrap_result(resp)
 
-    def subscribe(self, event_types, callback: Optional[Callable[[dict], None]] = None):
+    def subscribe(self, event_types):
         resp = self._call("subscribe", {"events": event_types})
         result = self._unwrap_result(resp)
         # Callback wiring for streaming transport is deferred to daemon event-stream phase.

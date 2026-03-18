@@ -206,7 +206,7 @@ export class BanditRouter {
         const d = shape - 1 / 3;
         const c = 1 / Math.sqrt(9 * d);
 
-        // eslint-disable-next-line no-constant-condition
+         
         while (true) {
             let x, v;
             do {
@@ -241,6 +241,7 @@ export class BanditRouter {
      * Uniform [0,1) random number (seeded if configured, otherwise Math.random).
      */
     private random(): number {
+        // eslint-disable-next-line sonarjs/pseudo-random
         return this.rng ? this.rng.next() : Math.random();
     }
 }

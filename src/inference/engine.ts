@@ -51,11 +51,6 @@ function toNumber(value: unknown, fallback: number = 0): number {
     return Number.isFinite(num) ? num : fallback;
 }
 
-function average(values: number[]): number {
-    if (values.length === 0) return 0;
-    return values.reduce((sum, current) => sum + current, 0) / values.length;
-}
-
 function feedbackScore(result: string | undefined, success: boolean): number {
     if (success) return 1;
     switch (String(result ?? '').toLowerCase()) {
@@ -376,6 +371,7 @@ export class GICSInferenceEngine {
         }
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private buildPolicy(domain: string, scope: string, subject: string | undefined, profile: ScopeProfile, candidates: CandidateInput[]): StoredPolicyRecord {
         const key = InferenceKeys.buildPolicyStorageKey(domain, scope, subject);
         const base: StoredPolicyRecord = {
@@ -397,7 +393,12 @@ export class GICSInferenceEngine {
         if (domain === 'compression.encode') {
             const readHeavy = profile.stats.reads > Math.max(1, profile.stats.writes * 2);
             const ratioLow = profile.stats.avgCompressionRatio > 0 && profile.stats.avgCompressionRatio < 20;
-            const suggestedPreset = readHeavy ? 'low_latency' : ratioLow ? 'max_ratio' : (profile.preferences.preferredCompressionPreset ?? 'balanced');
+            let suggestedPreset = profile.preferences.preferredCompressionPreset ?? 'balanced';
+            if (readHeavy) {
+                suggestedPreset = 'low_latency';
+            } else if (ratioLow) {
+                suggestedPreset = 'max_ratio';
+            }
             return {
                 ...base,
                 basis: [
@@ -474,7 +475,12 @@ export class GICSInferenceEngine {
         if (domain === 'storage.policy') {
             const scanHeavy = profile.stats.scans > Math.max(1, profile.stats.writes);
             const writeHeavy = profile.stats.writes >= Math.max(1, profile.stats.reads);
-            const mode = scanHeavy ? 'policy.read_heavy' : writeHeavy ? 'policy.write_heavy' : 'policy.current';
+            let mode = 'policy.current';
+            if (scanHeavy) {
+                mode = 'policy.read_heavy';
+            } else if (writeHeavy) {
+                mode = 'policy.write_heavy';
+            }
             return {
                 ...base,
                 basis: [
@@ -528,9 +534,18 @@ export class GICSInferenceEngine {
 
         if (domain === 'compression.encode') {
             const suggestedPreset = String(policy.payload.suggestedPreset ?? 'balanced');
-            const readMatch = candidate.id === 'low_latency' ? 1 : candidate.id === 'balanced' ? 0.6 : 0.25;
-            const ratioMatch = candidate.id === 'max_ratio' ? 1 : candidate.id === 'balanced' ? 0.55 : 0.25;
-            const baseline = candidate.id === suggestedPreset ? 1 : candidate.id === 'balanced' ? 0.7 : 0.4;
+            let readMatch = 0.25;
+            if (candidate.id === 'low_latency') readMatch = 1;
+            else if (candidate.id === 'balanced') readMatch = 0.6;
+            
+            let ratioMatch = 0.25;
+            if (candidate.id === 'max_ratio') ratioMatch = 1;
+            else if (candidate.id === 'balanced') ratioMatch = 0.55;
+            
+            let baseline = 0.4;
+            if (candidate.id === suggestedPreset) baseline = 1;
+            else if (candidate.id === 'balanced') baseline = 0.7;
+            
             components.push(readMatch, ratioMatch, baseline);
             weights.push(policy.weights.readPressure ?? 0.15, policy.weights.ratioPressure ?? 0.15, policy.weights.baseline ?? 0.15);
             basis.push(`suggestedPreset=${suggestedPreset}`);
@@ -552,7 +567,12 @@ export class GICSInferenceEngine {
         } else if (domain === 'storage.policy') {
             const mode = String(candidate.payload.mode ?? candidate.id);
             const recommendedMode = String(policy.payload.mode ?? 'policy.current');
-            const modeScore = mode === recommendedMode ? 1 : mode === 'current' ? 0.65 : 0.45;
+            let modeScore = 0.45;
+            if (mode === recommendedMode) {
+                modeScore = 1;
+            } else if (mode === 'current') {
+                modeScore = 0.65;
+            }
             const scanHeavy = profile.stats.scans > Math.max(1, profile.stats.writes) ? 1 : 0.35;
             const writeHeavy = profile.stats.writes >= Math.max(1, profile.stats.reads) ? 1 : 0.35;
             const safety = candidate.id === 'policy.current' ? 1 : 0.75;

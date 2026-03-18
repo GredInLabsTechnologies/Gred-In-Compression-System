@@ -53,10 +53,6 @@ function toHex(bytes: Uint8Array): string {
     return Buffer.from(bytes).toString('hex');
 }
 
-function fromHex(hex: string): Uint8Array {
-    return new Uint8Array(Buffer.from(hex, 'hex'));
-}
-
 function resolveRotationOptions(options: GICSv2RotationOptions): ResolvedRotationOptions {
     const sessionDir = path.resolve(options.sessionDir);
     const sessionId = options.sessionId ?? `gics-session-${Date.now()}`;
@@ -151,7 +147,7 @@ function estimateSnapshotRawBytes(snapshot: SessionSnapshot): number {
     let total = 16;
     for (const [itemId, values] of snapshot.items.entries()) {
         total += 8 + String(itemId).length;
-        if (typeof values === 'object' && values !== null) {
+        if (typeof values === 'object' && values != null) {
             for (const [fieldName, fieldValue] of Object.entries(values as Record<string, number | string>)) {
                 total += fieldName.length + 4;
                 total += typeof fieldValue === 'number' ? 8 : String(fieldValue).length;
@@ -189,6 +185,7 @@ async function readManifestFromPath(manifestPath: string): Promise<GICSSessionMa
     return parsed;
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 async function validateSessionManifest(
     manifest: GICSSessionManifest,
     sessionDir: string,
@@ -202,7 +199,7 @@ async function validateSessionManifest(
 
     let previousRoot = ZERO_HASH_HEX;
     let checked = 0;
-    let orphanedSkipped = manifest.files.filter((entry) => !!entry.orphaned).length;
+    const orphanedSkipped = manifest.files.filter((entry) => !!entry.orphaned).length;
     for (const entry of candidates) {
         if (entry.startSeedHash !== previousRoot) {
             if (options.strict) {
