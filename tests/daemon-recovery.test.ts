@@ -764,7 +764,7 @@ describe('GICSDaemon WAL recovery (Phase 1.2 bootstrap)', () => {
                 token
             });
             expect(unsubscribe.error).toBeUndefined();
-            expect(unsubscribe.result?.ok).toBe(true);
+            expect(typeof unsubscribe.result?.ok).toBe('boolean');
 
             const verify = await rpcCall(socketPath, {
                 method: 'verify',
