@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { wait } from '../gics-utils.js';
 
 /**
@@ -169,8 +170,7 @@ export class FileLock {
         }
 
         await this.ensureLockDir();
-        // eslint-disable-next-line sonarjs/pseudo-random
-        const candidatePath = `${this.lockDirPath}/shared-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.lock`;
+        const candidatePath = `${this.lockDirPath}/shared-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}.lock`;
 
         try {
             await this.writeLockFile(candidatePath, {

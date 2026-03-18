@@ -2,6 +2,7 @@ import * as net from 'node:net';
 import * as fs from 'node:fs/promises';
 import { existsSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import * as path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { MemTable } from './memtable.js';
 import { createWALProvider, Operation, type WALFsyncMode, type WALProvider, type WALType } from './wal.js';
 import { FileLock } from './file-lock.js';
@@ -172,8 +173,7 @@ export class GICSDaemon {
         if (existsSync(this.config.tokenPath)) {
             return readFileSync(this.config.tokenPath, 'utf8').trim();
         }
-        // eslint-disable-next-line sonarjs/pseudo-random
-        const newToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+        const newToken = randomBytes(16).toString('hex');
         writeFileSync(this.config.tokenPath, newToken, { mode: 0o600 });
         console.log(`[GICS] Generated new security token at ${this.config.tokenPath}`);
         return newToken;
@@ -621,8 +621,7 @@ export class GICSDaemon {
         let bytesWritten = 0;
 
         if (userRecords.length > 0) {
-            // eslint-disable-next-line sonarjs/pseudo-random
-            userSegmentPath = path.join(this.warmDirPath, `warm-${Date.now()}-${Math.random().toString(36).slice(2)}.gics`);
+            userSegmentPath = path.join(this.warmDirPath, `warm-${Date.now()}-${randomBytes(4).toString('hex')}.gics`);
             bytesWritten += await this.writeSegment(userSegmentPath, userRecords.map((record) => ({
                 key: record.key,
                 fields: { ...record.fields },
@@ -640,8 +639,7 @@ export class GICSDaemon {
 
         const systemRecords = Array.from(systemRecordMap.values());
         if (systemRecords.length > 0) {
-            // eslint-disable-next-line sonarjs/pseudo-random
-            systemSegmentPath = path.join(this.warmDirPath, `${GICSDaemon.SYSTEM_SEGMENT_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2)}.gics`);
+            systemSegmentPath = path.join(this.warmDirPath, `${GICSDaemon.SYSTEM_SEGMENT_PREFIX}${Date.now()}-${randomBytes(4).toString('hex')}.gics`);
             bytesWritten += await this.writeSegment(systemSegmentPath, systemRecords);
             for (const record of systemRecords) {
                 this.stateIndex.recordPut(record.key, record.fields, {
@@ -724,8 +722,7 @@ export class GICSDaemon {
             oldSegmentRefs.push(filePath);
         }
 
-        // eslint-disable-next-line sonarjs/pseudo-random
-        const outputSegment = path.join(this.warmDirPath, `compact-${Date.now()}-${Math.random().toString(36).slice(2)}.gics`);
+        const outputSegment = path.join(this.warmDirPath, `compact-${Date.now()}-${randomBytes(4).toString('hex')}.gics`);
         const bytesAfter = await this.writeSegment(outputSegment, mergedRecords);
 
         for (const filePath of oldSegmentRefs) {
@@ -797,8 +794,7 @@ export class GICSDaemon {
             if ((now - st.mtimeMs) < this.warmRetentionMs) continue;
 
             const prefix = this.isSystemSegmentFile(fileName) ? GICSDaemon.SYSTEM_SEGMENT_PREFIX : 'cold-';
-            // eslint-disable-next-line sonarjs/pseudo-random
-            const coldName = `${prefix}${Date.now()}-${Math.random().toString(36).slice(2)}.gics`;
+            const coldName = `${prefix}${Date.now()}-${randomBytes(4).toString('hex')}.gics`;
             const coldPath = path.join(this.coldDirPath, coldName);
 
             if (this.coldEncryption) {
@@ -1203,8 +1199,7 @@ export class GICSDaemon {
 
                 case 'subscribe': {
                     const subEvents = Array.isArray(params?.events) ? params.events as string[] : [];
-                    // eslint-disable-next-line sonarjs/pseudo-random
-                    const subscriptionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                    const subscriptionId = `sub_${Date.now()}_${randomBytes(3).toString('hex')}`;
                     if (socket) {
                         this.subscriptions.set(subscriptionId, { socket, events: subEvents });
                     }

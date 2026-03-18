@@ -1,5 +1,5 @@
-import * as os from 'os';
-import { createHash } from 'crypto';
+import * as os from 'node:os';
+import { createHash } from 'node:crypto';
 import {
     InferenceKeys,
     InferenceStateStore,
@@ -117,16 +117,9 @@ export class GICSInferenceEngine {
         result: string | undefined
     ): OutcomeArtifacts | null {
         const decision = decisionId ? this.store.getDecision(decisionId) : null;
-        const candidateId = String(
-            context?.candidateId ??
-            context?.chosenCandidateId ??
-            decision?.recommendedId ??
-            ''
-        );
+        const { candidateId, scope, subject } = this.extractIdentifiers(context, decision);
         if (!candidateId) return null;
 
-        const scope = String(context?.scope ?? decision?.scope ?? this.defaultScope);
-        const subject = context?.subject ? String(context.subject) : decision?.subject;
         const success = result === 'success' || result === 'ok' || result === 'true';
         const feedback: StoredFeedbackRecord = {
             feedbackId: `${Date.now()}|${stableId({ domain, candidateId, decisionId, scope, subject, result, metrics })}`,
@@ -138,7 +131,7 @@ export class GICSInferenceEngine {
             candidateId,
             success,
             result: String(result ?? (success ? 'success' : 'failure')),
-            metrics: { ...(metrics ?? {}) },
+            metrics: { ...metrics },
             context: context ? { ...context } : undefined,
             recordedAt: Date.now(),
         };
@@ -342,15 +335,41 @@ export class GICSInferenceEngine {
     }
 
     private resolveScope(context: Record<string, unknown> | undefined): string {
-        return String(context?.scope ?? this.defaultScope);
+        return typeof context?.scope === 'string' ? context.scope : this.defaultScope;
+    }
+
+    private extractIdentifiers(
+        context: Record<string, unknown> | undefined,
+        decision: StoredDecisionRecord | null
+    ): { candidateId: string; scope: string; subject?: string } {
+        let candidateId = '';
+        if (typeof context?.candidateId === 'string') candidateId = context.candidateId;
+        else if (typeof context?.chosenCandidateId === 'string') candidateId = context.chosenCandidateId;
+        else if (typeof decision?.recommendedId === 'string') candidateId = decision.recommendedId;
+
+        let scope = this.defaultScope;
+        if (typeof context?.scope === 'string') scope = context.scope;
+        else if (typeof decision?.scope === 'string') scope = decision.scope;
+        
+        let subject: string | undefined;
+        if (typeof context?.subject === 'string') subject = context.subject;
+        else if (typeof decision?.subject === 'string') subject = decision.subject;
+        
+        return { candidateId, scope, subject };
     }
 
     private resolveCandidates(request: InferenceRequest): CandidateInput[] {
         if (request.candidates?.length) {
-            return request.candidates.map((candidate, index) => ({
-                id: String(candidate.id ?? candidate.name ?? candidate.model ?? `${request.domain}-${index}`),
-                payload: { ...candidate },
-            }));
+            return request.candidates.map((candidate, index) => {
+                let id = `${request.domain}-${index}`;
+                if (typeof candidate.id === 'string') id = candidate.id;
+                else if (typeof candidate.name === 'string') id = candidate.name;
+                else if (typeof candidate.model === 'string') id = candidate.model;
+                return {
+                    id,
+                    payload: { ...candidate },
+                };
+            });
         }
 
         switch (request.domain) {
@@ -371,7 +390,6 @@ export class GICSInferenceEngine {
         }
     }
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private buildPolicy(domain: string, scope: string, subject: string | undefined, profile: ScopeProfile, candidates: CandidateInput[]): StoredPolicyRecord {
         const key = InferenceKeys.buildPolicyStorageKey(domain, scope, subject);
         const base: StoredPolicyRecord = {
@@ -390,227 +408,158 @@ export class GICSInferenceEngine {
             evidenceKeys: [`_infer|profile|${scope}`],
         };
 
-        if (domain === 'compression.encode') {
-            const readHeavy = profile.stats.reads > Math.max(1, profile.stats.writes * 2);
-            const ratioLow = profile.stats.avgCompressionRatio > 0 && profile.stats.avgCompressionRatio < 20;
-            let suggestedPreset = profile.preferences.preferredCompressionPreset ?? 'balanced';
-            if (readHeavy) {
-                suggestedPreset = 'low_latency';
-            } else if (ratioLow) {
-                suggestedPreset = 'max_ratio';
-            }
-            return {
-                ...base,
-                basis: [
-                    `reads=${profile.stats.reads}`,
-                    `writes=${profile.stats.writes}`,
-                    `avgCompressionRatio=${profile.stats.avgCompressionRatio.toFixed(2)}`,
-                ],
-                weights: {
-                    bandit: 0.55,
-                    readPressure: readHeavy ? 0.25 : 0.08,
-                    ratioPressure: ratioLow ? 0.25 : 0.12,
-                    baseline: 0.15,
-                },
-                thresholds: {
-                    ratioLowCutoff: 20,
-                    readHeavyFactor: 2,
-                },
-                payload: {
-                    suggestedPreset,
-                    workloadClass: readHeavy ? 'read_heavy' : 'balanced',
-                    candidateCount: candidates.length,
-                },
-            };
+        switch (domain) {
+            case 'compression.encode': return this.buildCompressionPolicy(profile, candidates, base);
+            case 'ops.provider_select': return this.buildProviderPolicy(profile, base);
+            case 'ops.plan_rank': return this.buildPlanPolicy(profile, base);
+            case 'storage.policy': return this.buildStoragePolicy(profile, base);
+            default:
+                return {
+                    ...base,
+                    basis: [`candidates=${candidates.length}`],
+                    weights: { bandit: 0.65, heuristic: 0.35 },
+                    thresholds: {},
+                    payload: {},
+                };
         }
+    }
 
-        if (domain === 'ops.provider_select') {
-            return {
-                ...base,
-                basis: [
-                    `preferredProvider=${profile.preferences.preferredProviderId ?? 'none'}`,
-                    `avgLatency=${profile.stats.avgReadLatencyMs.toFixed(2)}`,
-                ],
-                weights: {
-                    bandit: 0.5,
-                    latency: 0.3,
-                    cost: 0.2,
-                },
-                thresholds: {
-                    maxLatencyMs: 5000,
-                    maxCostScore: 1,
-                },
-                payload: {
-                    objective: 'provider_select',
-                    preferredProviderId: profile.preferences.preferredProviderId ?? null,
-                },
-            };
-        }
-
-        if (domain === 'ops.plan_rank') {
-            return {
-                ...base,
-                basis: [
-                    `preferredPlanBias=${profile.preferences.preferredPlanBias ?? 'balanced'}`,
-                    `reads=${profile.stats.reads}`,
-                    `writes=${profile.stats.writes}`,
-                ],
-                weights: {
-                    bandit: 0.35,
-                    confidence: 0.3,
-                    risk: 0.2,
-                    cost: 0.15,
-                },
-                thresholds: {
-                    maxRisk: 0.65,
-                    minConfidence: 0.55,
-                },
-                payload: {
-                    objective: 'plan_rank',
-                    preferredBias: profile.preferences.preferredPlanBias ?? 'balanced',
-                },
-            };
-        }
-
-        if (domain === 'storage.policy') {
-            const scanHeavy = profile.stats.scans > Math.max(1, profile.stats.writes);
-            const writeHeavy = profile.stats.writes >= Math.max(1, profile.stats.reads);
-            let mode = 'policy.current';
-            if (scanHeavy) {
-                mode = 'policy.read_heavy';
-            } else if (writeHeavy) {
-                mode = 'policy.write_heavy';
-            }
-            return {
-                ...base,
-                basis: [
-                    `scans=${profile.stats.scans}`,
-                    `writes=${profile.stats.writes}`,
-                    `flushes=${profile.stats.flushes}`,
-                ],
-                weights: {
-                    bandit: 0.35,
-                    scanPressure: scanHeavy ? 0.3 : 0.1,
-                    writePressure: writeHeavy ? 0.3 : 0.1,
-                    safety: 0.15,
-                },
-                thresholds: {
-                    scanHeavyCutoff: profile.stats.writes || 1,
-                    writeHeavyCutoff: profile.stats.reads || 1,
-                },
-                payload: {
-                    mode,
-                    recommendedMaxMemSizeBytes: writeHeavy ? 64 * 1024 * 1024 : 24 * 1024 * 1024,
-                    recommendedMaxDirtyCount: scanHeavy ? 1500 : 4000,
-                    recommendedWarmRetentionMs: scanHeavy ? 14 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000,
-                },
-            };
-        }
-
+    private buildCompressionPolicy(profile: ScopeProfile, candidates: CandidateInput[], base: StoredPolicyRecord): StoredPolicyRecord {
+        const readHeavy = profile.stats.reads > Math.max(1, profile.stats.writes * 2);
+        const ratioLow = profile.stats.avgCompressionRatio > 0 && profile.stats.avgCompressionRatio < 20;
+        let suggestedPreset = profile.preferences.preferredCompressionPreset ?? 'balanced';
+        if (readHeavy) suggestedPreset = 'low_latency';
+        else if (ratioLow) suggestedPreset = 'max_ratio';
         return {
             ...base,
-            basis: [`candidates=${candidates.length}`],
-            weights: {
-                bandit: 0.65,
-                heuristic: 0.35,
-            },
-            thresholds: {},
-            payload: {},
+            basis: [`reads=${profile.stats.reads}`, `writes=${profile.stats.writes}`, `avgCompressionRatio=${profile.stats.avgCompressionRatio.toFixed(2)}`],
+            weights: { bandit: 0.55, readPressure: readHeavy ? 0.25 : 0.08, ratioPressure: ratioLow ? 0.25 : 0.12, baseline: 0.15 },
+            thresholds: { ratioLowCutoff: 20, readHeavyFactor: 2 },
+            payload: { suggestedPreset, workloadClass: readHeavy ? 'read_heavy' : 'balanced', candidateCount: candidates.length },
+        };
+    }
+
+    private buildProviderPolicy(profile: ScopeProfile, base: StoredPolicyRecord): StoredPolicyRecord {
+        return {
+            ...base,
+            basis: [`preferredProvider=${profile.preferences.preferredProviderId ?? 'none'}`, `avgLatency=${profile.stats.avgReadLatencyMs.toFixed(2)}`],
+            weights: { bandit: 0.5, latency: 0.3, cost: 0.2 },
+            thresholds: { maxLatencyMs: 5000, maxCostScore: 1 },
+            payload: { objective: 'provider_select', preferredProviderId: profile.preferences.preferredProviderId ?? null },
+        };
+    }
+
+    private buildPlanPolicy(profile: ScopeProfile, base: StoredPolicyRecord): StoredPolicyRecord {
+        return {
+            ...base,
+            basis: [`preferredPlanBias=${profile.preferences.preferredPlanBias ?? 'balanced'}`, `reads=${profile.stats.reads}`, `writes=${profile.stats.writes}`],
+            weights: { bandit: 0.35, confidence: 0.3, risk: 0.2, cost: 0.15 },
+            thresholds: { maxRisk: 0.65, minConfidence: 0.55 },
+            payload: { objective: 'plan_rank', preferredBias: profile.preferences.preferredPlanBias ?? 'balanced' },
+        };
+    }
+
+    private buildStoragePolicy(profile: ScopeProfile, base: StoredPolicyRecord): StoredPolicyRecord {
+        const scanHeavy = profile.stats.scans > Math.max(1, profile.stats.writes);
+        const writeHeavy = profile.stats.writes >= Math.max(1, profile.stats.reads);
+        let mode = 'policy.current';
+        if (scanHeavy) mode = 'policy.read_heavy';
+        else if (writeHeavy) mode = 'policy.write_heavy';
+        return {
+            ...base,
+            basis: [`scans=${profile.stats.scans}`, `writes=${profile.stats.writes}`, `flushes=${profile.stats.flushes}`],
+            weights: { bandit: 0.35, scanPressure: scanHeavy ? 0.3 : 0.1, writePressure: writeHeavy ? 0.3 : 0.1, safety: 0.15 },
+            thresholds: { scanHeavyCutoff: profile.stats.writes || 1, writeHeavyCutoff: profile.stats.reads || 1 },
+            payload: { mode, recommendedMaxMemSizeBytes: writeHeavy ? 64 * 1024 * 1024 : 24 * 1024 * 1024, recommendedMaxDirtyCount: scanHeavy ? 1500 : 4000, recommendedWarmRetentionMs: scanHeavy ? 14 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000 },
         };
     }
 
     private scoreCandidate(domain: string, candidate: CandidateInput, profile: ScopeProfile, policy: StoredPolicyRecord): ScoredCandidate {
         const stats = this.store.getOutcomeStats(domain, candidate.id);
-        const successes = stats?.successes ?? 0;
-        const failures = stats?.failures ?? 0;
-        const pulls = successes + failures;
-        const banditScore = (successes + 3) / (pulls + 4);
+        const pulls = (stats?.successes ?? 0) + (stats?.failures ?? 0);
+        const banditScore = ((stats?.successes ?? 0) + 3) / (pulls + 4);
         const basis: string[] = [`bandit=${banditScore.toFixed(3)}`];
-        const components: number[] = [];
-        const weights: number[] = [];
+        const components: number[] = [banditScore];
+        const weights: number[] = [policy.weights.bandit ?? 0.65];
 
-        components.push(banditScore);
-        weights.push(policy.weights.bandit ?? 0.65);
-
-        if (domain === 'compression.encode') {
-            const suggestedPreset = String(policy.payload.suggestedPreset ?? 'balanced');
-            let readMatch = 0.25;
-            if (candidate.id === 'low_latency') readMatch = 1;
-            else if (candidate.id === 'balanced') readMatch = 0.6;
-            
-            let ratioMatch = 0.25;
-            if (candidate.id === 'max_ratio') ratioMatch = 1;
-            else if (candidate.id === 'balanced') ratioMatch = 0.55;
-            
-            let baseline = 0.4;
-            if (candidate.id === suggestedPreset) baseline = 1;
-            else if (candidate.id === 'balanced') baseline = 0.7;
-            
-            components.push(readMatch, ratioMatch, baseline);
-            weights.push(policy.weights.readPressure ?? 0.15, policy.weights.ratioPressure ?? 0.15, policy.weights.baseline ?? 0.15);
-            basis.push(`suggestedPreset=${suggestedPreset}`);
-        } else if (domain === 'ops.provider_select') {
-            const latency = toNumber(candidate.payload.latencyMs ?? candidate.payload.latency, stats?.avgLatencyMs ?? 2500);
-            const cost = toNumber(candidate.payload.costScore ?? candidate.payload.cost ?? candidate.payload.costUsd, stats?.avgCostScore ?? 0.5);
-            const latencyScore = clamp(1 - (latency / Math.max(1, policy.thresholds.maxLatencyMs ?? 5000)));
-            const costScore = clamp(1 - (cost / Math.max(0.001, policy.thresholds.maxCostScore ?? 1)));
-            components.push(latencyScore, costScore);
-            weights.push(policy.weights.latency ?? 0.2, policy.weights.cost ?? 0.15);
-            basis.push(`latency=${latency}`, `cost=${cost}`);
-        } else if (domain === 'ops.plan_rank') {
-            const risk = toNumber(candidate.payload.risk, 0.5);
-            const confidence = toNumber(candidate.payload.confidence, 0.5);
-            const cost = toNumber(candidate.payload.estimated_cost ?? candidate.payload.cost, 0.5);
-            components.push(clamp(confidence), clamp(1 - risk), clamp(1 - cost));
-            weights.push(policy.weights.confidence ?? 0.3, policy.weights.risk ?? 0.2, policy.weights.cost ?? 0.15);
-            basis.push(`risk=${risk}`, `confidence=${confidence}`, `cost=${cost}`);
-        } else if (domain === 'storage.policy') {
-            const mode = String(candidate.payload.mode ?? candidate.id);
-            const recommendedMode = String(policy.payload.mode ?? 'policy.current');
-            let modeScore = 0.45;
-            if (mode === recommendedMode) {
-                modeScore = 1;
-            } else if (mode === 'current') {
-                modeScore = 0.65;
-            }
-            const scanHeavy = profile.stats.scans > Math.max(1, profile.stats.writes) ? 1 : 0.35;
-            const writeHeavy = profile.stats.writes >= Math.max(1, profile.stats.reads) ? 1 : 0.35;
-            const safety = candidate.id === 'policy.current' ? 1 : 0.75;
-            components.push(modeScore, scanHeavy, writeHeavy, safety);
-            weights.push(policy.weights.scanPressure ?? 0.2, policy.weights.scanPressure ?? 0.1, policy.weights.writePressure ?? 0.1, policy.weights.safety ?? 0.15);
-            candidate.payload = {
-                ...candidate.payload,
-                recommendedMaxMemSizeBytes: policy.payload.recommendedMaxMemSizeBytes,
-                recommendedMaxDirtyCount: policy.payload.recommendedMaxDirtyCount,
-                recommendedWarmRetentionMs: policy.payload.recommendedWarmRetentionMs,
-            };
-            basis.push(`mode=${mode}`, `recommendedMode=${recommendedMode}`);
-        } else {
-            const heuristic = clamp(0.45 + ((stats?.avgFeedbackScore ?? 0.5) * 0.5));
-            components.push(heuristic);
-            weights.push(policy.weights.heuristic ?? 0.35);
+        switch (domain) {
+            case 'compression.encode': this.scoreCompression(candidate, policy, components, weights, basis); break;
+            case 'ops.provider_select': this.scoreProvider(candidate, stats ?? null, policy, components, weights, basis); break;
+            case 'ops.plan_rank': this.scorePlan(candidate, policy, components, weights, basis); break;
+            case 'storage.policy': this.scoreStorage(candidate, profile, policy, components, weights, basis); break;
+            default:
+                components.push(clamp(0.45 + ((stats?.avgFeedbackScore ?? 0.5) * 0.5)));
+                weights.push(policy.weights.heuristic ?? 0.35);
+                break;
         }
 
         const totalWeight = Math.max(0.0001, weights.reduce((sum, current) => sum + current, 0));
-        const weightedScore = components.reduce((sum, component, index) => sum + (component * weights[index]!), 0);
+        const weightedScore = components.reduce((sum, component, index) => sum + (component * weights[index]), 0);
         const score = clamp(weightedScore / totalWeight);
         const confidence = clamp(0.35 + (Math.min(pulls, 25) / 35) + ((stats?.avgFeedbackScore ?? 0) * 0.15));
 
-        if (stats) {
-            basis.push(
-                `outcomes=${stats.totalOutcomes}`,
-                `success=${stats.successes}`,
-                `feedback=${stats.avgFeedbackScore.toFixed(2)}`
-            );
-        }
+        if (stats) basis.push(`outcomes=${stats.totalOutcomes}`, `success=${stats.successes}`, `feedback=${stats.avgFeedbackScore.toFixed(2)}`);
 
-        return {
-            id: candidate.id,
-            score,
-            confidence,
-            basis,
-            candidate: { ...candidate.payload },
-        };
+        return { id: candidate.id, score, confidence, basis, candidate: { ...candidate.payload } };
+    }
+
+    private scoreCompression(candidate: CandidateInput, policy: StoredPolicyRecord, components: number[], weights: number[], basis: string[]): void {
+        const suggested = typeof policy.payload.suggestedPreset === 'string' ? policy.payload.suggestedPreset : 'balanced';
+        
+        let readMatch = 0.25;
+        if (candidate.id === 'low_latency') readMatch = 1;
+        else if (candidate.id === 'balanced') readMatch = 0.6;
+        
+        let ratioMatch = 0.25;
+        if (candidate.id === 'max_ratio') ratioMatch = 1;
+        else if (candidate.id === 'balanced') ratioMatch = 0.55;
+        
+        let baseline = 0.4;
+        if (candidate.id === suggested) baseline = 1;
+        else if (candidate.id === 'balanced') baseline = 0.7;
+
+        components.push(readMatch, ratioMatch, baseline);
+        weights.push(policy.weights.readPressure ?? 0.15, policy.weights.ratioPressure ?? 0.15, policy.weights.baseline ?? 0.15);
+        basis.push(`suggestedPreset=${suggested}`);
+    }
+
+    private scoreProvider(candidate: CandidateInput, stats: CandidateOutcomeStats | null, policy: StoredPolicyRecord, components: number[], weights: number[], basis: string[]): void {
+        const latency = toNumber(candidate.payload.latencyMs ?? candidate.payload.latency, stats?.avgLatencyMs ?? 2500);
+        const cost = toNumber(candidate.payload.costScore ?? candidate.payload.cost ?? candidate.payload.costUsd, stats?.avgCostScore ?? 0.5);
+        components.push(clamp(1 - (latency / Math.max(1, policy.thresholds.maxLatencyMs ?? 5000))), clamp(1 - (cost / Math.max(0.001, policy.thresholds.maxCostScore ?? 1))));
+        weights.push(policy.weights.latency ?? 0.2, policy.weights.cost ?? 0.15);
+        basis.push(`latency=${latency}`, `cost=${cost}`);
+    }
+
+    private scorePlan(candidate: CandidateInput, policy: StoredPolicyRecord, components: number[], weights: number[], basis: string[]): void {
+        const risk = toNumber(candidate.payload.risk, 0.5);
+        const confidence = toNumber(candidate.payload.confidence, 0.5);
+        const cost = toNumber(candidate.payload.estimated_cost ?? candidate.payload.cost, 0.5);
+        components.push(clamp(confidence), clamp(1 - risk), clamp(1 - cost));
+        weights.push(policy.weights.confidence ?? 0.3, policy.weights.risk ?? 0.2, policy.weights.cost ?? 0.15);
+        basis.push(`risk=${risk}`, `confidence=${confidence}`, `cost=${cost}`);
+    }
+
+    private scoreStorage(candidate: CandidateInput, profile: ScopeProfile, policy: StoredPolicyRecord, components: number[], weights: number[], basis: string[]): void {
+        const mode = typeof candidate.payload.mode === 'string' ? candidate.payload.mode : candidate.id;
+        const recMode = typeof policy.payload.mode === 'string' ? policy.payload.mode : 'policy.current';
+        
+        let modeScore = 0.45;
+        if (mode === recMode) modeScore = 1;
+        else if (mode === 'current') modeScore = 0.65;
+        
+        const scanHeavy = profile.stats.scans > Math.max(1, profile.stats.writes) ? 1 : 0.35;
+        const writeHeavy = profile.stats.writes >= Math.max(1, profile.stats.reads) ? 1 : 0.35;
+        const safety = candidate.id === 'policy.current' ? 1 : 0.75;
+        
+        components.push(modeScore, scanHeavy, writeHeavy, safety);
+        weights.push(policy.weights.scanPressure ?? 0.2, policy.weights.scanPressure ?? 0.1, policy.weights.writePressure ?? 0.1, policy.weights.safety ?? 0.15);
+        Object.assign(candidate.payload, {
+            recommendedMaxMemSizeBytes: policy.payload.recommendedMaxMemSizeBytes,
+            recommendedMaxDirtyCount: policy.payload.recommendedMaxDirtyCount,
+            recommendedWarmRetentionMs: policy.payload.recommendedWarmRetentionMs,
+        });
+        basis.push(`mode=${mode}`, `recommendedMode=${recMode}`);
     }
 
     private deriveProfileHints(
@@ -620,8 +569,9 @@ export class GICSInferenceEngine {
         policyPayload: Record<string, unknown>
     ): ScopeProfile['policyHints'] {
         if (domain === 'compression.encode') {
+            const preset = typeof policyPayload.suggestedPreset === 'string' ? policyPayload.suggestedPreset : 'balanced';
             return {
-                compressionPreset: recommendedId ?? String(policyPayload.suggestedPreset ?? 'balanced'),
+                compressionPreset: recommendedId ?? preset,
             };
         }
 
@@ -632,9 +582,10 @@ export class GICSInferenceEngine {
         }
 
         if (domain === 'storage.policy') {
+            const mode = typeof policyPayload.mode === 'string' ? policyPayload.mode : 'policy.current';
             return {
-                storageMode: recommendedId ?? String(policyPayload.mode ?? 'policy.current'),
-                maxMemSizeBytes: toNumber(recommendedCandidate.recommendedMaxMemSizeBytes ?? policyPayload.recommendedMaxMemSizeBytes, 0),
+                storageMode: recommendedId ?? mode,
+                maxMemSizeBytes: Math.floor(toNumber(recommendedCandidate.recommendedMaxMemSizeBytes ?? policyPayload.recommendedMaxMemSizeBytes, 0)),
                 maxDirtyCount: toNumber(recommendedCandidate.recommendedMaxDirtyCount ?? policyPayload.recommendedMaxDirtyCount, 0),
                 warmRetentionMs: toNumber(recommendedCandidate.recommendedWarmRetentionMs ?? policyPayload.recommendedWarmRetentionMs, 0),
             };

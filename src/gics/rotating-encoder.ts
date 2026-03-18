@@ -66,7 +66,7 @@ function resolveRotationOptions(options: GICSv2RotationOptions): ResolvedRotatio
         consecutiveBreachesToRotate: 3,
         cooldownFlushes: 2,
     };
-    const adaptive = { ...adaptiveDefaults, ...(options.adaptive ?? {}) };
+    const adaptive = { ...adaptiveDefaults, ...options.adaptive };
     return {
         sessionDir,
         sessionId,
@@ -185,7 +185,44 @@ async function readManifestFromPath(manifestPath: string): Promise<GICSSessionMa
     return parsed;
 }
 
-// eslint-disable-next-line sonarjs/cognitive-complexity
+function getValidationCandidates(manifest: GICSSessionManifest, options: { includeOrphaned: boolean; maxFiles: number; }) {
+    return manifest.files
+        .filter((entry) => options.includeOrphaned || !entry.orphaned)
+        .slice(0, options.maxFiles > 0 ? options.maxFiles : manifest.files.length);
+}
+
+async function validateSingleEntry(
+    entry: GICSSessionFileEntry,
+    previousRoot: string,
+    sessionDir: string,
+    options: { decoderOptions: NonNullable<GICSSessionReadOptions['decoderOptions']>; }
+): Promise<string> {
+    if (entry.startSeedHash !== previousRoot) {
+        throw new Error(`Session continuity mismatch at seq=${entry.seq}: expected startSeedHash=${previousRoot}, got ${entry.startSeedHash}`);
+    }
+
+    const absolute = path.resolve(sessionDir, entry.path);
+    const encoded = await fs.promises.readFile(absolute);
+
+    const actualRoot = extractRootHashHexFromEos(encoded);
+    if (actualRoot !== entry.endRootHash) {
+        throw new Error(`EOS root mismatch at seq=${entry.seq}: manifest=${entry.endRootHash}, file=${actualRoot}`);
+    }
+
+    const actualSha = createHash('sha256').update(encoded).digest('hex');
+    if (actualSha !== entry.sha256) {
+        throw new Error(`SHA256 mismatch at seq=${entry.seq}: manifest=${entry.sha256}, file=${actualSha}`);
+    }
+
+    const decoder = new GICSv2Decoder(encoded, options.decoderOptions);
+    const ok = await decoder.verifyIntegrityOnly();
+    if (!ok) {
+        throw new Error(`Integrity verification failed at seq=${entry.seq}`);
+    }
+
+    return entry.endRootHash;
+}
+
 async function validateSessionManifest(
     manifest: GICSSessionManifest,
     sessionDir: string,
@@ -193,59 +230,19 @@ async function validateSessionManifest(
         decoderOptions: NonNullable<GICSSessionReadOptions['decoderOptions']>;
     }
 ): Promise<SessionValidationSummary> {
-    const candidates = manifest.files
-        .filter((entry) => options.includeOrphaned || !entry.orphaned)
-        .slice(0, options.maxFiles > 0 ? options.maxFiles : manifest.files.length);
-
+    const candidates = getValidationCandidates(manifest, options);
     let previousRoot = ZERO_HASH_HEX;
     let checked = 0;
     const orphanedSkipped = manifest.files.filter((entry) => !!entry.orphaned).length;
+
     for (const entry of candidates) {
-        if (entry.startSeedHash !== previousRoot) {
-            if (options.strict) {
-                throw new Error(`Session continuity mismatch at seq=${entry.seq}: expected startSeedHash=${previousRoot}, got ${entry.startSeedHash}`);
-            }
-            return { ok: false, filesChecked: checked, orphanedSkipped, lastRootHash: previousRoot };
-        }
-
-        const absolute = path.resolve(sessionDir, entry.path);
-        let encoded: Uint8Array;
         try {
-            encoded = await fs.promises.readFile(absolute);
+            previousRoot = await validateSingleEntry(entry, previousRoot, sessionDir, options);
+            checked++;
         } catch (error) {
-            if (options.strict) {
-                throw error;
-            }
+            if (options.strict) throw error;
             return { ok: false, filesChecked: checked, orphanedSkipped, lastRootHash: previousRoot };
         }
-
-        const actualRoot = extractRootHashHexFromEos(encoded);
-        if (actualRoot !== entry.endRootHash) {
-            if (options.strict) {
-                throw new Error(`EOS root mismatch at seq=${entry.seq}: manifest=${entry.endRootHash}, file=${actualRoot}`);
-            }
-            return { ok: false, filesChecked: checked, orphanedSkipped, lastRootHash: previousRoot };
-        }
-
-        const actualSha = createHash('sha256').update(encoded).digest('hex');
-        if (actualSha !== entry.sha256) {
-            if (options.strict) {
-                throw new Error(`SHA256 mismatch at seq=${entry.seq}: manifest=${entry.sha256}, file=${actualSha}`);
-            }
-            return { ok: false, filesChecked: checked, orphanedSkipped, lastRootHash: previousRoot };
-        }
-
-        const decoder = new GICSv2Decoder(encoded, options.decoderOptions);
-        const ok = await decoder.verifyIntegrityOnly();
-        if (!ok) {
-            if (options.strict) {
-                throw new Error(`Integrity verification failed at seq=${entry.seq}`);
-            }
-            return { ok: false, filesChecked: checked, orphanedSkipped, lastRootHash: previousRoot };
-        }
-
-        checked++;
-        previousRoot = entry.endRootHash;
     }
 
     const manifestLastRoot = normalizeHashHex(manifest.lastRootHash);
@@ -266,7 +263,7 @@ async function validateSessionManifest(
 
 export class GICSv2RotatingEncoder {
     private readonly options: ResolvedRotationOptions;
-    private manifest: GICSSessionManifest;
+    private readonly manifest: GICSSessionManifest;
     private encoder: GICSv2Encoder | null = null;
     private handle: fs.promises.FileHandle | null = null;
     private currentSeq = 0;
@@ -378,7 +375,7 @@ export class GICSv2RotatingEncoder {
     }
 
     getManifest(): GICSSessionManifest {
-        return JSON.parse(JSON.stringify(this.manifest)) as GICSSessionManifest;
+        return structuredClone(this.manifest);
     }
 
     getRotationReasonCounts(): Record<string, number> {
@@ -393,9 +390,7 @@ export class GICSv2RotatingEncoder {
 
         await this.encoder.addSnapshot(snapshot);
         this.currentFileSnapshots++;
-        if (this.currentFileFirstTs === null) {
-            this.currentFileFirstTs = snapshot.timestamp;
-        }
+        this.currentFileFirstTs ??= snapshot.timestamp;
         this.currentFileLastTs = snapshot.timestamp;
         this.bufferedSnapshots++;
         this.bufferedRawBytes += estimateSnapshotRawBytes(snapshot);
@@ -469,12 +464,18 @@ export class GICSv2RotatingEncoder {
 
     private updateAdaptiveEwma(latencyUs: number, ratio: number): void {
         const alpha = this.options.adaptive.ewmaAlpha;
-        this.ewmaLatencyUs = this.ewmaLatencyUs === null
-            ? latencyUs
-            : (alpha * latencyUs) + ((1 - alpha) * this.ewmaLatencyUs);
-        this.ewmaRatio = this.ewmaRatio === null
-            ? ratio
-            : (alpha * ratio) + ((1 - alpha) * this.ewmaRatio);
+        if (this.ewmaLatencyUs === null) {
+            this.ewmaLatencyUs = latencyUs;
+        } else {
+            this.ewmaLatencyUs = (alpha * latencyUs) + ((1 - alpha) * this.ewmaLatencyUs);
+        }
+        
+        if (this.ewmaRatio === null) {
+            this.ewmaRatio = ratio;
+        } else {
+            this.ewmaRatio = (alpha * ratio) + ((1 - alpha) * this.ewmaRatio);
+        }
+        
         if (this.ewmaRatio > this.bestRatioEwma) {
             this.bestRatioEwma = this.ewmaRatio;
         }

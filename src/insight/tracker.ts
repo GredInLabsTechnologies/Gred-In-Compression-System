@@ -277,93 +277,72 @@ export class InsightTracker {
             : 0;
     }
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private updateFieldTrends(item: InternalItemBehavior, fields: Record<string, number | string>): void {
+        const { aggregateDelta, numericFieldCount } = this.processNumericFields(item, fields);
+        if (numericFieldCount > 0) {
+            this.updateStreakAndEntropy(item, aggregateDelta);
+        }
+        this.buildPublicFieldTrends(item);
+    }
+
+    private processNumericFields(item: InternalItemBehavior, fields: Record<string, number | string>) {
         let aggregateDelta = 0;
         let numericFieldCount = 0;
-
         for (const [fieldName, value] of Object.entries(fields)) {
             if (typeof value !== 'number') continue;
             numericFieldCount++;
-
             let stats = item.fieldStatsMap.get(fieldName);
             if (!stats) {
-                stats = {
-                    ema: value,
-                    previousValue: value,
-                    runningMean: value,
-                    runningM2: 0,
-                    sampleCount: 1,
-                    min: value,
-                    max: value
-                };
+                stats = { ema: value, previousValue: value, runningMean: value, runningM2: 0, sampleCount: 1, min: value, max: value };
                 item.fieldStatsMap.set(fieldName, stats);
                 continue;
             }
-
-            const delta = value - stats.previousValue;
-            aggregateDelta += delta;
-
-            // EMA
+            aggregateDelta += value - stats.previousValue;
             stats.ema = (this.fieldTrendAlpha * value) + ((1 - this.fieldTrendAlpha) * stats.ema);
-
-            // Welford for z-score
             stats.sampleCount += 1;
             const oldMean = stats.runningMean;
             stats.runningMean = oldMean + (value - oldMean) / stats.sampleCount;
             stats.runningM2 += (value - oldMean) * (value - stats.runningMean);
-
-            // Min/max
             if (value < stats.min) stats.min = value;
             if (value > stats.max) stats.max = value;
-
             stats.previousValue = value;
         }
+        return { aggregateDelta, numericFieldCount };
+    }
 
-        // Update streak based on aggregate delta direction
-        if (numericFieldCount > 0) {
-            let sign = 0;
-            if (aggregateDelta > 0) sign = 1;
-            else if (aggregateDelta < 0) sign = -1;
+    private updateStreakAndEntropy(item: InternalItemBehavior, aggregateDelta: number): void {
+        let sign = 0;
+        if (aggregateDelta > 0) sign = 1;
+        else if (aggregateDelta < 0) sign = -1;
 
-            // Push to entropy window
-            if (sign !== 0) {
-                item.recentDeltaSigns.push(sign);
-                if (item.recentDeltaSigns.length > this.entropyWindowSize) {
-                    item.recentDeltaSigns.shift();
-                }
+        if (sign !== 0) {
+            item.recentDeltaSigns.push(sign);
+            if (item.recentDeltaSigns.length > this.entropyWindowSize) {
+                item.recentDeltaSigns.shift();
             }
-
-            // Update streak
-            if (sign > 0) {
-                item.streak = item.streak >= 0 ? item.streak + 1 : 1;
-            } else if (sign < 0) {
-                item.streak = item.streak <= 0 ? item.streak - 1 : -1;
-            }
-            // sign === 0: streak unchanged
-
-            const absStreak = Math.abs(item.streak);
-            if (absStreak > item.streakRecord) {
-                item.streakRecord = absStreak;
-            }
-
-            // Recompute Shannon entropy over recent delta signs
-            item.entropy = this.shannonEntropy(item.recentDeltaSigns);
+        }
+        
+        if (sign > 0) {
+            if (item.streak >= 0) item.streak += 1;
+            else item.streak = 1;
+        } else if (sign < 0) {
+            if (item.streak <= 0) item.streak -= 1;
+            else item.streak = -1;
         }
 
-        // Build public fieldTrends
+        const absStreak = Math.abs(item.streak);
+        if (absStreak > item.streakRecord) item.streakRecord = absStreak;
+
+        item.entropy = this.shannonEntropy(item.recentDeltaSigns);
+    }
+
+    private buildPublicFieldTrends(item: InternalItemBehavior): void {
         item.fieldTrends = {};
         for (const [fieldName, stats] of item.fieldStatsMap.entries()) {
-            const stddev = stats.sampleCount > 1
-                ? Math.sqrt(stats.runningM2 / (stats.sampleCount - 1))
-                : 0;
-            const zScore = stddev > 0
-                ? (stats.previousValue - stats.runningMean) / stddev
-                : 0;
+            const stddev = stats.sampleCount > 1 ? Math.sqrt(stats.runningM2 / (stats.sampleCount - 1)) : 0;
+            const zScore = stddev > 0 ? (stats.previousValue - stats.runningMean) / stddev : 0;
             const range = stats.max - stats.min;
-            const magnitude = range > 0
-                ? Math.abs(stats.previousValue - stats.ema) / range
-                : 0;
+            const magnitude = range > 0 ? Math.abs(stats.previousValue - stats.ema) / range : 0;
 
             let direction: 'up' | 'down' | 'flat';
             if (stats.previousValue > stats.ema * 1.005) direction = 'up';
