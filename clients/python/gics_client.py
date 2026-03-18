@@ -310,6 +310,14 @@ class GICSClient:
         resp = self._call("getProfile", params)
         return self._unwrap_result(resp)
 
+    def get_inference_runtime(self):
+        resp = self._call("getInferenceRuntime")
+        return self._unwrap_result(resp)
+
+    def flush_inference(self):
+        resp = self._call("flushInference")
+        return self._unwrap_result(resp).get('ok', False)
+
     def get_accuracy(self, insight_type=None, scope=None):
         params = {}
         if insight_type is not None:
@@ -441,6 +449,14 @@ class GICSClient:
             params["scope"] = scope
         resp = await self._acall("getAccuracy", params)
         return self._unwrap_result(resp)
+
+    async def aget_inference_runtime(self):
+        resp = await self._acall("getInferenceRuntime")
+        return self._unwrap_result(resp)
+
+    async def aflush_inference(self) -> bool:
+        resp = await self._acall("flushInference")
+        return self._unwrap_result(resp).get('ok', False)
 
     async def asubscribe(self, event_types: list[str]):
         resp = await self._acall("subscribe", {"events": event_types})

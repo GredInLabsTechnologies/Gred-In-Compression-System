@@ -2,12 +2,13 @@ import * as path from 'path';
 import { AuditChain } from './audit-chain.js';
 import { ModuleRegistry, type DaemonModule, type ModuleContext, type ModuleDeleteEvent, type ModuleOutcomeEvent, type ModuleReadEvent, type ModuleWriteEvent, type RecommendationQuery } from './module-registry.js';
 import { PromptDistiller } from './prompt-distiller.js';
-import { InferenceEngineModule } from '../inference/module.js';
+import { InferenceEngineModule, type InferenceEngineModuleOptions } from '../inference/module.js';
 import { InsightTracker, type ItemBehavior, type LifecycleStage } from '../insight/tracker.js';
 import { CorrelationAnalyzer } from '../insight/correlation.js';
 import { PredictiveSignals } from '../insight/signals.js';
 import { ConfidenceTracker, type OutcomeResult } from '../insight/confidence.js';
 import { InsightPersistence } from '../insight/persistence.js';
+import type { GICSModuleRuntimeConfig } from './config.js';
 
 export class AuditChainModule implements DaemonModule {
     public enabled = true;
@@ -272,6 +273,7 @@ export function createBuiltinModuleSet(options: {
     enablePromptDistiller?: boolean;
     enableInferenceEngine?: boolean;
     defaultScope: string;
+    moduleConfigs?: Record<string, GICSModuleRuntimeConfig>;
 }): BuiltinModuleSet {
     const registry = new ModuleRegistry();
     const audit = new AuditChainModule(new AuditChain({ filePath: path.join(options.dataPath, 'audit.chain') }));
@@ -286,7 +288,11 @@ export function createBuiltinModuleSet(options: {
     registry.register(nativeInsight);
 
     const inferenceEngine = options.enableInferenceEngine
-        ? new InferenceEngineModule(options.dataPath, options.defaultScope)
+        ? new InferenceEngineModule(
+            options.dataPath,
+            options.defaultScope,
+            options.moduleConfigs?.['inference-engine']?.options as InferenceEngineModuleOptions | undefined
+        )
         : null;
     if (inferenceEngine) registry.register(inferenceEngine);
 

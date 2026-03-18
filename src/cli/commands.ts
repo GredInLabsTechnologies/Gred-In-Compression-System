@@ -1,7 +1,7 @@
 /**
  * GICS CLI Commands (Phase 10 → v1.3.3 UX)
  *
- * Implements: encode, decode, verify, info, bench, profile, daemon
+ * Implements: encode, decode, verify, info, bench, profile, inference, daemon
  * Zero external dependencies, ANSI UX via ui.ts
  */
 
@@ -135,17 +135,25 @@ async function daemonRpcCall(
 }
 
 function parseJsonInput(args: string[], inlineFlag: string, fileFlag: string): Record<string, unknown> {
+    const value = parseJsonValue(args, inlineFlag, fileFlag);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return {};
+    }
+    return value as Record<string, unknown>;
+}
+
+function parseJsonValue(args: string[], inlineFlag: string, fileFlag: string): unknown {
     const inline = parseFlag(args, inlineFlag);
     if (inline) {
-        return JSON.parse(inline) as Record<string, unknown>;
+        return JSON.parse(inline);
     }
 
     const filePath = parseFlag(args, fileFlag);
     if (filePath) {
-        return JSON.parse(readFileSync(filePath, 'utf8')) as Record<string, unknown>;
+        return JSON.parse(readFileSync(filePath, 'utf8'));
     }
 
-    return {};
+    return null;
 }
 
 /**
@@ -705,6 +713,50 @@ ${c.bold('Options:')}
 }
 
 /**
+ * gics inference <infer|profile|recommendations|health|flush>
+ */
+export async function inferenceCommand(ctx: CLIContext): Promise<number> {
+    const subcommand = ctx.args[0];
+    const subArgs = ctx.args.slice(1);
+
+    if (hasFlag(ctx.args, '--help') || !subcommand || !['infer', 'profile', 'recommendations', 'health', 'flush'].includes(subcommand)) {
+        console.log(`${c.bold('gics inference')} — Operate the GICS inference engine
+
+${c.bold('Usage:')} gics inference <infer|profile|recommendations|health|flush> [options]
+
+${c.bold('Subcommands:')}
+  infer             Ask the inference engine to rank candidates
+  profile           Fetch a persisted inference profile
+  recommendations   Fetch recent decisions and policies
+  health            Show inference runtime health
+  flush             Force a durable inference flush
+
+${c.bold('Options:')}
+  --json                Emit machine-readable JSON
+  --pretty              Pretty-print JSON
+  --socket-path <path>  Explicit daemon socket path
+  --token-path <path>   Explicit daemon token path
+  --config <path>       Resolve daemon paths from config`);
+        return subcommand ? 0 : 2;
+    }
+
+    switch (subcommand) {
+        case 'infer':
+            return inferenceInfer(subArgs);
+        case 'profile':
+            return inferenceProfile(subArgs);
+        case 'recommendations':
+            return inferenceRecommendations(subArgs);
+        case 'health':
+            return inferenceHealth(subArgs);
+        case 'flush':
+            return inferenceFlush(subArgs);
+        default:
+            return 2;
+    }
+}
+
+/**
  * gics rpc <method> [--params-json <json>]
  */
 export async function rpcCommand(ctx: CLIContext): Promise<number> {
@@ -751,6 +803,177 @@ ${c.bold('Examples:')}
                 message: err.message,
             },
         }, wantsPrettyJson(ctx.args));
+        return 1;
+    }
+}
+
+async function inferenceInfer(args: string[]): Promise<number> {
+    const domain = parseFlag(args, '--domain');
+    if (!domain) {
+        console.error(c.red('Missing required flag: --domain'));
+        return 2;
+    }
+
+    let context: Record<string, unknown> = {};
+    let candidates: Array<Record<string, unknown>> = [];
+    try {
+        context = parseJsonInput(args, '--context-json', '--context-file');
+        const rawCandidates = parseJsonValue(args, '--candidates-json', '--candidates-file');
+        if (Array.isArray(rawCandidates)) {
+            candidates = rawCandidates as Array<Record<string, unknown>>;
+        }
+    } catch (err: any) {
+        console.error(c.red(`Invalid inference JSON payload: ${err.message}`));
+        return 2;
+    }
+
+    try {
+        const { socketPath, token } = await resolveDaemonTarget(args);
+        const response = await daemonRpcCall(socketPath, token, 'infer', {
+            domain,
+            objective: parseFlag(args, '--objective') ?? undefined,
+            subject: parseFlag(args, '--subject') ?? undefined,
+            context,
+            candidates,
+        }, 10_000);
+        if (wantsJson(args)) {
+            writeJson(response.error ? response : response.result, wantsPrettyJson(args));
+            return response.error ? 1 : 0;
+        }
+        if (response.error) {
+            console.error(c.red(response.error.message));
+            return 1;
+        }
+        const result = response.result;
+        console.log(table(
+            ['Property', 'Value'],
+            [
+                ['Domain', result.domain],
+                ['Decision ID', result.decisionId],
+                ['Recommended', result.recommended?.id ?? '(none)'],
+                ['Policy Version', result.policyVersion],
+                ['Profile Version', result.profileVersion],
+            ]
+        ));
+        const rankingRows = (result.ranking ?? []).map((item: any) => [
+            item.id,
+            Number(item.score ?? 0).toFixed(3),
+            Number(item.confidence ?? 0).toFixed(3),
+            Array.isArray(item.basis) ? item.basis.join('; ') : '',
+        ]);
+        console.log(table(['Candidate', 'Score', 'Confidence', 'Basis'], rankingRows));
+        return 0;
+    } catch (err: any) {
+        if (wantsJson(args)) {
+            writeJson({ error: err.message }, wantsPrettyJson(args));
+        } else {
+            console.error(c.red(err.message));
+        }
+        return 1;
+    }
+}
+
+async function inferenceProfile(args: string[]): Promise<number> {
+    const scope = parseFlag(args, '--scope') ?? 'host:default';
+    try {
+        const { socketPath, token } = await resolveDaemonTarget(args);
+        const response = await daemonRpcCall(socketPath, token, 'getProfile', { scope });
+        if (wantsJson(args)) {
+            writeJson(response.error ? response : response.result, wantsPrettyJson(args));
+            return response.error ? 1 : 0;
+        }
+        if (response.error) {
+            console.error(c.red(response.error.message));
+            return 1;
+        }
+        console.log(JSON.stringify(response.result, mapReplacer, 2));
+        return 0;
+    } catch (err: any) {
+        if (wantsJson(args)) {
+            writeJson({ error: err.message }, wantsPrettyJson(args));
+        } else {
+            console.error(c.red(err.message));
+        }
+        return 1;
+    }
+}
+
+async function inferenceRecommendations(args: string[]): Promise<number> {
+    const params: Record<string, unknown> = {};
+    const domain = parseFlag(args, '--domain');
+    const subject = parseFlag(args, '--subject');
+    const limit = parseFlag(args, '--limit');
+    if (domain) params.domain = domain;
+    if (subject) params.subject = subject;
+    if (limit) params.limit = Number(limit);
+
+    try {
+        const { socketPath, token } = await resolveDaemonTarget(args);
+        const response = await daemonRpcCall(socketPath, token, 'getRecommendations', params);
+        if (wantsJson(args)) {
+            writeJson(response.error ? response : response.result, wantsPrettyJson(args));
+            return response.error ? 1 : 0;
+        }
+        if (response.error) {
+            console.error(c.red(response.error.message));
+            return 1;
+        }
+        console.log(JSON.stringify(response.result, mapReplacer, 2));
+        return 0;
+    } catch (err: any) {
+        if (wantsJson(args)) {
+            writeJson({ error: err.message }, wantsPrettyJson(args));
+        } else {
+            console.error(c.red(err.message));
+        }
+        return 1;
+    }
+}
+
+async function inferenceHealth(args: string[]): Promise<number> {
+    try {
+        const { socketPath, token } = await resolveDaemonTarget(args);
+        const response = await daemonRpcCall(socketPath, token, 'getInferenceRuntime');
+        if (wantsJson(args)) {
+            writeJson(response.error ? response : response.result, wantsPrettyJson(args));
+            return response.error ? 1 : 0;
+        }
+        if (response.error) {
+            console.error(c.red(response.error.message));
+            return 1;
+        }
+        console.log(JSON.stringify(response.result, mapReplacer, 2));
+        return 0;
+    } catch (err: any) {
+        if (wantsJson(args)) {
+            writeJson({ error: err.message }, wantsPrettyJson(args));
+        } else {
+            console.error(c.red(err.message));
+        }
+        return 1;
+    }
+}
+
+async function inferenceFlush(args: string[]): Promise<number> {
+    try {
+        const { socketPath, token } = await resolveDaemonTarget(args);
+        const response = await daemonRpcCall(socketPath, token, 'flushInference');
+        if (wantsJson(args)) {
+            writeJson(response.error ? response : response.result, wantsPrettyJson(args));
+            return response.error ? 1 : 0;
+        }
+        if (response.error) {
+            console.error(c.red(response.error.message));
+            return 1;
+        }
+        console.log(c.green('Inference engine flushed.'));
+        return 0;
+    } catch (err: any) {
+        if (wantsJson(args)) {
+            writeJson({ error: err.message }, wantsPrettyJson(args));
+        } else {
+            console.error(c.red(err.message));
+        }
         return 1;
     }
 }

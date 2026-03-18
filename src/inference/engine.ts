@@ -1,11 +1,41 @@
 import * as os from 'os';
 import { createHash } from 'crypto';
-import { InferenceStateStore, type ScopeProfile, type StoredDecisionRecord } from './state-store.js';
+import {
+    InferenceKeys,
+    InferenceStateStore,
+    type CandidateOutcomeStats,
+    type ScopeProfile,
+    type StoredDecisionRecord,
+    type StoredFeedbackRecord,
+    type StoredPolicyRecord
+} from './state-store.js';
 import type { InferenceDecision, InferenceRequest, RecommendationQuery } from '../daemon/module-registry.js';
 
 interface CandidateInput {
     id: string;
     payload: Record<string, unknown>;
+}
+
+interface ScoredCandidate {
+    id: string;
+    score: number;
+    confidence: number;
+    basis: string[];
+    candidate: Record<string, unknown>;
+}
+
+export interface InferenceArtifacts {
+    decision: InferenceDecision;
+    decisionRecord: StoredDecisionRecord;
+    profile: ScopeProfile;
+    policy: StoredPolicyRecord;
+}
+
+export interface OutcomeArtifacts {
+    feedback: StoredFeedbackRecord;
+    stats: CandidateOutcomeStats;
+    profile: ScopeProfile;
+    policy: StoredPolicyRecord | null;
 }
 
 function stableId(raw: unknown): string {
@@ -21,9 +51,31 @@ function toNumber(value: unknown, fallback: number = 0): number {
     return Number.isFinite(num) ? num : fallback;
 }
 
+function average(values: number[]): number {
+    if (values.length === 0) return 0;
+    return values.reduce((sum, current) => sum + current, 0) / values.length;
+}
+
+function feedbackScore(result: string | undefined, success: boolean): number {
+    if (success) return 1;
+    switch (String(result ?? '').toLowerCase()) {
+        case 'partial':
+        case 'retry':
+            return 0.35;
+        case 'timeout':
+        case 'error':
+        case 'fail':
+        case 'failed':
+            return 0;
+        default:
+            return success ? 1 : 0.1;
+    }
+}
+
 export class GICSInferenceEngine {
     private readonly hostFingerprint: string;
-    private readonly policyVersion = 'gics-infer-v1';
+    private readonly engineVersion = 'gics-inference-engine-v1';
+    private readonly policyVersion = 'gics-infer-policy-v1';
 
     constructor(private readonly store: InferenceStateStore, private readonly defaultScope: string) {
         this.hostFingerprint = `${os.hostname()}|${os.platform()}|${os.arch()}`;
@@ -31,6 +83,7 @@ export class GICSInferenceEngine {
 
     async load(): Promise<void> {
         await this.store.load();
+        this.store.setRuntimeMetadata({ engineVersion: this.engineVersion });
     }
 
     async save(): Promise<void> {
@@ -67,33 +120,111 @@ export class GICSInferenceEngine {
         context: Record<string, unknown> | undefined,
         metrics: Record<string, number> | undefined,
         result: string | undefined
-    ): void {
+    ): OutcomeArtifacts | null {
+        const decision = decisionId ? this.store.getDecision(decisionId) : null;
         const candidateId = String(
             context?.candidateId ??
             context?.chosenCandidateId ??
-            this.store.getDecision(decisionId ?? '')?.recommendedId ??
+            decision?.recommendedId ??
             ''
         );
-        if (!candidateId) return;
+        if (!candidateId) return null;
 
-        this.store.recordOutcome(domain, candidateId, {
-            success: result === 'success' || result === 'ok' || result === 'true',
+        const scope = String(context?.scope ?? decision?.scope ?? this.defaultScope);
+        const subject = context?.subject ? String(context.subject) : decision?.subject;
+        const success = result === 'success' || result === 'ok' || result === 'true';
+        const feedback: StoredFeedbackRecord = {
+            feedbackId: `${Date.now()}|${stableId({ domain, candidateId, decisionId, scope, subject, result, metrics })}`,
+            systemKey: '',
+            domain,
+            scope,
+            subject,
+            decisionId,
+            candidateId,
+            success,
+            result: String(result ?? (success ? 'success' : 'failure')),
+            metrics: { ...(metrics ?? {}) },
+            context: context ? { ...context } : undefined,
+            recordedAt: Date.now(),
+        };
+        feedback.systemKey = InferenceKeys.buildFeedbackSystemKey(feedback.feedbackId);
+        this.store.appendFeedback(feedback);
+
+        const stats = this.store.recordOutcome(domain, candidateId, {
+            success,
             latencyMs: metrics?.latencyMs,
             costScore: metrics?.costScore ?? metrics?.costUsd,
+            feedbackScore: feedbackScore(result, success),
+            result: feedback.result,
         });
+
+        let profile = this.store.getProfile(scope, this.hostFingerprint);
+        if (success && decision) {
+            const chosen = decision.ranking.find((item) => item.id === candidateId);
+            if (domain === 'compression.encode') {
+                profile = this.store.updateProfile(scope, this.hostFingerprint, (draft) => {
+                    draft.preferences.preferredCompressionPreset = candidateId;
+                });
+            } else if (domain === 'ops.provider_select') {
+                profile = this.store.updateProfile(scope, this.hostFingerprint, (draft) => {
+                    draft.preferences.preferredProviderId = candidateId;
+                });
+            } else if (domain === 'ops.plan_rank' && chosen) {
+                profile = this.store.updateProfile(scope, this.hostFingerprint, (draft) => {
+                    const risk = toNumber(chosen.candidate.risk, 0.5);
+                    const confidence = toNumber(chosen.candidate.confidence, 0.5);
+                    draft.preferences.preferredPlanBias = confidence >= (1 - risk) ? 'high_confidence' : 'low_risk';
+                });
+            } else if (domain === 'storage.policy') {
+                profile = this.store.updateProfile(scope, this.hostFingerprint, (draft) => {
+                    draft.policyHints.storageMode = candidateId;
+                });
+            }
+        }
+
+        const policy = this.buildPolicy(domain, scope, subject, profile, decision?.ranking.map((item) => ({
+            id: item.id,
+            payload: { ...item.candidate },
+        })) ?? []);
+        this.store.upsertPolicy(policy);
+
+        return { feedback, stats, profile, policy };
     }
 
     infer(request: InferenceRequest): InferenceDecision {
-        const scope = String(request.context?.scope ?? this.defaultScope);
+        return this.inferDetailed(request).decision;
+    }
+
+    inferDetailed(request: InferenceRequest): InferenceArtifacts {
+        const scope = this.resolveScope(request.context);
         const subject = request.subject ? String(request.subject) : undefined;
+        const now = Date.now();
         const profile = this.store.getProfile(scope, this.hostFingerprint);
         const candidates = this.resolveCandidates(request);
-        const ranking = candidates.map((candidate) => this.scoreCandidate(request.domain, candidate, profile));
-        ranking.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+        const policy = this.buildPolicy(request.domain, scope, subject, profile, candidates);
+        const ranking = candidates
+            .map((candidate) => this.scoreCandidate(request.domain, candidate, profile, policy))
+            .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
 
-        const decisionId = `${request.domain}|${Date.now()}|${stableId({ scope, subject, candidates: ranking.map((c) => c.id) })}`;
         const recommended = ranking[0];
-        const evidenceKeys = [`_infer|profile|${scope}`, `_infer|policy|${request.domain}`];
+        const finalizedPolicy: StoredPolicyRecord = {
+            ...policy,
+            recommendedCandidateId: recommended?.id,
+            payload: {
+                ...policy.payload,
+                recommendedCandidateId: recommended?.id,
+                rankingPreview: ranking.slice(0, 3).map((item) => ({
+                    id: item.id,
+                    score: item.score,
+                    confidence: item.confidence,
+                })),
+            },
+            generatedAt: now,
+        };
+        this.store.upsertPolicy(finalizedPolicy);
+
+        const decisionId = `${request.domain}|${now}|${stableId({ scope, subject, candidates: ranking.map((item) => item.id), objective: request.objective })}`;
+        const evidenceKeys = [`_infer|profile|${scope}`, finalizedPolicy.systemKey];
         const decision: InferenceDecision = {
             domain: request.domain,
             decisionId,
@@ -104,7 +235,7 @@ export class GICSInferenceEngine {
                 basis: item.basis,
                 candidate: item.candidate,
             })),
-            policyVersion: this.policyVersion,
+            policyVersion: finalizedPolicy.policyVersion,
             profileVersion: `profile-v${profile.version}`,
             evidenceKeys,
             recommended: recommended ? {
@@ -113,38 +244,68 @@ export class GICSInferenceEngine {
                 confidence: recommended.confidence,
                 basis: recommended.basis,
             } : undefined,
-            createdAt: Date.now(),
+            createdAt: now,
         };
 
-        const record: StoredDecisionRecord = {
+        const decisionRecord: StoredDecisionRecord = {
             decisionId,
+            systemKey: InferenceKeys.buildDecisionSystemKey(decisionId),
             domain: request.domain,
+            scope,
             subject,
             recommendedId: recommended?.id,
-            createdAt: decision.createdAt,
-            policyVersion: decision.policyVersion,
+            createdAt: now,
+            policyKey: finalizedPolicy.key,
+            policyVersion: finalizedPolicy.policyVersion,
             profileVersion: decision.profileVersion,
             ranking: decision.ranking.map((item) => ({
                 id: item.id,
                 score: item.score,
                 confidence: item.confidence,
-                basis: item.basis,
+                basis: [...item.basis],
+                candidate: { ...item.candidate },
             })),
             evidenceKeys,
         };
-        this.store.appendDecision(record);
+        this.store.appendDecision(decisionRecord);
 
-        return decision;
+        const profileHints = this.deriveProfileHints(request.domain, recommended?.id, recommended?.candidate ?? {}, finalizedPolicy.payload);
+        const updatedProfile = this.store.updatePolicyHints(scope, this.hostFingerprint, profileHints);
+
+        return {
+            decision,
+            decisionRecord,
+            profile: updatedProfile,
+            policy: finalizedPolicy,
+        };
     }
 
-    getProfile(scope: string): Record<string, unknown> {
-        return { ...this.store.getProfile(scope, this.hostFingerprint) };
+    getProfile(scope: string): ScopeProfile {
+        return this.store.getProfile(scope, this.hostFingerprint);
+    }
+
+    getPolicy(domain: string, scope: string, subject?: string): StoredPolicyRecord | null {
+        return this.store.getPolicy(domain, scope, subject);
+    }
+
+    getPolicyByKey(policyKey: string): StoredPolicyRecord | null {
+        return this.store.getPolicyByKey(policyKey);
+    }
+
+    getDecision(decisionId: string): StoredDecisionRecord | null {
+        return this.store.getDecision(decisionId);
+    }
+
+    getFeedback(feedbackId: string): StoredFeedbackRecord | null {
+        return this.store.getFeedback(feedbackId);
     }
 
     getRecommendations(query: RecommendationQuery): Array<Record<string, unknown>> {
-        return this.store.getDecisions(query.domain, query.subject, query.limit ?? 20).map((decision) => ({
+        const limit = query.limit ?? 20;
+        const decisions = this.store.getDecisions(query.domain, query.subject, limit).map((decision) => ({
             type: 'inference_decision',
             domain: decision.domain,
+            scope: decision.scope,
             subject: decision.subject,
             decisionId: decision.decisionId,
             recommendedId: decision.recommendedId,
@@ -154,6 +315,39 @@ export class GICSInferenceEngine {
             createdAt: decision.createdAt,
             evidenceKeys: decision.evidenceKeys,
         }));
+        const policies = this.store.getPolicies(query.domain, this.defaultScope, query.subject, Math.max(1, Math.floor(limit / 2))).map((policy) => ({
+            type: 'inference_policy',
+            domain: policy.domain,
+            scope: policy.scope,
+            subject: policy.subject,
+            policyKey: policy.key,
+            policyVersion: policy.policyVersion,
+            profileVersion: policy.profileVersion,
+            recommendedCandidateId: policy.recommendedCandidateId,
+            payload: policy.payload,
+            generatedAt: policy.generatedAt,
+            evidenceKeys: policy.evidenceKeys,
+        }));
+        return [...decisions, ...policies]
+            .sort((a, b) => {
+                const aTime = Number((a as { createdAt?: number; generatedAt?: number; }).createdAt ?? (a as { generatedAt?: number; }).generatedAt ?? 0);
+                const bTime = Number((b as { createdAt?: number; generatedAt?: number; }).createdAt ?? (b as { generatedAt?: number; }).generatedAt ?? 0);
+                return bTime - aTime;
+            })
+            .slice(0, limit);
+    }
+
+    getRuntimeSnapshot(): Record<string, unknown> {
+        return {
+            ...this.store.getRuntime(),
+            ...this.store.getSummary(),
+            hostFingerprint: this.hostFingerprint,
+            defaultScope: this.defaultScope,
+        };
+    }
+
+    private resolveScope(context: Record<string, unknown> | undefined): string {
+        return String(context?.scope ?? this.defaultScope);
     }
 
     private resolveCandidates(request: InferenceRequest): CandidateInput[] {
@@ -182,65 +376,250 @@ export class GICSInferenceEngine {
         }
     }
 
-    private scoreCandidate(domain: string, candidate: CandidateInput, profile: ScopeProfile): {
-        id: string;
-        score: number;
-        confidence: number;
-        basis: string[];
-        candidate: Record<string, unknown>;
-    } {
+    private buildPolicy(domain: string, scope: string, subject: string | undefined, profile: ScopeProfile, candidates: CandidateInput[]): StoredPolicyRecord {
+        const key = InferenceKeys.buildPolicyStorageKey(domain, scope, subject);
+        const base: StoredPolicyRecord = {
+            key,
+            systemKey: InferenceKeys.buildPolicySystemKey(domain, scope, subject),
+            domain,
+            scope,
+            subject,
+            policyVersion: `${this.policyVersion}:${domain}`,
+            profileVersion: `profile-v${profile.version}`,
+            generatedAt: Date.now(),
+            basis: [],
+            weights: {},
+            thresholds: {},
+            payload: {},
+            evidenceKeys: [`_infer|profile|${scope}`],
+        };
+
+        if (domain === 'compression.encode') {
+            const readHeavy = profile.stats.reads > Math.max(1, profile.stats.writes * 2);
+            const ratioLow = profile.stats.avgCompressionRatio > 0 && profile.stats.avgCompressionRatio < 20;
+            const suggestedPreset = readHeavy ? 'low_latency' : ratioLow ? 'max_ratio' : (profile.preferences.preferredCompressionPreset ?? 'balanced');
+            return {
+                ...base,
+                basis: [
+                    `reads=${profile.stats.reads}`,
+                    `writes=${profile.stats.writes}`,
+                    `avgCompressionRatio=${profile.stats.avgCompressionRatio.toFixed(2)}`,
+                ],
+                weights: {
+                    bandit: 0.55,
+                    readPressure: readHeavy ? 0.25 : 0.08,
+                    ratioPressure: ratioLow ? 0.25 : 0.12,
+                    baseline: 0.15,
+                },
+                thresholds: {
+                    ratioLowCutoff: 20,
+                    readHeavyFactor: 2,
+                },
+                payload: {
+                    suggestedPreset,
+                    workloadClass: readHeavy ? 'read_heavy' : 'balanced',
+                    candidateCount: candidates.length,
+                },
+            };
+        }
+
+        if (domain === 'ops.provider_select') {
+            return {
+                ...base,
+                basis: [
+                    `preferredProvider=${profile.preferences.preferredProviderId ?? 'none'}`,
+                    `avgLatency=${profile.stats.avgReadLatencyMs.toFixed(2)}`,
+                ],
+                weights: {
+                    bandit: 0.5,
+                    latency: 0.3,
+                    cost: 0.2,
+                },
+                thresholds: {
+                    maxLatencyMs: 5000,
+                    maxCostScore: 1,
+                },
+                payload: {
+                    objective: 'provider_select',
+                    preferredProviderId: profile.preferences.preferredProviderId ?? null,
+                },
+            };
+        }
+
+        if (domain === 'ops.plan_rank') {
+            return {
+                ...base,
+                basis: [
+                    `preferredPlanBias=${profile.preferences.preferredPlanBias ?? 'balanced'}`,
+                    `reads=${profile.stats.reads}`,
+                    `writes=${profile.stats.writes}`,
+                ],
+                weights: {
+                    bandit: 0.35,
+                    confidence: 0.3,
+                    risk: 0.2,
+                    cost: 0.15,
+                },
+                thresholds: {
+                    maxRisk: 0.65,
+                    minConfidence: 0.55,
+                },
+                payload: {
+                    objective: 'plan_rank',
+                    preferredBias: profile.preferences.preferredPlanBias ?? 'balanced',
+                },
+            };
+        }
+
+        if (domain === 'storage.policy') {
+            const scanHeavy = profile.stats.scans > Math.max(1, profile.stats.writes);
+            const writeHeavy = profile.stats.writes >= Math.max(1, profile.stats.reads);
+            const mode = scanHeavy ? 'policy.read_heavy' : writeHeavy ? 'policy.write_heavy' : 'policy.current';
+            return {
+                ...base,
+                basis: [
+                    `scans=${profile.stats.scans}`,
+                    `writes=${profile.stats.writes}`,
+                    `flushes=${profile.stats.flushes}`,
+                ],
+                weights: {
+                    bandit: 0.35,
+                    scanPressure: scanHeavy ? 0.3 : 0.1,
+                    writePressure: writeHeavy ? 0.3 : 0.1,
+                    safety: 0.15,
+                },
+                thresholds: {
+                    scanHeavyCutoff: profile.stats.writes || 1,
+                    writeHeavyCutoff: profile.stats.reads || 1,
+                },
+                payload: {
+                    mode,
+                    recommendedMaxMemSizeBytes: writeHeavy ? 64 * 1024 * 1024 : 24 * 1024 * 1024,
+                    recommendedMaxDirtyCount: scanHeavy ? 1500 : 4000,
+                    recommendedWarmRetentionMs: scanHeavy ? 14 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000,
+                },
+            };
+        }
+
+        return {
+            ...base,
+            basis: [`candidates=${candidates.length}`],
+            weights: {
+                bandit: 0.65,
+                heuristic: 0.35,
+            },
+            thresholds: {},
+            payload: {},
+        };
+    }
+
+    private scoreCandidate(domain: string, candidate: CandidateInput, profile: ScopeProfile, policy: StoredPolicyRecord): ScoredCandidate {
         const stats = this.store.getOutcomeStats(domain, candidate.id);
         const successes = stats?.successes ?? 0;
         const failures = stats?.failures ?? 0;
         const pulls = successes + failures;
         const banditScore = (successes + 3) / (pulls + 4);
         const basis: string[] = [`bandit=${banditScore.toFixed(3)}`];
-        let heuristic = 0.5;
+        const components: number[] = [];
+        const weights: number[] = [];
+
+        components.push(banditScore);
+        weights.push(policy.weights.bandit ?? 0.65);
 
         if (domain === 'compression.encode') {
-            const readHeavy = profile.stats.reads > Math.max(1, profile.stats.writes * 2);
-            const ratioLow = profile.stats.avgCompressionRatio > 0 && profile.stats.avgCompressionRatio < 20;
-            if (candidate.id === 'low_latency') heuristic += readHeavy ? 0.2 : 0.05;
-            if (candidate.id === 'max_ratio') heuristic += ratioLow ? 0.2 : 0.08;
-            if (candidate.id === 'balanced') heuristic += 0.15;
-            basis.push(`reads=${profile.stats.reads}`, `writes=${profile.stats.writes}`, `ratio=${profile.stats.avgCompressionRatio.toFixed(2)}`);
+            const suggestedPreset = String(policy.payload.suggestedPreset ?? 'balanced');
+            const readMatch = candidate.id === 'low_latency' ? 1 : candidate.id === 'balanced' ? 0.6 : 0.25;
+            const ratioMatch = candidate.id === 'max_ratio' ? 1 : candidate.id === 'balanced' ? 0.55 : 0.25;
+            const baseline = candidate.id === suggestedPreset ? 1 : candidate.id === 'balanced' ? 0.7 : 0.4;
+            components.push(readMatch, ratioMatch, baseline);
+            weights.push(policy.weights.readPressure ?? 0.15, policy.weights.ratioPressure ?? 0.15, policy.weights.baseline ?? 0.15);
+            basis.push(`suggestedPreset=${suggestedPreset}`);
         } else if (domain === 'ops.provider_select') {
-            const latencyPenalty = stats?.avgLatencyMs ? clamp(1 - (stats.avgLatencyMs / 5000)) : 0.5;
-            const costBonus = stats?.avgCostScore ? clamp(1 - stats.avgCostScore) : 0.5;
-            heuristic += (latencyPenalty * 0.2) + (costBonus * 0.15);
-            basis.push(`latency=${stats?.avgLatencyMs ?? 0}`, `cost=${stats?.avgCostScore ?? 0}`);
+            const latency = toNumber(candidate.payload.latencyMs ?? candidate.payload.latency, stats?.avgLatencyMs ?? 2500);
+            const cost = toNumber(candidate.payload.costScore ?? candidate.payload.cost ?? candidate.payload.costUsd, stats?.avgCostScore ?? 0.5);
+            const latencyScore = clamp(1 - (latency / Math.max(1, policy.thresholds.maxLatencyMs ?? 5000)));
+            const costScore = clamp(1 - (cost / Math.max(0.001, policy.thresholds.maxCostScore ?? 1)));
+            components.push(latencyScore, costScore);
+            weights.push(policy.weights.latency ?? 0.2, policy.weights.cost ?? 0.15);
+            basis.push(`latency=${latency}`, `cost=${cost}`);
         } else if (domain === 'ops.plan_rank') {
-            const estRisk = toNumber(candidate.payload.risk, 0.5);
-            const estConfidence = toNumber(candidate.payload.confidence, 0.5);
-            const estCost = toNumber(candidate.payload.estimated_cost, 0.5);
-            heuristic += clamp(estConfidence) * 0.25;
-            heuristic += clamp(1 - estRisk) * 0.15;
-            heuristic += clamp(1 - estCost) * 0.1;
-            basis.push(`risk=${estRisk}`, `confidence=${estConfidence}`, `cost=${estCost}`);
+            const risk = toNumber(candidate.payload.risk, 0.5);
+            const confidence = toNumber(candidate.payload.confidence, 0.5);
+            const cost = toNumber(candidate.payload.estimated_cost ?? candidate.payload.cost, 0.5);
+            components.push(clamp(confidence), clamp(1 - risk), clamp(1 - cost));
+            weights.push(policy.weights.confidence ?? 0.3, policy.weights.risk ?? 0.2, policy.weights.cost ?? 0.15);
+            basis.push(`risk=${risk}`, `confidence=${confidence}`, `cost=${cost}`);
         } else if (domain === 'storage.policy') {
-            const scanHeavy = profile.stats.scans > profile.stats.writes;
-            const writeHeavy = profile.stats.writes >= profile.stats.reads;
-            if (candidate.id === 'policy.read_heavy' && scanHeavy) heuristic += 0.2;
-            if (candidate.id === 'policy.write_heavy' && writeHeavy) heuristic += 0.2;
-            if (candidate.id === 'policy.current') heuristic += 0.15;
-            basis.push(`scans=${profile.stats.scans}`, `flushes=${profile.stats.flushes}`);
+            const mode = String(candidate.payload.mode ?? candidate.id);
+            const recommendedMode = String(policy.payload.mode ?? 'policy.current');
+            const modeScore = mode === recommendedMode ? 1 : mode === 'current' ? 0.65 : 0.45;
+            const scanHeavy = profile.stats.scans > Math.max(1, profile.stats.writes) ? 1 : 0.35;
+            const writeHeavy = profile.stats.writes >= Math.max(1, profile.stats.reads) ? 1 : 0.35;
+            const safety = candidate.id === 'policy.current' ? 1 : 0.75;
+            components.push(modeScore, scanHeavy, writeHeavy, safety);
+            weights.push(policy.weights.scanPressure ?? 0.2, policy.weights.scanPressure ?? 0.1, policy.weights.writePressure ?? 0.1, policy.weights.safety ?? 0.15);
             candidate.payload = {
                 ...candidate.payload,
-                recommendedMaxMemSizeBytes: writeHeavy ? 64 * 1024 * 1024 : 24 * 1024 * 1024,
-                recommendedMaxDirtyCount: scanHeavy ? 1500 : 4000,
-                recommendedWarmRetentionMs: scanHeavy ? 14 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000,
+                recommendedMaxMemSizeBytes: policy.payload.recommendedMaxMemSizeBytes,
+                recommendedMaxDirtyCount: policy.payload.recommendedMaxDirtyCount,
+                recommendedWarmRetentionMs: policy.payload.recommendedWarmRetentionMs,
             };
+            basis.push(`mode=${mode}`, `recommendedMode=${recommendedMode}`);
+        } else {
+            const heuristic = clamp(0.45 + ((stats?.avgFeedbackScore ?? 0.5) * 0.5));
+            components.push(heuristic);
+            weights.push(policy.weights.heuristic ?? 0.35);
         }
 
-        const score = clamp((banditScore * 0.65) + (heuristic * 0.35));
-        const confidence = clamp(0.35 + Math.min(pulls, 20) / 30);
+        const totalWeight = Math.max(0.0001, weights.reduce((sum, current) => sum + current, 0));
+        const weightedScore = components.reduce((sum, component, index) => sum + (component * weights[index]!), 0);
+        const score = clamp(weightedScore / totalWeight);
+        const confidence = clamp(0.35 + (Math.min(pulls, 25) / 35) + ((stats?.avgFeedbackScore ?? 0) * 0.15));
+
+        if (stats) {
+            basis.push(
+                `outcomes=${stats.totalOutcomes}`,
+                `success=${stats.successes}`,
+                `feedback=${stats.avgFeedbackScore.toFixed(2)}`
+            );
+        }
 
         return {
             id: candidate.id,
             score,
             confidence,
             basis,
-            candidate: candidate.payload,
+            candidate: { ...candidate.payload },
         };
+    }
+
+    private deriveProfileHints(
+        domain: string,
+        recommendedId: string | undefined,
+        recommendedCandidate: Record<string, unknown>,
+        policyPayload: Record<string, unknown>
+    ): ScopeProfile['policyHints'] {
+        if (domain === 'compression.encode') {
+            return {
+                compressionPreset: recommendedId ?? String(policyPayload.suggestedPreset ?? 'balanced'),
+            };
+        }
+
+        if (domain === 'ops.provider_select') {
+            return {
+                providerId: recommendedId,
+            };
+        }
+
+        if (domain === 'storage.policy') {
+            return {
+                storageMode: recommendedId ?? String(policyPayload.mode ?? 'policy.current'),
+                maxMemSizeBytes: toNumber(recommendedCandidate.recommendedMaxMemSizeBytes ?? policyPayload.recommendedMaxMemSizeBytes, 0),
+                maxDirtyCount: toNumber(recommendedCandidate.recommendedMaxDirtyCount ?? policyPayload.recommendedMaxDirtyCount, 0),
+                warmRetentionMs: toNumber(recommendedCandidate.recommendedWarmRetentionMs ?? policyPayload.recommendedWarmRetentionMs, 0),
+            };
+        }
+
+        return {};
     }
 }

@@ -144,3 +144,16 @@ export type { InferenceRequest, InferenceDecision, RecommendationQuery } from '.
 export type { GICSModuleRuntimeConfig, GICSDaemonFileConfig, ResolvedDaemonConfig } from './daemon/config.js';
 export { createBuiltinModuleSet, NativeInsightModule, AuditChainModule, PromptDistillerModule } from './daemon/builtin-modules.js';
 export { GICSInferenceEngine } from './inference/engine.js';
+export type { InferenceArtifacts, OutcomeArtifacts } from './inference/engine.js';
+export { InferenceEngineModule } from './inference/module.js';
+export type { InferenceEngineModuleOptions } from './inference/module.js';
+export { InferenceStateStore, InferenceKeys } from './inference/state-store.js';
+export type {
+    CandidateOutcomeStats,
+    ScopeProfile,
+    ScopeProfileStats,
+    StoredPolicyRecord,
+    StoredDecisionRecord,
+    StoredFeedbackRecord,
+    InferenceRuntimeState,
+} from './inference/state-store.js';

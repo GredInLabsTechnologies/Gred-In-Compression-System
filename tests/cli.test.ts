@@ -274,4 +274,67 @@ describe('CLI Tool (Phase 10)', () => {
             }
         });
     });
+
+    it('inference commands expose machine-readable decisions and runtime health', async () => {
+        await withTempDir(async (dir) => {
+            const dataPath = path.join(dir, 'data');
+            const tokenPath = path.join(dir, 'gics.token');
+            const socketPath = makeSocketPath('gics-cli-inference');
+            const daemon = new GICSDaemon({
+                socketPath,
+                dataPath,
+                tokenPath,
+                walType: 'binary',
+                modules: {
+                    'inference-engine': { enabled: true },
+                },
+            });
+
+            await daemon.start();
+            try {
+                const infer = await execFileAsync('node', [
+                    cliPath,
+                    'inference',
+                    'infer',
+                    '--socket-path', socketPath,
+                    '--token-path', tokenPath,
+                    '--domain', 'ops.provider_select',
+                    '--subject', 'gimo',
+                    '--context-json', JSON.stringify({ scope: 'host:default' }),
+                    '--candidates-json', JSON.stringify([
+                        { id: 'haiku', latencyMs: 90, cost: 0.2 },
+                        { id: 'sonnet', latencyMs: 110, cost: 0.3 },
+                    ]),
+                    '--json',
+                ]);
+                const decision = JSON.parse(infer.stdout);
+                expect(decision.domain).toBe('ops.provider_select');
+                expect(Array.isArray(decision.ranking)).toBe(true);
+
+                const health = await execFileAsync('node', [
+                    cliPath,
+                    'inference',
+                    'health',
+                    '--socket-path', socketPath,
+                    '--token-path', tokenPath,
+                    '--json',
+                ]);
+                const runtime = JSON.parse(health.stdout);
+                expect(runtime.enabled).toBe(true);
+                expect(runtime.defaultScope).toBe('host:default');
+
+                const flush = await execFileAsync('node', [
+                    cliPath,
+                    'inference',
+                    'flush',
+                    '--socket-path', socketPath,
+                    '--token-path', tokenPath,
+                    '--json',
+                ]);
+                expect(JSON.parse(flush.stdout).ok).toBe(true);
+            } finally {
+                await daemon.stop();
+            }
+        });
+    });
 });

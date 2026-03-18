@@ -114,6 +114,7 @@ export interface DaemonModule {
     getRecommendations?(query: RecommendationQuery, ctx: ModuleContext): Promise<Array<Record<string, unknown>>>;
     health?(): Promise<Record<string, unknown>>;
     snapshot?(): Promise<Record<string, unknown>>;
+    forceFlush?(): Promise<void>;
     stop?(): Promise<void>;
 }
 

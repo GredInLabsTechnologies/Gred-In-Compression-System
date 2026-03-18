@@ -55,12 +55,12 @@ export class GICSDaemon {
         'get', 'getInsight', 'getInsights', 'getAccuracy', 'getCorrelations',
         'getClusters', 'getLeadingIndicators', 'getSeasonalPatterns', 'getForecast',
         'getAnomalies', 'getRecommendations', 'verify', 'verifyAudit', 'exportAudit',
-        'infer', 'getProfile'
+        'infer', 'getProfile', 'getInferenceRuntime'
     ]);
     private static readonly SCAN_OPS = new Set(['scan']);
     private static readonly CONTROL_OPS = new Set([
         'ping', 'getStatus', 'getHealth', 'resetDegraded',
-        'subscribe', 'unsubscribe', 'reportOutcome', 'recordOutcome',
+        'subscribe', 'unsubscribe', 'reportOutcome', 'recordOutcome', 'flushInference',
     ]);
 
     private server: net.Server;
@@ -137,6 +137,7 @@ export class GICSDaemon {
             enablePromptDistiller: promptEnabled,
             enableInferenceEngine: inferenceEnabled,
             defaultScope: config.defaultProfileScope ?? 'host:default',
+            moduleConfigs: config.modules,
         });
         this.applyModuleOverrides();
 
@@ -1073,6 +1074,23 @@ export class GICSDaemon {
         return { jsonrpc: '2.0', id, result: profile };
     }
 
+    private async handleGetInferenceRuntime(id: any): Promise<any> {
+        const inferenceModule = this.modules.inferenceEngine;
+        if (!inferenceModule || !inferenceModule.enabled) {
+            return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Inference engine is not enabled' } };
+        }
+        return { jsonrpc: '2.0', id, result: await inferenceModule.snapshot?.() ?? await inferenceModule.health?.() ?? null };
+    }
+
+    private async handleFlushInference(id: any): Promise<any> {
+        const inferenceModule = this.modules.inferenceEngine;
+        if (!inferenceModule || !inferenceModule.enabled || typeof inferenceModule.forceFlush !== 'function') {
+            return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Inference engine flush is unavailable' } };
+        }
+        await inferenceModule.forceFlush();
+        return { jsonrpc: '2.0', id, result: { ok: true } };
+    }
+
     private async dispatchOutcomeToModules(event: {
         insightId?: string;
         result?: string;
@@ -1220,6 +1238,12 @@ export class GICSDaemon {
 
                 case 'getProfile':
                     return await this.handleGetProfile(id, params);
+
+                case 'getInferenceRuntime':
+                    return await this.handleGetInferenceRuntime(id);
+
+                case 'flushInference':
+                    return await this.handleFlushInference(id);
 
                 case 'delete':
                     return await this.handleDelete(id, params);

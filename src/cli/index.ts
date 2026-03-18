@@ -13,6 +13,7 @@ import {
     infoCommand,
     benchCommand,
     profileCommand,
+    inferenceCommand,
     moduleCommand,
     rpcCommand,
     daemonCommand,
@@ -27,6 +28,7 @@ const COMMANDS = {
     info: infoCommand,
     bench: benchCommand,
     profile: profileCommand,
+    inference: inferenceCommand,
     module: moduleCommand,
     rpc: rpcCommand,
     daemon: daemonCommand,
@@ -44,6 +46,7 @@ ${c.bold('Commands:')}
   ${c.green('info')}     Display archive metadata
   ${c.green('bench')}    Benchmark encode/decode performance
   ${c.green('profile')}  Find optimal compression settings
+  ${c.green('inference')} Operate the inference engine
   ${c.green('module')}   Manage daemon modules
   ${c.green('rpc')}      Call daemon RPC methods with JSON output
   ${c.green('daemon')}   Manage the GICS background daemon
