@@ -93,6 +93,7 @@ abstract class BaseWALProvider implements WALProvider {
     protected state: StateMap = new Map();
     private initPromise: Promise<void> | null = null;
     private fsyncWarningLogged = false;
+    private mutationQueue: Promise<void> = Promise.resolve();
 
     constructor(filePath: string, options: WALProviderOptions = {}) {
         this.filePath = filePath;
@@ -128,6 +129,23 @@ abstract class BaseWALProvider implements WALProvider {
         if (!this.writeStream) {
             this.writeStream = createWriteStream(this.filePath, { flags: 'a' });
         }
+    }
+
+    protected async closeStream(): Promise<void> {
+        if (!this.writeStream) return;
+        await new Promise<void>((resolve, reject) => {
+            this.writeStream!.end((err?: Error | null) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+        this.writeStream = null;
+    }
+
+    private async enqueueMutation<T>(task: () => Promise<T>): Promise<T> {
+        const run = this.mutationQueue.then(task, task);
+        this.mutationQueue = run.then(() => undefined, () => undefined);
+        return run;
     }
 
     protected async fsyncFile(): Promise<void> {
@@ -210,18 +228,20 @@ abstract class BaseWALProvider implements WALProvider {
     }
 
     async append(op: Operation, key: string, payload: WALPayload): Promise<void> {
-        await this.ensureInitialized();
-        await this.ensureOpen();
+        await this.enqueueMutation(async () => {
+            await this.ensureInitialized();
+            await this.ensureOpen();
 
-        const nextLsn = this.lastLsn + 1n;
-        const ts = Date.now();
-        await this.appendEntry(nextLsn, op, key, payload, ts);
-        await this.fsyncFile();
+            const nextLsn = this.lastLsn + 1n;
+            const ts = Date.now();
+            await this.appendEntry(nextLsn, op, key, payload, ts);
+            await this.fsyncFile();
 
-        this.lastLsn = nextLsn;
-        this.opsSinceCheckpoint++;
-        this.applyState(op, key, payload, nextLsn);
-        await this.maybeCheckpointAndCompact();
+            this.lastLsn = nextLsn;
+            this.opsSinceCheckpoint++;
+            this.applyState(op, key, payload, nextLsn);
+            await this.maybeCheckpointAndCompact();
+        });
     }
 
     async replay(handler: (op: Operation, key: string, payload: WALPayload) => void): Promise<void> {
@@ -244,32 +264,21 @@ abstract class BaseWALProvider implements WALProvider {
     }
 
     async truncate(): Promise<void> {
-        await this.ensureInitialized();
-        if (this.writeStream) {
-            await new Promise<void>((resolve, reject) => {
-                this.writeStream!.end((err?: Error | null) => {
-                    if (err) reject(err);
-                    else resolve();
-                });
-            });
-            this.writeStream = null;
-        }
-        await fs.writeFile(this.filePath, '');
-        await fs.writeFile(this.checkpointPath, '');
-        this.lastLsn = 0n;
-        this.opsSinceCheckpoint = 0;
-        this.state.clear();
+        await this.enqueueMutation(async () => {
+            await this.ensureInitialized();
+            await this.closeStream();
+            await fs.writeFile(this.filePath, '');
+            await fs.writeFile(this.checkpointPath, '');
+            this.lastLsn = 0n;
+            this.opsSinceCheckpoint = 0;
+            this.state.clear();
+        });
     }
 
     async close(): Promise<void> {
-        if (!this.writeStream) return;
-        await new Promise<void>((resolve, reject) => {
-            this.writeStream!.end((err?: Error | null) => {
-                if (err) reject(err);
-                else resolve();
-            });
+        await this.enqueueMutation(async () => {
+            await this.closeStream();
         });
-        this.writeStream = null;
     }
 }
 
@@ -448,7 +457,7 @@ export class BinaryWALProvider extends BaseWALProvider {
 
     protected async compactToState(): Promise<void> {
         if (this.writeStream) {
-            await this.close();
+            await this.closeStream();
         }
         const tempPath = `${this.filePath}.tmp`;
         const chunks: Buffer[] = [Buffer.concat([BIN_MAGIC, Buffer.from([BIN_VERSION])])];
@@ -584,7 +593,7 @@ export class JsonlWALProvider extends BaseWALProvider {
 
     protected async compactToState(): Promise<void> {
         if (this.writeStream) {
-            await this.close();
+            await this.closeStream();
         }
 
         const lines: string[] = [JSON.stringify({ __wal: 'gics', version: 2 })];

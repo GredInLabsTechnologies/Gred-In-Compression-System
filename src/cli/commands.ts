@@ -37,9 +37,116 @@ function hasFlag(args: string[], flag: string): boolean {
 const GICS_HOME = path.join(os.homedir(), '.gics');
 const PID_FILE = path.join(GICS_HOME, 'gics.pid');
 const DEFAULT_DATA_PATH = path.join(GICS_HOME, 'data');
+const DEFAULT_TOKEN_PATH = path.join(GICS_HOME, 'gics.token');
 const DEFAULT_SOCKET = process.platform === 'win32'
     ? '\\\\.\\pipe\\gics-daemon'
     : path.join(GICS_HOME, 'gics.sock');
+const BUILTIN_MODULES = ['audit-chain', 'native-insight', 'prompt-distiller', 'inference-engine'] as const;
+
+function parseModuleList(value: string | null): string[] {
+    if (!value) return [];
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function wantsJson(args: string[]): boolean {
+    return hasFlag(args, '--json');
+}
+
+function wantsPrettyJson(args: string[]): boolean {
+    return hasFlag(args, '--pretty');
+}
+
+function writeJson(value: unknown, pretty: boolean = false): void {
+    process.stdout.write(JSON.stringify(value, mapReplacer, pretty ? 2 : undefined) + '\n');
+}
+
+async function resolveDaemonTarget(args: string[]): Promise<{ socketPath: string; tokenPath: string; token: string; }> {
+    const explicitSocketPath = parseFlag(args, '--socket-path');
+    const explicitTokenPath = parseFlag(args, '--token-path');
+    const configPath = parseFlag(args, '--config');
+    const { resolveDaemonConfig, DEFAULT_CONFIG_PATH } = await import('../daemon/config.js');
+    const resolved = await resolveDaemonConfig(configPath ?? DEFAULT_CONFIG_PATH, {
+        socketPath: explicitSocketPath ?? DEFAULT_SOCKET,
+        dataPath: DEFAULT_DATA_PATH,
+        tokenPath: explicitTokenPath ?? DEFAULT_TOKEN_PATH,
+        walType: 'binary',
+    });
+
+    const socketPath = explicitSocketPath ?? resolved.daemon.socketPath;
+    const tokenPath = explicitTokenPath ?? resolved.daemon.tokenPath;
+    const token = readFileSync(tokenPath, 'utf8').trim();
+    return { socketPath, tokenPath, token };
+}
+
+async function daemonRpcCall(
+    socketPath: string,
+    token: string,
+    method: string,
+    params: Record<string, unknown> = {},
+    timeoutMs: number = 5000
+): Promise<any> {
+    return new Promise((resolve, reject) => {
+        const socket = net.createConnection(socketPath, () => {
+            socket.write(JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method,
+                params,
+                token,
+            }) + '\n');
+        });
+
+        let settled = false;
+        let buffer = '';
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            socket.destroy();
+            reject(new Error(`RPC timeout after ${timeoutMs}ms`));
+        }, timeoutMs);
+
+        const finish = (fn: () => void) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            fn();
+        };
+
+        socket.on('data', (data) => {
+            buffer += data.toString();
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            const line = lines.find((entry) => entry.trim());
+            if (!line) return;
+            finish(() => {
+                socket.end();
+                try {
+                    resolve(JSON.parse(line));
+                } catch (err: any) {
+                    reject(new Error(`Invalid JSON-RPC response: ${err.message}`));
+                }
+            });
+        });
+
+        socket.on('error', (err) => {
+            finish(() => reject(err));
+        });
+    });
+}
+
+function parseJsonInput(args: string[], inlineFlag: string, fileFlag: string): Record<string, unknown> {
+    const inline = parseFlag(args, inlineFlag);
+    if (inline) {
+        return JSON.parse(inline) as Record<string, unknown>;
+    }
+
+    const filePath = parseFlag(args, fileFlag);
+    if (filePath) {
+        return JSON.parse(readFileSync(filePath, 'utf8')) as Record<string, unknown>;
+    }
+
+    return {};
+}
 
 /**
  * gics encode <input.json> [-o output.gics] [--preset ...] [--password <pw>]
@@ -185,7 +292,8 @@ export async function verifyCommand(ctx: CLIContext): Promise<number> {
 ${c.bold('Usage:')} gics verify <input.gics> [options]
 
 ${c.bold('Options:')}
-  --password <pw>     Decrypt with password`);
+  --password <pw>     Decrypt with password
+  --json              Emit machine-readable JSON`);
         return 0;
     }
 
@@ -201,24 +309,34 @@ ${c.bold('Options:')}
     }
 
     const password = parseFlag(ctx.args, '--password') ?? undefined;
+    const asJson = wantsJson(ctx.args);
+    const spinner = asJson ? null : new Spinner();
 
-    const spinner = new Spinner();
-    spinner.start(`Verifying integrity of ${path.basename(inputPath)}...`);
+    spinner?.start(`Verifying integrity of ${path.basename(inputPath)}...`);
 
     try {
         const raw = await fs.readFile(inputPath);
         const decoder = new GICSv2Decoder(raw, { password });
         const valid = await decoder.verifyIntegrityOnly();
 
+        if (asJson) {
+            writeJson({ file: inputPath, valid }, wantsPrettyJson(ctx.args));
+            return valid ? 0 : 1;
+        }
+
         if (valid) {
-            spinner.succeed(c.bold(`Integrity valid: ${inputPath}`));
+            spinner?.succeed(c.bold(`Integrity valid: ${inputPath}`));
             return 0;
         } else {
-            spinner.fail(c.bold(`INTEGRITY FAILED: ${inputPath}`));
+            spinner?.fail(c.bold(`INTEGRITY FAILED: ${inputPath}`));
             return 1;
         }
     } catch (err: any) {
-        spinner.fail(`Verification error: ${err.message}`);
+        if (asJson) {
+            writeJson({ file: inputPath, valid: false, error: err.message }, wantsPrettyJson(ctx.args));
+        } else {
+            spinner?.fail(`Verification error: ${err.message}`);
+        }
         return 1;
     }
 }
@@ -233,7 +351,8 @@ export async function infoCommand(ctx: CLIContext): Promise<number> {
 ${c.bold('Usage:')} gics info <input.gics> [options]
 
 ${c.bold('Options:')}
-  --password <pw>     Decrypt with password`);
+  --password <pw>     Decrypt with password
+  --json              Emit machine-readable JSON`);
         return 0;
     }
 
@@ -249,6 +368,7 @@ ${c.bold('Options:')}
     }
 
     const password = parseFlag(ctx.args, '--password') ?? undefined;
+    const asJson = wantsJson(ctx.args);
 
     try {
         const raw = await fs.readFile(inputPath);
@@ -257,6 +377,21 @@ ${c.bold('Options:')}
         const schema = decoder.getSchema();
         const snapshots = await decoder.getAllGenericSnapshots();
         const totalItems = snapshots.reduce((sum, s) => sum + s.items.size, 0);
+
+        if (asJson) {
+            writeJson({
+                file: inputPath,
+                sizeBytes: raw.length,
+                schema: {
+                    id: schema.id,
+                    version: schema.version,
+                    fields: schema.fields.length,
+                },
+                snapshots: snapshots.length,
+                totalItems,
+            }, wantsPrettyJson(ctx.args));
+            return 0;
+        }
 
         console.log(table(
             ['Property', 'Value'],
@@ -372,7 +507,10 @@ export async function profileCommand(ctx: CLIContext): Promise<number> {
     if (hasFlag(ctx.args, '--help')) {
         console.log(`${c.bold('gics profile')} — Find optimal compression settings
 
-${c.bold('Usage:')} gics profile <input.json>`);
+${c.bold('Usage:')} gics profile <input.json>
+
+${c.bold('Options:')}
+  --json              Emit machine-readable JSON`);
         return 0;
     }
 
@@ -387,8 +525,11 @@ ${c.bold('Usage:')} gics profile <input.json>`);
         return 1;
     }
 
+    const asJson = wantsJson(ctx.args);
     const spinner = new Spinner();
-    spinner.start(`Profiling ${path.basename(inputPath)}...`);
+    if (!asJson) {
+        spinner.start(`Profiling ${path.basename(inputPath)}...`);
+    }
 
     try {
         const raw = await fs.readFile(inputPath, 'utf8');
@@ -404,6 +545,13 @@ ${c.bold('Usage:')} gics profile <input.json>`);
         }));
 
         const result = await CompressionProfiler.profile(snapshots, 'quick', { schema: data.schema });
+        if (asJson) {
+            writeJson({
+                file: inputPath,
+                ...result,
+            }, wantsPrettyJson(ctx.args));
+            return 0;
+        }
 
         spinner.succeed(`Profile complete: ${path.basename(inputPath)}`);
 
@@ -424,7 +572,11 @@ ${c.bold('Usage:')} gics profile <input.json>`);
 
         return 0;
     } catch (err: any) {
-        spinner.fail(`Profiling failed: ${err.message}`);
+        if (asJson) {
+            writeJson({ file: inputPath, error: err.message }, wantsPrettyJson(ctx.args));
+        } else {
+            spinner.fail(`Profiling failed: ${err.message}`);
+        }
         return 1;
     }
 }
@@ -449,7 +601,14 @@ ${c.bold('Subcommands:')}
 ${c.bold('Options (start):')}
   --data-path <dir>     Data directory (default: ~/.gics/data)
   --socket-path <path>  Socket path (default: platform-specific)
-  --wal-type <type>     WAL type: binary or jsonl (default: binary)`);
+  --wal-type <type>     WAL type: binary or jsonl (default: binary)
+  --config <path>       Persistent daemon config file
+  --modules <list>      Comma-separated enabled modules
+
+${c.bold('Options (status):')}
+  --json                Emit machine-readable JSON
+  --pretty              Pretty-print JSON
+  --token-path <path>   Explicit daemon token path`);
         return subcommand ? 0 : 2;
     }
 
@@ -465,13 +624,147 @@ ${c.bold('Options (start):')}
     }
 }
 
+/**
+ * gics module list|status|enable|disable
+ */
+export async function moduleCommand(ctx: CLIContext): Promise<number> {
+    const subcommand = ctx.args[0];
+    const target = ctx.args[1];
+    const configPath = parseFlag(ctx.args, '--config');
+
+    if (hasFlag(ctx.args, '--help') || !subcommand || !['list', 'status', 'enable', 'disable'].includes(subcommand)) {
+        console.log(`${c.bold('gics module')} â€” Manage daemon modules
+
+${c.bold('Usage:')} gics module <list|status|enable|disable> [moduleId] [options]
+
+${c.bold('Options:')}
+  --config <path>       Config file path (default: ~/.gics/gics.config.json)
+  --json                Emit machine-readable JSON`);
+        return subcommand ? 0 : 2;
+    }
+
+    const { loadDaemonFileConfig, writeDaemonFileConfig, DEFAULT_CONFIG_PATH } = await import('../daemon/config.js');
+    const resolvedConfigPath = configPath ?? DEFAULT_CONFIG_PATH;
+    const fileConfig = await loadDaemonFileConfig(resolvedConfigPath);
+    const moduleConfig = { ...(fileConfig.modules ?? {}) };
+
+    const asJson = wantsJson(ctx.args);
+    const statusItems = BUILTIN_MODULES.map((moduleId) => ({
+        moduleId,
+        enabled: moduleConfig[moduleId]?.enabled !== false,
+    }));
+
+    const renderStatus = () => {
+        if (asJson) {
+            writeJson({
+                configPath: resolvedConfigPath,
+                modules: statusItems,
+            }, wantsPrettyJson(ctx.args));
+            return;
+        }
+        const rows = statusItems.map((item) => {
+            const label = item.enabled ? c.green('enabled') : c.red('disabled');
+            return [item.moduleId, label];
+        });
+        console.log(table(['Module', 'Status'], rows));
+    };
+
+    switch (subcommand) {
+        case 'list':
+        case 'status':
+            renderStatus();
+            return 0;
+        case 'enable':
+        case 'disable': {
+            if (!target || !BUILTIN_MODULES.includes(target as typeof BUILTIN_MODULES[number])) {
+                console.error(c.red(`Unknown module: ${target ?? '(missing)'}`));
+                return 2;
+            }
+            moduleConfig[target] = {
+                ...(moduleConfig[target] ?? {}),
+                enabled: subcommand === 'enable',
+            };
+            await writeDaemonFileConfig(resolvedConfigPath, {
+                ...fileConfig,
+                modules: moduleConfig,
+            });
+            if (asJson) {
+                writeJson({
+                    moduleId: target,
+                    enabled: subcommand === 'enable',
+                    configPath: resolvedConfigPath,
+                }, wantsPrettyJson(ctx.args));
+            } else {
+                console.log(`${target}: ${subcommand === 'enable' ? 'enabled' : 'disabled'} (${resolvedConfigPath})`);
+            }
+            return 0;
+        }
+        default:
+            return 2;
+    }
+}
+
+/**
+ * gics rpc <method> [--params-json <json>]
+ */
+export async function rpcCommand(ctx: CLIContext): Promise<number> {
+    const method = ctx.args[0];
+    if (hasFlag(ctx.args, '--help') || !method) {
+        console.log(`${c.bold('gics rpc')} â€” Call daemon RPC methods from scripts
+
+${c.bold('Usage:')} gics rpc <method> [options]
+
+${c.bold('Options:')}
+  --params-json <json>  Inline JSON params
+  --params-file <path>  JSON file with params
+  --socket-path <path>  Explicit daemon socket path
+  --token-path <path>   Explicit daemon token path
+  --config <path>       Resolve daemon paths from config
+  --pretty              Pretty-print JSON
+  --envelope            Emit full JSON-RPC envelope
+
+${c.bold('Examples:')}
+  gics rpc get --params-json "{\\"key\\":\\"orders:42\\"}"
+  gics rpc scan --params-json "{\\"prefix\\":\\"orders:\\"}" --pretty`);
+        return method ? 0 : 2;
+    }
+
+    let params: Record<string, unknown>;
+    try {
+        params = parseJsonInput(ctx.args, '--params-json', '--params-file');
+    } catch (err: any) {
+        console.error(c.red(`Invalid RPC params: ${err.message}`));
+        return 2;
+    }
+
+    try {
+        const { socketPath, token } = await resolveDaemonTarget(ctx.args);
+        const response = await daemonRpcCall(socketPath, token, method, params);
+        const payload = hasFlag(ctx.args, '--envelope')
+            ? response
+            : (response.error ? { error: response.error } : (response.result ?? null));
+        writeJson(payload, wantsPrettyJson(ctx.args));
+        return response.error ? 1 : 0;
+    } catch (err: any) {
+        writeJson({
+            error: {
+                message: err.message,
+            },
+        }, wantsPrettyJson(ctx.args));
+        return 1;
+    }
+}
+
 async function daemonStart(args: string[]): Promise<number> {
     const dataPath = parseFlag(args, '--data-path') ?? DEFAULT_DATA_PATH;
     const socketPath = parseFlag(args, '--socket-path') ?? DEFAULT_SOCKET;
     const walType = (parseFlag(args, '--wal-type') ?? 'binary') as 'binary' | 'jsonl';
+    const configPath = parseFlag(args, '--config');
+    const modulesOverride = parseModuleList(parseFlag(args, '--modules'));
 
     // Lazy import to avoid loading daemon code for non-daemon commands
     const { GICSDaemon } = await import('../daemon/server.js');
+    const { resolveDaemonConfig, DEFAULT_CONFIG_PATH } = await import('../daemon/config.js');
 
     console.log(daemonBanner());
 
@@ -479,13 +772,20 @@ async function daemonStart(args: string[]): Promise<number> {
     const { mkdirSync } = await import('fs');
     mkdirSync(GICS_HOME, { recursive: true });
 
-    const tokenPath = path.join(GICS_HOME, 'gics.token');
-
-    const daemon = new GICSDaemon({
+    const tokenPath = DEFAULT_TOKEN_PATH;
+    const defaults = {
         socketPath,
         dataPath,
         tokenPath,
         walType,
+    };
+    const resolved = await resolveDaemonConfig(configPath ?? DEFAULT_CONFIG_PATH, defaults, modulesOverride);
+
+    const daemon = new GICSDaemon({
+        ...resolved.daemon,
+        modules: resolved.modules,
+        defaultProfileScope: resolved.profiles.defaultScope,
+        configPath: resolved.filePath,
     });
 
     // Write PID file
@@ -503,8 +803,8 @@ async function daemonStart(args: string[]): Promise<number> {
 
     try {
         await daemon.start();
-        console.log(c.green(`[GICS] Daemon started on ${socketPath}`));
-        console.log(c.dim(`[GICS] PID: ${process.pid} | Data: ${dataPath} | WAL: ${walType}`));
+        console.log(c.green(`[GICS] Daemon started on ${resolved.daemon.socketPath}`));
+        console.log(c.dim(`[GICS] PID: ${process.pid} | Data: ${resolved.daemon.dataPath} | WAL: ${resolved.daemon.walType ?? walType}`));
         // Keep process alive
         await new Promise(() => {});
         return 0;
@@ -545,70 +845,46 @@ async function daemonStop(): Promise<number> {
 }
 
 async function daemonStatus(args: string[]): Promise<number> {
-    const socketPath = parseFlag(args, '--socket-path') ?? DEFAULT_SOCKET;
-    const tokenPath = path.join(GICS_HOME, 'gics.token');
-
-    let token = '';
     try {
-        token = readFileSync(tokenPath, 'utf8').trim();
-    } catch {
-        console.log(c.red('Daemon not configured (no token file)'));
+        const { socketPath, token } = await resolveDaemonTarget(args);
+        const response = await daemonRpcCall(socketPath, token, 'ping', {}, 3000);
+        if (response.error) {
+            if (wantsJson(args)) {
+                writeJson(response, wantsPrettyJson(args));
+            } else {
+                console.error(c.red(`Error: ${response.error.message}`));
+            }
+            return 1;
+        }
+
+        const result = response.result ?? {};
+        if (wantsJson(args)) {
+            writeJson(result, wantsPrettyJson(args));
+            return 0;
+        }
+
+        console.log(table(
+            ['Property', 'Value'],
+            [
+                ['Status', c.green(result.status ?? 'ok')],
+                ['Uptime', `${result.uptime?.toFixed(0) ?? '?'}s`],
+                ['Records', String(result.count ?? 0)],
+                ['WAL Type', result.walType ?? '?'],
+                ['Warm Segments', String(result.segments ?? 0)],
+                ['Cold Segments', String(result.coldSegments ?? 0)],
+                ['Insights', String(result.insightsTracked ?? 0)],
+                ['Supervisor', result.supervisorState ?? '?'],
+            ]
+        ));
+        return 0;
+    } catch (err: any) {
+        if (wantsJson(args)) {
+            writeJson({ error: err.message }, wantsPrettyJson(args));
+        } else if (err.code === 'ENOENT') {
+            console.log(c.red('Daemon not configured (no token file)'));
+        } else {
+            console.log(c.red(`Daemon not running: ${err.message}`));
+        }
         return 1;
     }
-
-    return new Promise<number>((resolve) => {
-        const socket = net.createConnection(socketPath, () => {
-            const request = JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'ping',
-                token,
-            });
-            socket.write(request + '\n');
-        });
-
-        let buffer = '';
-        socket.on('data', (data) => {
-            buffer += data.toString();
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    const response = JSON.parse(line);
-                    if (response.result) {
-                        const r = response.result;
-                        console.log(table(
-                            ['Property', 'Value'],
-                            [
-                                ['Status', c.green(r.status ?? 'ok')],
-                                ['Uptime', `${r.uptime?.toFixed(0) ?? '?'}s`],
-                                ['Records', String(r.count ?? 0)],
-                                ['WAL Type', r.walType ?? '?'],
-                                ['Warm Segments', String(r.segments ?? 0)],
-                                ['Cold Segments', String(r.coldSegments ?? 0)],
-                                ['Insights', String(r.insightsTracked ?? 0)],
-                                ['Supervisor', r.supervisorState ?? '?'],
-                            ]
-                        ));
-                    } else if (response.error) {
-                        console.error(c.red(`Error: ${response.error.message}`));
-                    }
-                } catch { /* ignore parse errors */ }
-                socket.end();
-                resolve(0);
-            }
-        });
-
-        socket.on('error', () => {
-            console.log(c.red('Daemon not running'));
-            resolve(1);
-        });
-
-        setTimeout(() => {
-            socket.destroy();
-            console.log(c.red('Daemon not responding (timeout)'));
-            resolve(1);
-        }, 3000);
-    });
 }

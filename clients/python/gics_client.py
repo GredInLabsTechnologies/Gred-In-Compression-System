@@ -196,8 +196,13 @@ class GICSClient:
         resp = self._call("delete", {"key": key})
         return self._unwrap_result(resp).get('ok', False)
 
-    def scan(self, prefix=""):
-        resp = self._call("scan", {"prefix": prefix})
+    def scan(self, prefix="", tiers="all", include_system=False, limit=None, cursor=None, mode="current"):
+        params = {"prefix": prefix, "tiers": tiers, "includeSystem": include_system, "mode": mode}
+        if limit is not None:
+            params["limit"] = limit
+        if cursor is not None:
+            params["cursor"] = cursor
+        resp = self._call("scan", params)
         return self._unwrap_result(resp).get('items', [])
 
     def flush(self):
@@ -283,6 +288,26 @@ class GICSClient:
         if target is not None:
             params["target"] = target
         resp = self._call("getRecommendations", params)
+        return self._unwrap_result(resp)
+
+    def infer(self, domain, objective=None, subject=None, context=None, candidates=None):
+        params = {"domain": domain}
+        if objective is not None:
+            params["objective"] = objective
+        if subject is not None:
+            params["subject"] = subject
+        if context is not None:
+            params["context"] = context
+        if candidates is not None:
+            params["candidates"] = candidates
+        resp = self._call("infer", params)
+        return self._unwrap_result(resp)
+
+    def get_profile(self, scope=None):
+        params = {}
+        if scope is not None:
+            params["scope"] = scope
+        resp = self._call("getProfile", params)
         return self._unwrap_result(resp)
 
     def get_accuracy(self, insight_type=None, scope=None):

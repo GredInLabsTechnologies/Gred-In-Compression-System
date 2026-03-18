@@ -8,15 +8,13 @@ import { FileLock } from './file-lock.js';
 import { GICSv2Encoder } from '../gics/encode.js';
 import { GICSv2Decoder } from '../gics/decode.js';
 import type { GenericSnapshot, SchemaProfile } from '../gics-types.js';
-import { InsightTracker, type LifecycleStage } from '../insight/tracker.js';
-import { CorrelationAnalyzer } from '../insight/correlation.js';
-import { PredictiveSignals } from '../insight/signals.js';
-import { ConfidenceTracker, type OutcomeResult } from '../insight/confidence.js';
-import { InsightPersistence } from '../insight/persistence.js';
 import { GICSSupervisor } from './supervisor.js';
-import { AuditChain } from './audit-chain.js';
-import { PromptDistiller } from './prompt-distiller.js';
 import { ResilienceShell, GICSCircuitOpen, GICSTimeout, GICSUnavailable, type ResilienceConfig } from './resilience.js';
+import { createBuiltinModuleSet, type BuiltinModuleSet } from './builtin-modules.js';
+import type { GICSModuleRuntimeConfig } from './config.js';
+import type { InferenceRequest, ModuleContext } from './module-registry.js';
+import { StateIndex, type StateIndexEntry, type StateIndexTier, type StateIndexScanOptions } from './state-index.js';
+import { isHiddenSystemKey, isSystemKey } from './system-keys.js';
 
 export interface GICSDaemonConfig {
     socketPath: string;
@@ -36,15 +34,41 @@ export interface GICSDaemonConfig {
     coldEncryption?: boolean;
     coldPasswordEnvVar?: string;
     resilience?: ResilienceConfig;
+    modules?: Record<string, GICSModuleRuntimeConfig>;
+    defaultProfileScope?: string;
+    configPath?: string;
+}
+
+interface SegmentDescriptor {
+    filePath: string;
+    tier: 'warm' | 'cold';
+    system: boolean;
 }
 
 export class GICSDaemon {
+    private static readonly LEGACY_INSIGHT_SEGMENT_PREFIX = 'insight-';
+    private static readonly SYSTEM_SEGMENT_PREFIX = 'insight-';
+    private static readonly PRESENCE_PREFIX = '__gics_p__';
+    private static readonly STATE_INDEX_FILE = 'state-index.json';
+    private static readonly WRITE_OPS = new Set(['put', 'delete', 'flush', 'compact', 'rotate']);
+    private static readonly READ_OPS = new Set([
+        'get', 'getInsight', 'getInsights', 'getAccuracy', 'getCorrelations',
+        'getClusters', 'getLeadingIndicators', 'getSeasonalPatterns', 'getForecast',
+        'getAnomalies', 'getRecommendations', 'verify', 'verifyAudit', 'exportAudit',
+        'infer', 'getProfile'
+    ]);
+    private static readonly SCAN_OPS = new Set(['scan']);
+    private static readonly CONTROL_OPS = new Set([
+        'ping', 'getStatus', 'getHealth', 'resetDegraded',
+        'subscribe', 'unsubscribe', 'reportOutcome', 'recordOutcome',
+    ]);
+
     private server: net.Server;
     private memTable: MemTable;
     private wal: WALProvider;
     private config: GICSDaemonConfig;
     private token: string;
-    private recoveredEntries: number = 0;
+    private recoveredEntries = 0;
     private readonly walType: WALType;
     private readonly walFsyncMode: WALFsyncMode;
     private readonly walFsyncOnCommit: boolean;
@@ -55,30 +79,24 @@ export class GICSDaemon {
     private readonly storageLockTarget: string;
     private readonly warmDirPath: string;
     private readonly coldDirPath: string;
+    private readonly stateIndexPath: string;
     private readonly warmRetentionMs: number;
     private readonly coldRetentionMs: number;
     private readonly coldEncryption: boolean;
     private readonly coldPasswordEnvVar: string;
-    private readonly tierIndexWarm = new Map<string, Set<string>>();
-    private readonly tierIndexCold = new Map<string, Set<string>>();
-    private readonly insightTracker = new InsightTracker();
-    private readonly correlationAnalyzer = new CorrelationAnalyzer();
-    private readonly predictiveSignals = new PredictiveSignals();
-    private readonly confidenceTracker = new ConfidenceTracker();
-    private readonly insightPersistence = new InsightPersistence();
+    private readonly stateIndex: StateIndex;
     private readonly supervisor = new GICSSupervisor();
     private readonly resilience: ResilienceShell;
-    private auditChain: AuditChain | null = null;
-    private promptDistiller: PromptDistiller | null = null;
     private readonly subscriptions = new Map<string, { socket: net.Socket; events: string[] }>();
-    private static readonly INSIGHT_SEGMENT_PREFIX = 'insight-';
-    private static readonly PRESENCE_PREFIX = '__gics_p__';
+    private readonly segmentCatalog = new Map<string, SegmentDescriptor>();
+    private readonly modules: BuiltinModuleSet;
+    private readonly moduleContext: ModuleContext;
 
     constructor(config: GICSDaemonConfig) {
         this.config = config;
         this.memTable = new MemTable({
             maxMemTableBytes: config.maxMemSizeBytes,
-            maxDirtyRecords: config.maxDirtyCount
+            maxDirtyRecords: config.maxDirtyCount,
         });
         this.walType = config.walType ?? 'binary';
         this.walFsyncMode = config.walFsyncMode ?? 'best_effort';
@@ -87,21 +105,22 @@ export class GICSDaemon {
         this.walCheckpointEveryMs = config.walCheckpointEveryMs ?? 30_000;
         this.walMaxSizeMB = config.walMaxSizeMB ?? 50;
         this.fileLockTimeoutMs = config.fileLockTimeoutMs ?? 5000;
-        this.storageLockTarget = path.join(config.dataPath, 'segments');
+        this.storageLockTarget = path.join(config.dataPath, 'segments.lock');
         this.warmDirPath = path.join(config.dataPath, 'warm');
         this.coldDirPath = path.join(config.dataPath, 'cold');
+        this.stateIndexPath = path.join(config.dataPath, GICSDaemon.STATE_INDEX_FILE);
         this.warmRetentionMs = config.warmRetentionMs ?? (30 * 24 * 60 * 60 * 1000);
         this.coldRetentionMs = config.coldRetentionMs ?? (365 * 24 * 60 * 60 * 1000);
         this.coldEncryption = config.coldEncryption ?? false;
         this.coldPasswordEnvVar = config.coldPasswordEnvVar ?? 'GICS_COLD_KEY';
-
+        this.stateIndex = new StateIndex(this.stateIndexPath);
         this.resilience = new ResilienceShell(config.resilience);
 
         const walFileName = this.walType === 'jsonl' ? 'gics.wal.jsonl' : 'gics.wal';
         const walPath = path.join(config.dataPath, walFileName);
         if (!existsSync(config.dataPath)) {
             mkdirSync(config.dataPath, { recursive: true });
-            writeFileSync(walPath, ''); // Ensure file exists
+            writeFileSync(walPath, '');
         }
         this.wal = createWALProvider(this.walType, walPath, {
             fsyncMode: this.walFsyncMode,
@@ -111,56 +130,80 @@ export class GICSDaemon {
             maxWalSizeMB: this.walMaxSizeMB,
         });
 
+        const promptEnabled = this.resolveModuleEnabled('prompt-distiller', process.env.GICS_DISTILLER_ENABLED === 'true');
+        const inferenceEnabled = this.resolveModuleEnabled('inference-engine', false);
+        this.modules = createBuiltinModuleSet({
+            dataPath: config.dataPath,
+            enablePromptDistiller: promptEnabled,
+            enableInferenceEngine: inferenceEnabled,
+            defaultScope: config.defaultProfileScope ?? 'host:default',
+        });
+        this.applyModuleOverrides();
+
+        this.moduleContext = {
+            emitEvent: (type, data) => this.emitEvent(type, data),
+            upsertSystemRecord: async (key, fields) => {
+                await this.upsertSystemRecord(key, fields);
+            },
+            now: () => Date.now(),
+            getStateSnapshot: () => this.stateIndex.snapshotEntries(),
+        };
+
         this.token = this.ensureToken();
-        this.auditChain = new AuditChain({ filePath: path.join(config.dataPath, 'audit.chain') });
-
-        // Phase 12: PromptDistiller (optional, for lifecycle-based retention)
-        if (process.env.GICS_DISTILLER_ENABLED === 'true') {
-            this.promptDistiller = new PromptDistiller({
-                dataPath: path.join(config.dataPath, 'distilled'),
-            });
-        }
-
         this.server = net.createServer((socket) => this.handleConnection(socket));
+    }
+
+    private resolveModuleEnabled(moduleId: string, defaultValue: boolean): boolean {
+        const override = this.config.modules?.[moduleId]?.enabled;
+        return override ?? defaultValue;
+    }
+
+    private applyModuleOverrides(): void {
+        for (const module of this.modules.registry.list()) {
+            const override = this.config.modules?.[module.manifest.id];
+            if (override?.enabled !== undefined) {
+                module.enabled = override.enabled;
+            }
+        }
     }
 
     private ensureToken(): string {
         if (existsSync(this.config.tokenPath)) {
             return readFileSync(this.config.tokenPath, 'utf8').trim();
-        } else {
-            const newToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
-            writeFileSync(this.config.tokenPath, newToken, { mode: 0o600 });
-            console.log(`[GICS] Generated new security token at ${this.config.tokenPath}`);
-            return newToken;
         }
+        const newToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+        writeFileSync(this.config.tokenPath, newToken, { mode: 0o600 });
+        console.log(`[GICS] Generated new security token at ${this.config.tokenPath}`);
+        return newToken;
     }
 
     async start(): Promise<void> {
-        // 1. Replay WAL to restore state
+        await FileLock.withSharedLock(this.storageLockTarget, async () => {
+            await this.loadOrRebuildStateIndex();
+        }, this.fileLockTimeoutMs);
+
+        await this.modules.registry.initAll(this.moduleContext);
+        await this.modules.registry.restoreAll(this.moduleContext);
+
         console.log('[GICS] Replaying WAL...');
         this.recoveredEntries = 0;
         await this.wal.replay((op, key, payload) => {
+            const timestamp = Date.now();
             if (op === Operation.PUT) {
                 this.memTable.put(key, payload);
-                this.insightTracker.onWrite(key, Date.now(), payload);
+                this.stateIndex.recordPut(key, payload, { tier: 'hot', segmentRef: null, timestamp });
                 this.recoveredEntries++;
             } else if (op === Operation.DELETE) {
                 this.memTable.delete(key);
+                this.stateIndex.applyWALDelete(key, timestamp);
                 this.recoveredEntries++;
             }
         });
-        this.memTable.resetDirty(); // WAL replay records are not dirty in MemTable sense (already persisted in WAL)
+        this.memTable.resetDirty();
         console.log(`[GICS] WAL replayed. ${this.memTable.count} records loaded (${this.recoveredEntries} entries replayed).`);
 
-        await FileLock.withSharedLock(this.storageLockTarget, async () => {
-            await this.rebuildTierIndex();
-            const restored = await this.restoreInsightsFromSegments();
-            if (restored.total > 0) {
-                console.log(`[GICS] Restored insights from segments: behavioral=${restored.behavioral}, confidence=${restored.confidence}`);
-            }
-        }, this.fileLockTimeoutMs);
+        await this.replayHotStateIntoModules();
 
-        // 2. Register supervisor health checks and start
         this.supervisor.registerHealthChecks({
             checkMemTable: () => {
                 try { return this.memTable.count >= 0; } catch { return false; }
@@ -170,21 +213,15 @@ export class GICSDaemon {
             },
             restartSubsystem: async () => {
                 try {
-                    // Re-verify MemTable and WAL are functional
-                    this.memTable.count; // throws if broken
+                    this.memTable.count;
                     return true;
-                } catch { return false; }
+                } catch {
+                    return false;
+                }
             },
         });
-
-        // Phase 12: Initialize PromptDistiller if enabled
-        if (this.promptDistiller) {
-            await this.promptDistiller.initialize();
-        }
-
         this.supervisor.start();
 
-        // 3. Start listening
         if (process.platform !== 'win32' && existsSync(this.config.socketPath)) {
             await fs.unlink(this.config.socketPath);
         }
@@ -199,8 +236,8 @@ export class GICSDaemon {
 
     async stop(): Promise<void> {
         this.supervisor.stop();
-        await this.auditChain?.close();
-        await this.promptDistiller?.stop();
+        await this.stateIndex.save();
+        await this.modules.registry.stopAll();
         return new Promise((resolve) => {
             this.server.close(() => {
                 console.log('[GICS] Daemon stopped.');
@@ -209,11 +246,21 @@ export class GICSDaemon {
         });
     }
 
+    private async replayHotStateIntoModules(): Promise<void> {
+        const records = this.memTable.scan().sort((a, b) => a.updated - b.updated);
+        for (const record of records) {
+            if (isHiddenSystemKey(record.key)) continue;
+            await this.modules.registry.onWrite({
+                key: record.key,
+                fields: { ...record.fields },
+                timestamp: record.updated,
+            }, this.moduleContext);
+        }
+    }
     private handleConnection(socket: net.Socket): void {
         let buffer = '';
 
         socket.on('close', () => {
-            // Clean up subscriptions for this socket
             for (const [subId, sub] of this.subscriptions) {
                 if (sub.socket === socket) this.subscriptions.delete(subId);
             }
@@ -221,9 +268,8 @@ export class GICSDaemon {
 
         socket.on('data', async (data) => {
             buffer += data.toString();
-
             const lines = buffer.split('\n');
-            buffer = lines.pop() || ''; // Keep last partial line
+            buffer = lines.pop() || '';
 
             for (const line of lines) {
                 const trimmed = line.trim();
@@ -236,7 +282,7 @@ export class GICSDaemon {
                     socket.write(JSON.stringify({
                         jsonrpc: '2.0',
                         id: null,
-                        error: { code: -32700, message: 'Parse error' }
+                        error: { code: -32700, message: 'Parse error' },
                     }) + '\n');
                     continue;
                 }
@@ -248,14 +294,14 @@ export class GICSDaemon {
                     socket.write(JSON.stringify({
                         jsonrpc: '2.0',
                         id: request.id ?? null,
-                        error: { code: -32603, message: e?.message ?? 'Internal error' }
+                        error: { code: -32603, message: e?.message ?? 'Internal error' },
                     }) + '\n');
                 }
             }
         });
     }
 
-    private emitEvent(type: string, data: any): void {
+    private emitEvent(type: string, data: unknown): void {
         for (const [subId, sub] of this.subscriptions) {
             if (!sub.events.includes(type)) continue;
             if (sub.socket.destroyed) {
@@ -265,17 +311,21 @@ export class GICSDaemon {
             const event = JSON.stringify({
                 jsonrpc: '2.0',
                 method: 'event',
-                params: { subscriptionId: subId, type, data }
+                params: { subscriptionId: subId, type, data },
             });
             sub.socket.write(event + '\n');
         }
+    }
+
+    private isSystemSegmentFile(name: string): boolean {
+        return name.startsWith(GICSDaemon.SYSTEM_SEGMENT_PREFIX) || name.startsWith(GICSDaemon.LEGACY_INSIGHT_SEGMENT_PREFIX);
     }
 
     private async countSegmentFiles(): Promise<number> {
         return FileLock.withSharedLock(this.storageLockTarget, async () => {
             if (!existsSync(this.warmDirPath)) return 0;
             const files = await fs.readdir(this.warmDirPath);
-            return files.filter((name) => name.endsWith('.gics') && !name.startsWith(GICSDaemon.INSIGHT_SEGMENT_PREFIX)).length;
+            return files.filter((name) => name.endsWith('.gics') && !this.isSystemSegmentFile(name)).length;
         }, this.fileLockTimeoutMs);
     }
 
@@ -283,29 +333,75 @@ export class GICSDaemon {
         return FileLock.withSharedLock(this.storageLockTarget, async () => {
             if (!existsSync(this.coldDirPath)) return 0;
             const files = await fs.readdir(this.coldDirPath);
-            return files.filter((name) => name.endsWith('.gics') && !name.startsWith(GICSDaemon.INSIGHT_SEGMENT_PREFIX)).length;
+            return files.filter((name) => name.endsWith('.gics') && !this.isSystemSegmentFile(name)).length;
         }, this.fileLockTimeoutMs);
     }
 
-    private async rebuildTierIndex(): Promise<void> {
-        this.tierIndexWarm.clear();
-        this.tierIndexCold.clear();
-
+    private async loadOrRebuildStateIndex(): Promise<void> {
         await fs.mkdir(this.warmDirPath, { recursive: true });
         await fs.mkdir(this.coldDirPath, { recursive: true });
 
-        const warmFiles = (await fs.readdir(this.warmDirPath))
-            .filter((name) => name.endsWith('.gics') && !name.startsWith(GICSDaemon.INSIGHT_SEGMENT_PREFIX))
-            .map((name) => path.join(this.warmDirPath, name));
-        const coldFiles = (await fs.readdir(this.coldDirPath))
-            .filter((name) => name.endsWith('.gics') && !name.startsWith(GICSDaemon.INSIGHT_SEGMENT_PREFIX))
-            .map((name) => path.join(this.coldDirPath, name));
-
-        for (const filePath of warmFiles) {
-            await this.indexFileKeys(filePath, 'warm');
+        let loadedFromDisk = false;
+        try {
+            await this.stateIndex.load();
+            loadedFromDisk = true;
+        } catch (err: any) {
+            console.warn(`[GICS] StateIndex load failed, rebuilding from segments: ${err.message}`);
+            this.stateIndex.clear();
         }
-        for (const filePath of coldFiles) {
-            await this.indexFileKeys(filePath, 'cold');
+
+        await this.rebuildSegmentCatalog();
+        if (!loadedFromDisk || !this.validateStateIndexAgainstSegments()) {
+            await this.rebuildStateIndexFromSegments();
+            await this.stateIndex.save();
+        }
+    }
+
+    private validateStateIndexAgainstSegments(): boolean {
+        for (const entry of this.stateIndex.snapshotEntries()) {
+            if (entry.tier === 'hot') continue;
+            if (!entry.segmentRef) return false;
+            if (!this.segmentCatalog.has(entry.segmentRef)) return false;
+        }
+        return true;
+    }
+
+    private async rebuildSegmentCatalog(): Promise<void> {
+        this.segmentCatalog.clear();
+        const loadTier = async (dir: string, tier: 'warm' | 'cold') => {
+            if (!existsSync(dir)) return;
+            const names = (await fs.readdir(dir)).filter((name) => name.endsWith('.gics')).sort();
+            for (const name of names) {
+                const filePath = path.join(dir, name);
+                this.segmentCatalog.set(filePath, {
+                    filePath,
+                    tier,
+                    system: this.isSystemSegmentFile(name),
+                });
+            }
+        };
+
+        await loadTier(this.warmDirPath, 'warm');
+        await loadTier(this.coldDirPath, 'cold');
+    }
+
+    private async rebuildStateIndexFromSegments(): Promise<void> {
+        this.stateIndex.clear();
+        const segments = Array.from(this.segmentCatalog.values()).sort((a, b) => a.filePath.localeCompare(b.filePath));
+        for (const segment of segments) {
+            const raw = await fs.readFile(segment.filePath);
+            const snapshots = await this.decodeSnapshotsWithFallback(raw, segment.tier === 'cold');
+            for (const snapshot of snapshots) {
+                for (const [rawKey, rawFields] of snapshot.items.entries()) {
+                    const key = String(rawKey);
+                    const fields = this.restoreOriginalFieldShape(rawFields);
+                    this.stateIndex.recordPut(key, fields, {
+                        timestamp: snapshot.timestamp,
+                        tier: segment.tier,
+                        segmentRef: segment.filePath,
+                    });
+                }
+            }
         }
     }
 
@@ -322,105 +418,90 @@ export class GICSDaemon {
         }
     }
 
-    private async indexFileKeys(filePath: string, tier: 'warm' | 'cold'): Promise<void> {
-        const raw = await fs.readFile(filePath);
-        const snapshots = await this.decodeSnapshotsWithFallback(raw, tier === 'cold');
-
-        for (const snapshot of snapshots) {
-            for (const key of snapshot.items.keys()) {
-                const strKey = String(key);
-                const index = tier === 'warm' ? this.tierIndexWarm : this.tierIndexCold;
-                if (!index.has(strKey)) index.set(strKey, new Set<string>());
-                index.get(strKey)!.add(filePath);
-            }
+    private async querySnapshotsWithFallback(raw: Buffer, key: string, coldTier: boolean): Promise<GenericSnapshot<Record<string, number | string>>[]> {
+        try {
+            const decoder = new GICSv2Decoder(raw);
+            return await decoder.queryGeneric(key);
+        } catch {
+            if (!coldTier) throw new Error('Failed to query warm segment');
+            const password = process.env[this.coldPasswordEnvVar] ?? '';
+            if (!password) throw new Error(`Failed to query cold segment and no ${this.coldPasswordEnvVar} provided`);
+            const decoder = new GICSv2Decoder(raw, { password });
+            return await decoder.queryGeneric(key);
         }
     }
 
-    private async resolveFromTier(
-        key: string,
-        tier: 'warm' | 'cold'
-    ): Promise<{ key: string; fields: Record<string, number | string>; tier: 'warm' | 'cold' } | null> {
-        if (InsightPersistence.isInsightKey(key)) return null;
-        const index = tier === 'warm' ? this.tierIndexWarm : this.tierIndexCold;
-        const candidateFiles = Array.from(index.get(key) ?? []);
-        if (candidateFiles.length === 0) return null;
+    private async hydrateEntryFromSegment(entry: StateIndexEntry): Promise<StateIndexEntry | null> {
+        if (!entry.segmentRef) return null;
+        const segment = this.segmentCatalog.get(entry.segmentRef);
+        if (!segment) return null;
+        const raw = await fs.readFile(entry.segmentRef);
+        const snapshots = await this.querySnapshotsWithFallback(raw, entry.key, segment.tier === 'cold');
 
-        let winner: { ts: number; fields: Record<string, number | string> } | null = null;
-
-        for (const filePath of candidateFiles) {
-            const raw = await fs.readFile(filePath);
-            const snapshots = await this.decodeSnapshotsWithFallback(raw, tier === 'cold');
-            for (const snapshot of snapshots) {
-                const fields = snapshot.items.get(key);
-                if (!fields) continue;
-                if (!winner || snapshot.timestamp >= winner.ts) {
-                    winner = { ts: snapshot.timestamp, fields: { ...fields } };
-                }
+        let winner: { timestamp: number; fields: Record<string, number | string> } | null = null;
+        for (const snapshot of snapshots) {
+            const fields = snapshot.items.get(entry.key);
+            if (!fields) continue;
+            if (!winner || snapshot.timestamp >= winner.timestamp) {
+                winner = { timestamp: snapshot.timestamp, fields: this.restoreOriginalFieldShape(fields) };
             }
         }
 
         if (!winner) return null;
-        return { key, fields: this.restoreOriginalFieldShape(winner.fields), tier };
+        this.stateIndex.recordPut(entry.key, winner.fields, {
+            timestamp: winner.timestamp,
+            tier: segment.tier,
+            segmentRef: entry.segmentRef,
+        });
+        return this.stateIndex.getVisible(entry.key, true);
     }
 
     private restoreOriginalFieldShape(fields: Record<string, number | string>): Record<string, number | string> {
         const restored: Record<string, number | string> = {};
         const presence = new Map<string, number>();
 
-        for (const [k, v] of Object.entries(fields)) {
-            if (!k.startsWith(GICSDaemon.PRESENCE_PREFIX)) {
-                restored[k] = v;
+        for (const [key, value] of Object.entries(fields)) {
+            if (!key.startsWith(GICSDaemon.PRESENCE_PREFIX)) {
+                restored[key] = value;
                 continue;
             }
-
-            const target = k.slice(GICSDaemon.PRESENCE_PREFIX.length);
-            presence.set(target, typeof v === 'number' ? v : Number(v));
+            const target = key.slice(GICSDaemon.PRESENCE_PREFIX.length);
+            presence.set(target, typeof value === 'number' ? value : Number(value));
         }
 
         for (const [fieldName, flag] of presence.entries()) {
-            if (flag === 0) {
-                delete restored[fieldName];
-            }
+            if (flag === 0) delete restored[fieldName];
         }
-
         return restored;
-    }
-
-    private inferSchemaAndSnapshot(records: ReturnType<MemTable['scan']>): {
-        schema: SchemaProfile;
-        snapshot: GenericSnapshot<Record<string, number | string>>;
-    } {
-        const serialized = records.map((rec) => this.serializeRecordWithPresence(rec.fields));
-        const inferredSchema = this.inferSchemaFromFields(serialized);
-
-        const items = new Map<string, Record<string, number | string>>();
-        let snapshotTimestamp = Date.now();
-
-        for (const rec of records) {
-            snapshotTimestamp = Math.max(snapshotTimestamp, rec.updated);
-            items.set(rec.key, this.serializeRecordWithPresence(rec.fields));
-        }
-
-        return {
-            schema: inferredSchema,
-            snapshot: {
-                timestamp: snapshotTimestamp,
-                items
-            }
-        };
     }
 
     private serializeRecordWithPresence(fields: Record<string, number | string>): Record<string, number | string> {
         const out: Record<string, number | string> = { ...fields };
-        const keySet = new Set(Object.keys(fields));
-
-        for (const fieldName of keySet) {
+        for (const fieldName of Object.keys(fields)) {
             out[`${GICSDaemon.PRESENCE_PREFIX}${fieldName}`] = 1;
         }
-
         return out;
     }
 
+    private inferSchemaAndSnapshot(records: Array<{ key: string; fields: Record<string, number | string>; updated: number }>): {
+        schema: SchemaProfile;
+        snapshot: GenericSnapshot<Record<string, number | string>>;
+    } {
+        const serialized = records.map((record) => this.serializeRecordWithPresence(record.fields));
+        const inferredSchema = this.inferSchemaFromFields(serialized);
+
+        const items = new Map<string, Record<string, number | string>>();
+        let snapshotTimestamp = Date.now();
+        for (const record of records) {
+            snapshotTimestamp = Math.max(snapshotTimestamp, record.updated);
+            items.set(record.key, this.serializeRecordWithPresence(record.fields));
+        }
+
+        return {
+            schema: inferredSchema,
+            snapshot: { timestamp: snapshotTimestamp, items },
+        };
+    }
     private inferSchemaFromFields(allFields: Array<Record<string, number | string>>): SchemaProfile {
         const fieldNames = new Set<string>();
         for (const fields of allFields) {
@@ -431,28 +512,24 @@ export class GICSDaemon {
 
         const fields: SchemaProfile['fields'] = [];
         const sortedFieldNames = Array.from(fieldNames).sort();
-
         for (const fieldName of sortedFieldNames) {
             const values = allFields
-                .map((fields) => fields[fieldName])
-                .filter((v): v is number | string => v !== undefined);
+                .map((entry) => entry[fieldName])
+                .filter((value): value is number | string => value !== undefined);
 
-            const isNumeric = values.every((v) => typeof v === 'number');
+            const isNumeric = values.every((value) => typeof value === 'number');
             if (isNumeric) {
                 fields.push({
                     name: fieldName,
                     type: 'numeric',
-                    codecStrategy: 'value'
+                    codecStrategy: 'value',
                 });
                 continue;
             }
 
             const enumMap: Record<string, number> = { '__MISSING__': 0 };
             let idx = 1;
-            const categoricalValues = Array.from(
-                new Set(values.filter((v): v is string => typeof v === 'string'))
-            ).sort();
-
+            const categoricalValues = Array.from(new Set(values.filter((value): value is string => typeof value === 'string'))).sort();
             for (const value of categoricalValues) {
                 if (enumMap[value] === undefined) {
                     enumMap[value] = idx++;
@@ -463,77 +540,139 @@ export class GICSDaemon {
                 name: fieldName,
                 type: 'categorical',
                 codecStrategy: 'structural',
-                enumMap
+                enumMap,
             });
         }
 
         return {
-            id: 'gics_daemon_memtable_v1',
-            version: 1,
+            id: 'gics_daemon_memtable_v2',
+            version: 2,
             itemIdType: 'string',
-            fields
+            fields,
         };
     }
 
-    private coldStartBootstrap(key: string): void {
-        if (this.insightTracker.getInsight(key)) return;
-
-        const similar = this.correlationAnalyzer.findSimilarKeys(key);
-        if (similar.length > 0) {
-            const cluster = this.correlationAnalyzer.getClusterForKey(similar[0]!);
-            if (cluster) {
-                const mean = this.correlationAnalyzer.getClusterMeanBehavior(cluster, this.insightTracker);
-                this.insightTracker.bootstrapFromCluster(key, mean);
-                return;
-            }
-        }
-
-        this.insightTracker.bootstrapRecord(key);
+    private async writeSegment(filePath: string, records: Array<{ key: string; fields: Record<string, number | string>; updated: number }>): Promise<number> {
+        const { schema, snapshot } = this.inferSchemaAndSnapshot(records);
+        const encoder = new GICSv2Encoder({ schema });
+        await encoder.addSnapshot(snapshot);
+        const packed = await encoder.finish();
+        await fs.writeFile(filePath, packed);
+        return packed.length;
     }
 
-    private async collectInsightRecordsFromTier(tier: 'warm' | 'cold'): Promise<Map<string, Record<string, number | string>>> {
-        const dir = tier === 'warm' ? this.warmDirPath : this.coldDirPath;
-        const latest = new Map<string, { ts: number; fields: Record<string, number | string> }>();
-        if (!existsSync(dir)) return new Map();
+    private async flushMemTableToWarm(trigger: 'manual' | 'auto', reason: string | null = null): Promise<{
+        recordsBeforeFlush: number;
+        dirtyBeforeFlush: number;
+        recordsFlushed: number;
+        bytesWritten: number;
+        segmentCreated: string | null;
+        systemSegmentCreated: string | null;
+        flushDurationMs: number;
+        walTruncated: boolean;
+        trigger: 'manual' | 'auto';
+        reason: string | null;
+    }> {
+        const start = Date.now();
+        const recordsBeforeFlush = this.memTable.count;
+        const dirtyBeforeFlush = this.memTable.dirtyCount;
 
-        const files = (await fs.readdir(dir))
-            .filter((f) => f.endsWith('.gics'))
-            .sort();
+        if (recordsBeforeFlush === 0 || dirtyBeforeFlush === 0) {
+            this.memTable.resetDirty();
+            await this.wal.truncate();
+            return {
+                recordsBeforeFlush,
+                dirtyBeforeFlush,
+                recordsFlushed: 0,
+                bytesWritten: 0,
+                segmentCreated: null,
+                systemSegmentCreated: null,
+                flushDurationMs: Date.now() - start,
+                walTruncated: true,
+                trigger,
+                reason,
+            };
+        }
 
-        for (const fileName of files) {
-            const filePath = path.join(dir, fileName);
-            const raw = await fs.readFile(filePath);
-            const snapshots = await this.decodeSnapshotsWithFallback(raw, tier === 'cold');
-            for (const snapshot of snapshots) {
-                for (const [key, fields] of snapshot.items.entries()) {
-                    const strKey = String(key);
-                    if (!InsightPersistence.isInsightKey(strKey)) continue;
-                    const prev = latest.get(strKey);
-                    if (!prev || snapshot.timestamp >= prev.ts) {
-                        latest.set(strKey, { ts: snapshot.timestamp, fields: { ...fields } });
-                    }
-                }
+        const dirtyRecords = this.memTable.scan().filter((record) => record.dirty);
+        const userRecords = dirtyRecords.filter((record) => !isSystemKey(record.key));
+        const systemRecordMap = new Map<string, { key: string; fields: Record<string, number | string>; updated: number }>();
+        const now = Date.now();
+
+        for (const record of dirtyRecords) {
+            if (!isSystemKey(record.key)) continue;
+            systemRecordMap.set(record.key, { key: record.key, fields: { ...record.fields }, updated: record.updated });
+        }
+
+        for (const [key, fields] of this.modules.nativeInsight.snapshotBehavioral()) {
+            systemRecordMap.set(key, { key, fields, updated: now });
+        }
+        for (const [key, fields] of this.modules.nativeInsight.snapshotCorrelations()) {
+            systemRecordMap.set(key, { key, fields, updated: now });
+        }
+        for (const [key, fields] of this.modules.nativeInsight.snapshotConfidence()) {
+            systemRecordMap.set(key, { key, fields, updated: now });
+        }
+
+        await fs.mkdir(this.warmDirPath, { recursive: true });
+        let userSegmentPath: string | null = null;
+        let systemSegmentPath: string | null = null;
+        let bytesWritten = 0;
+
+        if (userRecords.length > 0) {
+            userSegmentPath = path.join(this.warmDirPath, `warm-${Date.now()}-${Math.random().toString(36).slice(2)}.gics`);
+            bytesWritten += await this.writeSegment(userSegmentPath, userRecords.map((record) => ({
+                key: record.key,
+                fields: { ...record.fields },
+                updated: record.updated,
+            })));
+            for (const record of userRecords) {
+                this.stateIndex.recordPut(record.key, record.fields, {
+                    timestamp: record.updated,
+                    tier: 'warm',
+                    segmentRef: userSegmentPath,
+                });
             }
+            this.segmentCatalog.set(userSegmentPath, { filePath: userSegmentPath, tier: 'warm', system: false });
         }
 
-        const out = new Map<string, Record<string, number | string>>();
-        for (const [key, value] of latest.entries()) {
-            out.set(key, value.fields);
+        const systemRecords = Array.from(systemRecordMap.values());
+        if (systemRecords.length > 0) {
+            systemSegmentPath = path.join(this.warmDirPath, `${GICSDaemon.SYSTEM_SEGMENT_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2)}.gics`);
+            bytesWritten += await this.writeSegment(systemSegmentPath, systemRecords);
+            for (const record of systemRecords) {
+                this.stateIndex.recordPut(record.key, record.fields, {
+                    timestamp: record.updated,
+                    tier: 'warm',
+                    segmentRef: systemSegmentPath,
+                });
+            }
+            this.segmentCatalog.set(systemSegmentPath, { filePath: systemSegmentPath, tier: 'warm', system: true });
         }
-        return out;
-    }
 
-    private async restoreInsightsFromSegments(): Promise<{ behavioral: number; confidence: number; total: number; }> {
-        const warm = await this.collectInsightRecordsFromTier('warm');
-        const cold = await this.collectInsightRecordsFromTier('cold');
+        this.memTable.clear();
+        await this.wal.truncate();
+        await this.stateIndex.save();
 
-        const merged = new Map<string, Record<string, number | string>>();
-        for (const [k, v] of warm) merged.set(k, v);
-        for (const [k, v] of cold) merged.set(k, v);
+        await this.modules.registry.onFlush({
+            trigger,
+            recordsFlushed: dirtyRecords.length,
+            bytesWritten,
+            segmentCreated: userSegmentPath,
+        }, this.moduleContext);
 
-        const behavioral = this.insightPersistence.restoreBehavioral(merged, this.insightTracker);
-        const confidence = this.insightPersistence.restoreConfidence(merged, this.confidenceTracker);
-        return { behavioral, confidence, total: behavioral + confidence };
+        return {
+            recordsBeforeFlush,
+            dirtyBeforeFlush,
+            recordsFlushed: dirtyRecords.length,
+            bytesWritten,
+            segmentCreated: userSegmentPath,
+            systemSegmentCreated: systemSegmentPath,
+            flushDurationMs: Date.now() - start,
+            walTruncated: true,
+            trigger,
+            reason,
+        };
     }
 
     private async compactWarmSegments(): Promise<{
@@ -548,7 +687,7 @@ export class GICSDaemon {
     }> {
         await fs.mkdir(this.warmDirPath, { recursive: true });
         const warmFiles = (await fs.readdir(this.warmDirPath))
-            .filter((name) => name.endsWith('.gics') && !name.startsWith(GICSDaemon.INSIGHT_SEGMENT_PREFIX))
+            .filter((name) => name.endsWith('.gics') && !this.isSystemSegmentFile(name))
             .sort();
 
         if (warmFiles.length < 2) {
@@ -560,67 +699,55 @@ export class GICSDaemon {
                 bytesBefore: 0,
                 bytesAfter: 0,
                 spaceReclaimedBytes: 0,
-                outputSegment: null
+                outputSegment: null,
             };
         }
 
-        const latestByKey = new Map<string, { fields: Record<string, number | string>; timestamp: number }>();
-        let recordsSeen = 0;
-        let bytesBefore = 0;
+        const warmState = this.stateIndex.snapshotEntries()
+            .filter((entry) => entry.tier === 'warm' && !entry.deleted && entry.fields && !isSystemKey(entry.key));
 
+        const mergedRecords = warmState.map((entry) => ({
+            key: entry.key,
+            fields: { ...entry.fields! },
+            updated: entry.timestamp,
+        }));
+
+        let bytesBefore = 0;
+        const oldSegmentRefs: string[] = [];
         for (const fileName of warmFiles) {
             const filePath = path.join(this.warmDirPath, fileName);
-            const raw = await fs.readFile(filePath);
-            bytesBefore += raw.length;
-
-            const decoder = new GICSv2Decoder(raw);
-            const snapshots = await decoder.getAllGenericSnapshots();
-
-            for (const snapshot of snapshots) {
-                for (const [key, fields] of snapshot.items.entries()) {
-                    recordsSeen++;
-                    latestByKey.set(String(key), {
-                        fields: { ...fields },
-                        timestamp: snapshot.timestamp
-                    });
-                }
-            }
+            const stat = await fs.stat(filePath);
+            bytesBefore += stat.size;
+            oldSegmentRefs.push(filePath);
         }
 
-        const mergedEntries = Array.from(latestByKey.entries()).map(([key, payload]) => ({ key, ...payload }));
-        const mergedFields = mergedEntries.map((entry) => entry.fields);
-        const schema = this.inferSchemaFromFields(mergedFields);
+        const outputSegment = path.join(this.warmDirPath, `compact-${Date.now()}-${Math.random().toString(36).slice(2)}.gics`);
+        const bytesAfter = await this.writeSegment(outputSegment, mergedRecords);
 
-        const mergedSnapshot: GenericSnapshot<Record<string, number | string>> = {
-            timestamp: Date.now(),
-            items: new Map(mergedEntries.map((entry) => [entry.key, entry.fields]))
-        };
-
-        const encoder = new GICSv2Encoder({ schema });
-        await encoder.addSnapshot(mergedSnapshot);
-        const compactedBytes = await encoder.finish();
-
-        const outputName = `compact-${Date.now()}-${Math.random().toString(36).slice(2)}.gics`;
-        const outputPath = path.join(this.warmDirPath, outputName);
-        await fs.writeFile(outputPath, compactedBytes);
-
-        for (const fileName of warmFiles) {
-            await fs.unlink(path.join(this.warmDirPath, fileName));
+        for (const filePath of oldSegmentRefs) {
+            await fs.unlink(filePath);
+            this.segmentCatalog.delete(filePath);
         }
+        this.segmentCatalog.set(outputSegment, { filePath: outputSegment, tier: 'warm', system: false });
 
-        await this.rebuildTierIndex();
+        const remap = new Map<string, { tier: StateIndexTier; segmentRef: string | null }>();
+        for (const oldRef of oldSegmentRefs) {
+            remap.set(oldRef, { tier: 'warm', segmentRef: outputSegment });
+        }
+        this.stateIndex.remapSegments(remap);
+        await this.stateIndex.save();
 
+        await this.modules.registry.onCompact({ compacted: true, segmentsMerged: warmFiles.length }, this.moduleContext);
         return {
             compacted: true,
             segmentsMerged: warmFiles.length,
-            recordsDeduplicated: Math.max(0, recordsSeen - latestByKey.size),
+            recordsDeduplicated: Math.max(0, warmFiles.length - 1),
             bytesBefore,
-            bytesAfter: compactedBytes.length,
-            spaceReclaimedBytes: Math.max(0, bytesBefore - compactedBytes.length),
-            outputSegment: outputPath
+            bytesAfter,
+            spaceReclaimedBytes: Math.max(0, bytesBefore - bytesAfter),
+            outputSegment,
         };
     }
-
     private async reencodeForColdEncryption(inputPath: string, outputPath: string, password: string): Promise<number> {
         const raw = await fs.readFile(inputPath);
         const decoder = new GICSv2Decoder(raw);
@@ -649,8 +776,7 @@ export class GICSDaemon {
         await fs.mkdir(this.coldDirPath, { recursive: true });
 
         const now = Date.now();
-        const warmFiles = (await fs.readdir(this.warmDirPath))
-            .filter((name) => name.endsWith('.gics') && !name.startsWith(GICSDaemon.INSIGHT_SEGMENT_PREFIX));
+        const warmFiles = (await fs.readdir(this.warmDirPath)).filter((name) => name.endsWith('.gics'));
         const archivedFiles: string[] = [];
         let bytesArchived = 0;
 
@@ -659,17 +785,18 @@ export class GICSDaemon {
             throw new Error(`Cold encryption enabled but env var ${this.coldPasswordEnvVar} is missing`);
         }
 
+        const remap = new Map<string, { tier: StateIndexTier; segmentRef: string | null }>();
         for (const fileName of warmFiles) {
             const warmPath = path.join(this.warmDirPath, fileName);
             const st = await fs.stat(warmPath);
             if ((now - st.mtimeMs) < this.warmRetentionMs) continue;
 
-            const coldName = `cold-${Date.now()}-${Math.random().toString(36).slice(2)}.gics`;
+            const prefix = this.isSystemSegmentFile(fileName) ? GICSDaemon.SYSTEM_SEGMENT_PREFIX : 'cold-';
+            const coldName = `${prefix}${Date.now()}-${Math.random().toString(36).slice(2)}.gics`;
             const coldPath = path.join(this.coldDirPath, coldName);
 
             if (this.coldEncryption) {
-                const written = await this.reencodeForColdEncryption(warmPath, coldPath, password);
-                bytesArchived += written;
+                bytesArchived += await this.reencodeForColdEncryption(warmPath, coldPath, password);
                 await fs.unlink(warmPath);
             } else {
                 await fs.rename(warmPath, coldPath);
@@ -677,6 +804,13 @@ export class GICSDaemon {
             }
 
             archivedFiles.push(coldPath);
+            this.segmentCatalog.delete(warmPath);
+            this.segmentCatalog.set(coldPath, {
+                filePath: coldPath,
+                tier: 'cold',
+                system: this.isSystemSegmentFile(fileName),
+            });
+            remap.set(warmPath, { tier: 'cold', segmentRef: coldPath });
         }
 
         const deletedColdFiles: string[] = [];
@@ -685,14 +819,22 @@ export class GICSDaemon {
             for (const fileName of coldFiles) {
                 const coldPath = path.join(this.coldDirPath, fileName);
                 const st = await fs.stat(coldPath);
-                if ((now - st.mtimeMs) > this.coldRetentionMs) {
-                    await fs.unlink(coldPath);
-                    deletedColdFiles.push(coldPath);
-                }
+                if ((now - st.mtimeMs) <= this.coldRetentionMs) continue;
+                await fs.unlink(coldPath);
+                deletedColdFiles.push(coldPath);
+                this.segmentCatalog.delete(coldPath);
+                this.stateIndex.removeEntriesForSegment(coldPath);
             }
         }
 
-        await this.rebuildTierIndex();
+        if (remap.size > 0) {
+            this.stateIndex.remapSegments(remap);
+        }
+        await this.stateIndex.save();
+        await this.modules.registry.onRotate({
+            rotated: archivedFiles.length > 0 || deletedColdFiles.length > 0,
+            filesArchived: archivedFiles.length,
+        }, this.moduleContext);
 
         return {
             rotated: archivedFiles.length > 0 || deletedColdFiles.length > 0,
@@ -700,105 +842,251 @@ export class GICSDaemon {
             filesDeleted: deletedColdFiles.length,
             bytesArchived,
             archivedFiles,
-            deletedColdFiles
+            deletedColdFiles,
         };
     }
 
-    private async flushMemTableToWarm(trigger: 'manual' | 'auto', reason: string | null = null): Promise<{
-        recordsBeforeFlush: number;
-        dirtyBeforeFlush: number;
-        recordsFlushed: number;
-        bytesWritten: number;
-        segmentCreated: string | null;
-        flushDurationMs: number;
-        walTruncated: boolean;
-        trigger: 'manual' | 'auto';
-        reason: string | null;
-    }> {
-        const start = Date.now();
-        const recordsBeforeFlush = this.memTable.count;
-        const dirtyBeforeFlush = this.memTable.dirtyCount;
+    private async upsertSystemRecord(key: string, fields: Record<string, number | string>): Promise<void> {
+        await this.wal.append(Operation.PUT, key, fields);
+        this.memTable.put(key, fields);
+        this.stateIndex.recordPut(key, fields, {
+            tier: 'hot',
+            segmentRef: null,
+            timestamp: Date.now(),
+        });
+    }
 
-        if (recordsBeforeFlush === 0 || dirtyBeforeFlush === 0) {
-            this.memTable.resetDirty();
-            await this.wal.truncate();
-            return {
-                recordsBeforeFlush,
-                dirtyBeforeFlush,
-                recordsFlushed: 0,
-                bytesWritten: 0,
-                segmentCreated: null,
-                flushDurationMs: Date.now() - start,
-                walTruncated: true,
-                trigger,
-                reason
-            };
+    private getTierIndexStats(): { hotKeys: number; warmKeys: number; coldKeys: number; } {
+        let hotKeys = 0;
+        let warmKeys = 0;
+        let coldKeys = 0;
+        for (const entry of this.stateIndex.snapshotEntries()) {
+            if (entry.deleted || isHiddenSystemKey(entry.key)) continue;
+            if (entry.tier === 'hot') hotKeys++;
+            else if (entry.tier === 'warm') warmKeys++;
+            else coldKeys++;
+        }
+        return { hotKeys, warmKeys, coldKeys };
+    }
+
+    private async handlePut(id: any, params: any): Promise<any> {
+        if (this.supervisor.isDegraded()) {
+            const buffered = this.supervisor.bufferWrite(params.key, params.fields);
+            return { jsonrpc: '2.0', id, result: { ok: true, degraded: true, bufferedSeq: buffered.seq } };
         }
 
-        const behavioral = this.insightPersistence.snapshotBehavioral(this.insightTracker);
-        const correlations = this.insightPersistence.snapshotCorrelations(this.correlationAnalyzer);
-        const confidence = this.insightPersistence.snapshotConfidence(this.confidenceTracker);
+        const timestamp = Date.now();
+        await this.modules.registry.beforeWrite({
+            key: params.key,
+            fields: { ...params.fields },
+            timestamp,
+        }, this.moduleContext);
 
-        const records = this.memTable
-            .scan()
-            .filter((r) => !InsightPersistence.isInsightKey(r.key));
-        const { schema, snapshot } = this.inferSchemaAndSnapshot(records);
-        const encoder = new GICSv2Encoder({ schema });
-        await encoder.addSnapshot(snapshot);
-        const packed = await encoder.finish();
+        await this.wal.append(Operation.PUT, params.key, params.fields);
+        this.memTable.put(params.key, params.fields);
+        this.stateIndex.recordPut(params.key, params.fields, {
+            tier: 'hot',
+            segmentRef: null,
+            timestamp,
+        });
+        await this.modules.registry.onWrite({
+            key: params.key,
+            fields: { ...params.fields },
+            timestamp,
+        }, this.moduleContext);
 
-        await fs.mkdir(this.warmDirPath, { recursive: true });
-        const segmentName = `warm-${Date.now()}-${Math.random().toString(36).slice(2)}.gics`;
-        const segmentPath = path.join(this.warmDirPath, segmentName);
-        await fs.writeFile(segmentPath, packed);
-
-        const insightItems = new Map<string, Record<string, number | string>>();
-        for (const [key, fields] of behavioral) insightItems.set(key, fields);
-        for (const [key, fields] of correlations) insightItems.set(key, fields);
-        for (const [key, fields] of confidence) insightItems.set(key, fields);
-
-        if (insightItems.size > 0) {
-            const insightSchema = this.inferSchemaFromFields(Array.from(insightItems.values()));
-            const insightSnapshot: GenericSnapshot<Record<string, number | string>> = {
-                timestamp: Date.now(),
-                items: insightItems,
-            };
-            const insightEncoder = new GICSv2Encoder({ schema: insightSchema });
-            await insightEncoder.addSnapshot(insightSnapshot);
-            const insightPacked = await insightEncoder.finish();
-            const insightSegmentName = `${GICSDaemon.INSIGHT_SEGMENT_PREFIX}${Date.now()}.gics`;
-            await fs.writeFile(path.join(this.warmDirPath, insightSegmentName), insightPacked);
+        const behavior = this.modules.nativeInsight.getInsight(params.key) ?? undefined;
+        const flushDecision = this.memTable.shouldFlush();
+        if (!flushDecision.shouldFlush) {
+            return { jsonrpc: '2.0', id, result: { ok: true, behavior } };
         }
 
-        await this.rebuildTierIndex();
-
-        this.memTable.resetDirty();
-        await this.wal.truncate();
+        const autoFlush = await FileLock.withExclusiveLock(this.storageLockTarget, async () => {
+            return this.flushMemTableToWarm('auto', flushDecision.reason);
+        }, this.fileLockTimeoutMs);
 
         return {
-            recordsBeforeFlush,
-            dirtyBeforeFlush,
-            recordsFlushed: records.length,
-            bytesWritten: packed.length,
-            segmentCreated: segmentPath,
-            flushDurationMs: Date.now() - start,
-            walTruncated: true,
-            trigger,
-            reason
+            jsonrpc: '2.0',
+            id,
+            result: {
+                ok: true,
+                behavior,
+                autoFlushed: true,
+                flush: autoFlush,
+            },
         };
     }
 
-    private static readonly WRITE_OPS = new Set(['put', 'delete', 'flush', 'compact', 'rotate']);
-    private static readonly READ_OPS = new Set([
-        'get', 'getInsight', 'getInsights', 'getAccuracy', 'getCorrelations',
-        'getClusters', 'getLeadingIndicators', 'getSeasonalPatterns', 'getForecast',
-        'getAnomalies', 'getRecommendations', 'verify', 'verifyAudit', 'exportAudit',
-    ]);
-    private static readonly SCAN_OPS = new Set(['scan']);
-    private static readonly CONTROL_OPS = new Set([
-        'ping', 'getStatus', 'getHealth', 'resetDegraded',
-        'subscribe', 'unsubscribe', 'reportOutcome', 'recordOutcome',
-    ]);
+    private async handleGet(id: any, params: any): Promise<any> {
+        const key = String(params?.key ?? '');
+        const includeSystem = Boolean(params?.includeSystem ?? isSystemKey(key));
+        let entry = this.stateIndex.getVisible(key, includeSystem);
+        if (!entry) {
+            const rawEntry = this.stateIndex.getEntry(key);
+            if (rawEntry && !rawEntry.fields && !rawEntry.deleted) {
+                entry = await this.hydrateEntryFromSegment(rawEntry);
+            }
+        }
+        if (!entry || entry.deleted || (!includeSystem && isHiddenSystemKey(entry.key)) || !entry.fields) {
+            return { jsonrpc: '2.0', id, result: null };
+        }
+
+        if (entry.tier !== 'hot' && !isHiddenSystemKey(entry.key)) {
+            this.modules.nativeInsight.coldStartBootstrap(entry.key);
+        }
+        await this.modules.registry.onRead({ key: entry.key, timestamp: Date.now() }, this.moduleContext);
+        const behavior = !isHiddenSystemKey(entry.key) ? this.modules.nativeInsight.getInsight(entry.key) : null;
+        return {
+            jsonrpc: '2.0',
+            id,
+            result: {
+                key: entry.key,
+                fields: { ...entry.fields },
+                tier: entry.tier,
+                behavior,
+            },
+        };
+    }
+
+    private async handleDelete(id: any, params: any): Promise<any> {
+        const key = String(params?.key ?? '');
+        const timestamp = Date.now();
+        const { tombstoneKey, tombstoneFields } = this.stateIndex.recordDelete(key, {
+            tier: 'hot',
+            segmentRef: null,
+            timestamp,
+        });
+
+        await this.modules.registry.beforeDelete({
+            key,
+            timestamp,
+            tombstoneKey,
+        }, this.moduleContext);
+
+        await this.wal.append(Operation.DELETE, key, {});
+        await this.wal.append(Operation.PUT, tombstoneKey, tombstoneFields);
+        this.memTable.delete(key);
+        this.memTable.put(tombstoneKey, tombstoneFields);
+        await this.modules.registry.onDelete({ key, timestamp, tombstoneKey }, this.moduleContext);
+        return { jsonrpc: '2.0', id, result: { ok: true, tombstoneKey } };
+    }
+
+    private async handleScan(id: any, params: any): Promise<any> {
+        const options: StateIndexScanOptions = {
+            tiers: params?.tiers ?? 'all',
+            includeSystem: Boolean(params?.includeSystem ?? false),
+            limit: params?.limit,
+            cursor: params?.cursor ?? null,
+            mode: params?.mode ?? 'current',
+        };
+        const result = this.stateIndex.scan(String(params?.prefix ?? ''), options);
+        await this.modules.registry.onScan(result, this.moduleContext);
+        return {
+            jsonrpc: '2.0',
+            id,
+            result: {
+                items: result.items.map((item) => ({
+                    key: item.key,
+                    fields: item.fields,
+                    tier: item.tier,
+                    timestamp: item.timestamp,
+                })),
+                nextCursor: result.nextCursor,
+            },
+        };
+    }
+    private async handleReportOutcome(id: any, params: any): Promise<any> {
+        const insightId = String(params?.insightId ?? '');
+        const result = String(params?.result ?? '');
+        const domain = params?.domain ? String(params.domain) : undefined;
+        const decisionId = params?.decisionId ? String(params.decisionId) : undefined;
+        const timestamp = Date.now();
+        const outcomeEvent = {
+            insightId: insightId || undefined,
+            result,
+            domain,
+            decisionId,
+            context: params?.context,
+            metrics: params?.metrics,
+            timestamp,
+        };
+
+        let disabled = false;
+        if (insightId) {
+            const recorded = this.modules.nativeInsight.recordOutcome(insightId, result as any);
+            if (!recorded || !recorded.found) {
+                return { jsonrpc: '2.0', id, error: { code: -32602, message: `Insight ${insightId} not found` } };
+            }
+            disabled = recorded.nowDisabled;
+            if (!recorded.wasDisabled && recorded.nowDisabled) {
+                this.emitEvent('insight_disabled', { insightId, result });
+            }
+        }
+
+        await this.dispatchOutcomeToModules(outcomeEvent);
+
+        return {
+            jsonrpc: '2.0',
+            id,
+            result: {
+                ok: true,
+                insightId: insightId || undefined,
+                decisionId,
+                domain,
+                result,
+                recordedAt: timestamp,
+                disabled,
+            },
+        };
+    }
+
+    private async handleRecommendations(id: any, params: any): Promise<any> {
+        const predictive = this.modules.nativeInsight.getSignalRecommendations(params);
+        const moduleRecommendations = await this.modules.registry.getRecommendations({
+            domain: params?.domain,
+            subject: params?.subject,
+            limit: params?.limit,
+        }, this.moduleContext);
+        const limit = Math.max(0, Number(params?.limit ?? 0));
+        const combined = [...predictive, ...moduleRecommendations];
+        return { jsonrpc: '2.0', id, result: limit > 0 ? combined.slice(0, limit) : combined };
+    }
+
+    private async handleInfer(id: any, params: any): Promise<any> {
+        const request: InferenceRequest = {
+            domain: String(params?.domain ?? ''),
+            objective: params?.objective ? String(params.objective) : undefined,
+            subject: params?.subject ? String(params.subject) : undefined,
+            context: params?.context ?? {},
+            candidates: Array.isArray(params?.candidates) ? params.candidates : [],
+        };
+        if (!request.domain) {
+            return { jsonrpc: '2.0', id, error: { code: -32602, message: 'infer requires domain' } };
+        }
+        const decision = await this.modules.registry.infer(request, this.moduleContext);
+        return { jsonrpc: '2.0', id, result: decision };
+    }
+
+    private async handleGetProfile(id: any, params: any): Promise<any> {
+        const scope = String(params?.scope ?? this.config.defaultProfileScope ?? 'host:default');
+        const profile = await this.modules.registry.getProfile(scope, this.moduleContext);
+        return { jsonrpc: '2.0', id, result: profile };
+    }
+
+    private async dispatchOutcomeToModules(event: {
+        insightId?: string;
+        result?: string;
+        domain?: string;
+        decisionId?: string;
+        context?: unknown;
+        metrics?: Record<string, number>;
+        timestamp: number;
+    }): Promise<void> {
+        for (const module of this.modules.registry.enabled()) {
+            if (module.manifest.id === 'native-insight') continue;
+            await module.onOutcome?.(event, this.moduleContext);
+        }
+    }
 
     private async handleRequest(request: any, socket?: net.Socket): Promise<any> {
         const { method, params, id, token } = request;
@@ -807,7 +1095,7 @@ export class GICSDaemon {
             return {
                 jsonrpc: '2.0',
                 id: id ?? null,
-                error: { code: -32600, message: 'Invalid Request' }
+                error: { code: -32600, message: 'Invalid Request' },
             };
         }
 
@@ -817,14 +1105,16 @@ export class GICSDaemon {
 
         try {
             const exec = () => this.executeMethod(method, params, id, socket);
-
             if (GICSDaemon.CONTROL_OPS.has(method)) {
                 return await exec();
-            } else if (GICSDaemon.WRITE_OPS.has(method)) {
+            }
+            if (GICSDaemon.WRITE_OPS.has(method)) {
                 return await this.resilience.executeWrite(exec);
-            } else if (GICSDaemon.SCAN_OPS.has(method)) {
+            }
+            if (GICSDaemon.SCAN_OPS.has(method)) {
                 return await this.resilience.executeScan(exec);
-            } else if (GICSDaemon.READ_OPS.has(method)) {
+            }
+            if (GICSDaemon.READ_OPS.has(method)) {
                 return await this.resilience.executeRead(exec);
             }
             return await exec();
@@ -854,13 +1144,13 @@ export class GICSDaemon {
                     }
                     const resetOk = await this.supervisor.resetDegraded();
                     if (resetOk) {
-                        // Flush buffered writes post-recovery
                         const walKeys = new Set<string>();
-                        this.memTable.scan('').forEach(r => walKeys.add(r.key));
+                        this.memTable.scan('').forEach((record) => walKeys.add(record.key));
                         const flushResult = this.supervisor.flushBuffer(
                             (key) => walKeys.has(key),
                             (key, fields) => {
                                 this.memTable.put(key, fields);
+                                this.stateIndex.recordPut(key, fields, { tier: 'hot', segmentRef: null, timestamp: Date.now() });
                             }
                         );
                         return { jsonrpc: '2.0', id, result: { ok: true, flush: flushResult } };
@@ -868,194 +1158,23 @@ export class GICSDaemon {
                     return { jsonrpc: '2.0', id, error: { code: -32603, message: 'Failed to exit DEGRADED state' } };
                 }
 
-                case 'put': {
-                    // DEGRADED mode: buffer writes in-memory instead of WAL
-                    if (this.supervisor.isDegraded()) {
-                        const buffered = this.supervisor.bufferWrite(params.key, params.fields);
-                        return { jsonrpc: '2.0', id, result: { ok: true, degraded: true, bufferedSeq: buffered.seq } };
-                    }
+                case 'put':
+                    return await this.handlePut(id, params);
 
-                    // Audit log ANTES de la mutación (mandatory)
-                    try {
-                        await this.auditChain?.append(
-                            params.actor ?? 'system:unknown',
-                            'put',
-                            params.key,
-                            params.fields
-                        );
-                    } catch (auditErr: any) {
-                        return { jsonrpc: '2.0', id, error: { code: -32603, message: `Audit failed: ${auditErr.message}` } };
-                    }
-
-                    await this.wal.append(Operation.PUT, params.key, params.fields);
-                    this.memTable.put(params.key, params.fields);
-                    const putTs = Date.now();
-
-                    // Phase 9: Insight Engine wiring (best-effort, failures don't block put)
-                    let writeBehavior = this.insightTracker.getInsight(params.key) ?? undefined;
-                    try {
-                        const prevBehavior = this.insightTracker.getInsight(params.key);
-                        const prevCorrelations = this.correlationAnalyzer.getCorrelations();
-                        const prevCorrelationSet = new Set(prevCorrelations.map((c) => `${c.itemA}|${c.itemB}`));
-                        const prevClusterSet = new Set(this.correlationAnalyzer.getClusters().map((c) => c.id));
-                        writeBehavior = this.insightTracker.onWrite(params.key, putTs, params.fields);
-                        this.correlationAnalyzer.onItemUpdate(params.key, params.fields, putTs);
-                        this.correlationAnalyzer.setLifecycleHint(params.key, writeBehavior.lifecycle);
-                        const signalResult = this.predictiveSignals.onBehaviorUpdate(writeBehavior, params.fields);
-
-                        // Emit events to subscribers
-                        if (prevBehavior && prevBehavior.lifecycle !== writeBehavior.lifecycle) {
-                            this.emitEvent('lifecycle_change', { key: params.key, from: prevBehavior.lifecycle, to: writeBehavior.lifecycle });
-
-                            // Phase 12: Lifecycle-based actions
-                            if (writeBehavior.lifecycle === 'dormant' || writeBehavior.lifecycle === 'dead') {
-                                // Item became dormant/dead → trigger retention policy (compress old data)
-                                if (this.promptDistiller) {
-                                    this.promptDistiller.runRetentionPolicy().catch((err) => {
-                                        console.warn(`[GICS] PromptDistiller retention policy failed: ${err.message}`);
-                                    });
-                                }
-                            } else if (writeBehavior.lifecycle === 'resurrected') {
-                                // Item resurrected from dead state → log alert
-                                console.log(`[GICS] ALERT: Item resurrected: ${params.key} (previous: ${prevBehavior.lifecycle})`);
-                                try {
-                                    await this.auditChain?.append(
-                                        'system:lifecycle',
-                                        'item_resurrected',
-                                        params.key,
-                                        { from: prevBehavior.lifecycle, timestamp: putTs }
-                                    );
-                                } catch (auditErr: any) {
-                                    console.warn(`[GICS] Failed to audit resurrection: ${auditErr.message}`);
-                                }
-                            }
-                        }
-                        for (const anomaly of signalResult.newAnomalies) {
-                            this.emitEvent('anomaly_detected', anomaly);
-                        }
-                        for (const rec of signalResult.newRecommendations) {
-                            this.emitEvent('recommendation_new', rec);
-                        }
-
-                        const nextCorrelations = this.correlationAnalyzer.getCorrelations();
-                        for (const corr of nextCorrelations) {
-                            const corrId = `${corr.itemA}|${corr.itemB}`;
-                            if (!prevCorrelationSet.has(corrId)) {
-                                this.emitEvent('correlation_discovered', corr);
-                            }
-                        }
-
-                        const nextClusterSet = new Set(this.correlationAnalyzer.getClusters().map((c) => c.id));
-                        for (const id of nextClusterSet) {
-                            if (!prevClusterSet.has(id)) this.emitEvent('cluster_formed', { clusterId: id });
-                        }
-                        for (const id of prevClusterSet) {
-                            if (!nextClusterSet.has(id)) this.emitEvent('cluster_dissolved', { clusterId: id });
-                        }
-                    } catch (insightErr: any) {
-                        // Best-effort: insight failures do not block put operation
-                        console.warn(`[GICS] Insight engine error (best-effort): ${insightErr.message}`);
-                    }
-
-                    const flushDecision = this.memTable.shouldFlush();
-                    if (!flushDecision.shouldFlush) {
-                        return { jsonrpc: '2.0', id, result: { ok: true, behavior: writeBehavior } };
-                    }
-
-                    const autoFlush = await FileLock.withExclusiveLock(this.storageLockTarget, async () => {
-                        return this.flushMemTableToWarm('auto', flushDecision.reason);
-                    }, this.fileLockTimeoutMs);
-
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: {
-                            ok: true,
-                            behavior: writeBehavior,
-                            autoFlushed: true,
-                            flush: autoFlush
-                        }
-                    };
-                }
-
-                case 'get': {
-                    const record = this.memTable.get(params.key);
-                    if (record) {
-                        const behavior = this.insightTracker.onRead(params.key);
-                        return { jsonrpc: '2.0', id, result: { key: record.key, fields: record.fields, tier: 'hot', behavior } };
-                    }
-
-                    const warmRecord = await FileLock.withSharedLock(this.storageLockTarget, async () => {
-                        return this.resolveFromTier(params.key, 'warm');
-                    }, this.fileLockTimeoutMs);
-                    if (warmRecord) {
-                        this.coldStartBootstrap(params.key);
-                        const behavior = this.insightTracker.onRead(params.key);
-                        return { jsonrpc: '2.0', id, result: { ...warmRecord, behavior } };
-                    }
-
-                    const coldRecord = await FileLock.withSharedLock(this.storageLockTarget, async () => {
-                        return this.resolveFromTier(params.key, 'cold');
-                    }, this.fileLockTimeoutMs);
-                    if (coldRecord) {
-                        this.coldStartBootstrap(params.key);
-                        const behavior = this.insightTracker.onRead(params.key);
-                        return { jsonrpc: '2.0', id, result: { ...coldRecord, behavior } };
-                    }
-                    return { jsonrpc: '2.0', id, result: null };
-                }
+                case 'get':
+                    return await this.handleGet(id, params);
 
                 case 'getInsight':
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: this.insightTracker.getInsight(String(params?.key ?? ''))
-                    };
+                    return { jsonrpc: '2.0', id, result: this.modules.nativeInsight.getInsight(String(params?.key ?? '')) };
 
                 case 'getInsights': {
-                    const lifecycle = params?.lifecycle as LifecycleStage | undefined;
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: this.insightTracker.getInsights(lifecycle ? { lifecycle } : undefined)
-                    };
+                    const lifecycle = params?.lifecycle as any;
+                    return { jsonrpc: '2.0', id, result: this.modules.nativeInsight.getInsights(lifecycle ? { lifecycle } : undefined) };
                 }
 
                 case 'recordOutcome':
-                case 'reportOutcome': {
-                    const outcomeInsightId = String(params?.insightId ?? '');
-                    const outcomeResult = String(params?.result ?? '') as OutcomeResult;
-                    const recordedMeta = this.predictiveSignals.recordOutcome(outcomeInsightId, outcomeResult, this.confidenceTracker);
-                    if (!recordedMeta || !recordedMeta.found) {
-                        return { jsonrpc: '2.0', id, error: { code: -32602, message: `Insight ${outcomeInsightId} not found` } };
-                    }
-
-                    // Phase 9: Audit log when insight type gets disabled (graceful)
-                    if (!recordedMeta.wasDisabled && recordedMeta.nowDisabled) {
-                        try {
-                            await this.auditChain?.append(
-                                params.actor ?? 'system:confidence',
-                                'insight_disabled',
-                                outcomeInsightId,
-                                { result: outcomeResult, timestamp: Date.now() }
-                            );
-                        } catch (auditErr: any) {
-                            console.warn(`[GICS] Failed to audit insight disable: ${auditErr.message}`);
-                        }
-                    }
-
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: {
-                            ok: true,
-                            insightId: outcomeInsightId,
-                            result: outcomeResult,
-                            recordedAt: Date.now(),
-                            disabled: recordedMeta.nowDisabled
-                        }
-                    };
-                }
+                case 'reportOutcome':
+                    return await this.handleReportOutcome(id, params);
 
                 case 'subscribe': {
                     const subEvents = Array.isArray(params?.events) ? params.events as string[] : [];
@@ -1063,11 +1182,7 @@ export class GICSDaemon {
                     if (socket) {
                         this.subscriptions.set(subscriptionId, { socket, events: subEvents });
                     }
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: { subscriptionId, events: subEvents }
-                    };
+                    return { jsonrpc: '2.0', id, result: { subscriptionId, events: subEvents } };
                 }
 
                 case 'unsubscribe': {
@@ -1077,247 +1192,152 @@ export class GICSDaemon {
                 }
 
                 case 'getAccuracy':
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: this.confidenceTracker.getAccuracy(params?.insightType, params?.scope)
-                    };
+                    return { jsonrpc: '2.0', id, result: this.modules.nativeInsight.getAccuracy(params?.insightType, params?.scope) };
 
                 case 'getCorrelations':
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: this.correlationAnalyzer.getCorrelations(params?.key)
-                    };
+                    return { jsonrpc: '2.0', id, result: this.modules.nativeInsight.getCorrelations(params?.key) };
 
                 case 'getClusters':
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: this.correlationAnalyzer.getClusters()
-                    };
+                    return { jsonrpc: '2.0', id, result: this.modules.nativeInsight.getClusters() };
 
                 case 'getLeadingIndicators':
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: this.correlationAnalyzer.getLeadingIndicators(params?.key)
-                    };
+                    return { jsonrpc: '2.0', id, result: this.modules.nativeInsight.getLeadingIndicators(params?.key) };
 
                 case 'getSeasonalPatterns':
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: this.correlationAnalyzer.getSeasonalPatterns(params?.key)
-                    };
+                    return { jsonrpc: '2.0', id, result: this.modules.nativeInsight.getSeasonalPatterns(params?.key) };
 
-                case 'getForecast': {
-                    const fKey = String(params?.key ?? '');
-                    const fField = String(params?.field ?? '');
-                    const fBehavior = this.insightTracker.getInsight(fKey);
-                    if (!fBehavior) return { jsonrpc: '2.0', id, result: null };
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: this.predictiveSignals.getForecast(fBehavior, fField, params?.horizon)
-                    };
-                }
+                case 'getForecast':
+                    return { jsonrpc: '2.0', id, result: this.modules.nativeInsight.getForecast(String(params?.key ?? ''), String(params?.field ?? ''), params?.horizon) };
 
                 case 'getAnomalies':
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: this.predictiveSignals.getAnomalies(params?.since)
-                    };
+                    return { jsonrpc: '2.0', id, result: this.modules.nativeInsight.getAnomalies(params?.since) };
 
                 case 'getRecommendations':
-                    return {
-                        jsonrpc: '2.0',
-                        id,
-                        result: this.predictiveSignals.getRecommendations(params)
-                    };
+                    return await this.handleRecommendations(id, params);
+
+                case 'infer':
+                    return await this.handleInfer(id, params);
+
+                case 'getProfile':
+                    return await this.handleGetProfile(id, params);
 
                 case 'delete':
-                    // Audit log ANTES de la mutación (mandatory)
-                    try {
-                        await this.auditChain?.append(
-                            params.actor ?? 'system:unknown',
-                            'delete',
-                            params.key,
-                            {}
-                        );
-                    } catch (auditErr: any) {
-                        return { jsonrpc: '2.0', id, error: { code: -32603, message: `Audit failed: ${auditErr.message}` } };
-                    }
-
-                    await this.wal.append(Operation.DELETE, params.key, {});
-                    this.memTable.delete(params.key);
-                    return { jsonrpc: '2.0', id, result: { ok: true } };
+                    return await this.handleDelete(id, params);
 
                 case 'scan':
-                    const results = this.memTable
-                        .scan(params.prefix)
-                        .filter((r) => !InsightPersistence.isInsightKey(r.key));
-                    return { jsonrpc: '2.0', id, result: { items: results.map(r => ({ key: r.key, fields: r.fields })) } };
+                    return await this.handleScan(id, params);
 
                 case 'verify': {
                     const tier = params?.tier as 'warm' | 'cold' | undefined;
                     return FileLock.withSharedLock(this.storageLockTarget, async () => {
                         const details: Array<{ file: string; tier: string; valid: boolean; error?: string }> = [];
                         const tiers: Array<'warm' | 'cold'> = tier ? [tier] : ['warm', 'cold'];
-                        for (const t of tiers) {
-                            const dir = t === 'warm' ? this.warmDirPath : this.coldDirPath;
+                        for (const currentTier of tiers) {
+                            const dir = currentTier === 'warm' ? this.warmDirPath : this.coldDirPath;
                             if (!existsSync(dir)) continue;
-                            const files = (await fs.readdir(dir)).filter(f => f.endsWith('.gics'));
-                            for (const f of files) {
-                                const filePath = path.join(dir, f);
+                            const files = (await fs.readdir(dir)).filter((name) => name.endsWith('.gics'));
+                            for (const fileName of files) {
+                                const filePath = path.join(dir, fileName);
                                 try {
                                     const raw = await fs.readFile(filePath);
-                                    const decoder = t === 'cold' && (process.env[this.coldPasswordEnvVar] ?? '')
+                                    const decoder = currentTier === 'cold' && (process.env[this.coldPasswordEnvVar] ?? '')
                                         ? new GICSv2Decoder(raw, { password: process.env[this.coldPasswordEnvVar] })
                                         : new GICSv2Decoder(raw);
                                     const valid = await decoder.verifyIntegrityOnly();
-                                    details.push({ file: f, tier: t, valid });
+                                    details.push({ file: fileName, tier: currentTier, valid });
                                 } catch (e: any) {
-                                    details.push({ file: f, tier: t, valid: false, error: e.message });
+                                    details.push({ file: fileName, tier: currentTier, valid: false, error: e.message });
                                 }
                             }
                         }
-                        const allValid = details.every((d) => d.valid);
-                        return { jsonrpc: '2.0', id, result: { valid: allValid, details } };
+                        return { jsonrpc: '2.0', id, result: { valid: details.every((item) => item.valid), details } };
                     }, this.fileLockTimeoutMs);
                 }
 
-                case 'flush': {
-                    // Phase 2.1 flush: MemTable -> WARM segment + WAL truncate.
+                case 'flush':
                     return FileLock.withExclusiveLock(this.storageLockTarget, async () => {
                         const flushResult = await this.flushMemTableToWarm('manual');
-
-                        return {
-                            jsonrpc: '2.0',
-                            id,
-                            result: {
-                                ok: true,
-                                ...flushResult
-                            }
-                        };
+                        return { jsonrpc: '2.0', id, result: { ok: true, ...flushResult } };
                     }, this.fileLockTimeoutMs);
-                }
 
-                case 'compact': {
+                case 'compact':
                     return FileLock.withExclusiveLock(this.storageLockTarget, async () => {
                         const compaction = await this.compactWarmSegments();
-                        return {
-                            jsonrpc: '2.0',
-                            id,
-                            result: {
-                                ok: true,
-                                ...compaction
-                            }
-                        };
+                        return { jsonrpc: '2.0', id, result: { ok: true, ...compaction } };
                     }, this.fileLockTimeoutMs);
-                }
 
-                case 'rotate': {
+                case 'rotate':
                     return FileLock.withExclusiveLock(this.storageLockTarget, async () => {
                         const rotation = await this.rotateWarmToCold();
-                        return {
-                            jsonrpc: '2.0',
-                            id,
-                            result: {
-                                ok: true,
-                                ...rotation
-                            }
-                        };
+                        return { jsonrpc: '2.0', id, result: { ok: true, ...rotation } };
                     }, this.fileLockTimeoutMs);
+
+                case 'verifyAudit': {
+                    const auditResult = await this.modules.auditChain.verify();
+                    return { jsonrpc: '2.0', id, result: auditResult };
                 }
 
-                case 'verifyAudit':
-                    const auditResult = await this.auditChain?.verify();
-                    return { jsonrpc: '2.0', id, result: auditResult };
-
-                case 'exportAudit':
-                    const auditLines = await this.auditChain?.export();
+                case 'exportAudit': {
+                    const auditLines = await this.modules.auditChain.export();
                     return { jsonrpc: '2.0', id, result: { entries: auditLines } };
+                }
 
                 case 'getHealth': {
-                    // Phase 13: Health endpoint (response time < 100ms)
                     const healthStart = Date.now();
-
-                    // Basic metrics (fast)
+                    const tierStats = this.getTierIndexStats();
+                    const modulesHealth = await this.modules.registry.health();
+                    const auditHealth = await this.modules.auditChain.health();
                     const health: any = {
                         status: 'ok',
                         timestamp: Date.now(),
                         uptime: process.uptime(),
                         supervisor: this.supervisor.getStatus(),
+                        memTable: {
+                            count: this.memTable.count,
+                            sizeBytes: this.memTable.sizeBytes,
+                            dirtyCount: this.memTable.dirtyCount,
+                        },
+                        wal: {
+                            type: this.walType,
+                            fsyncMode: this.walFsyncMode,
+                            maxSizeMB: this.walMaxSizeMB,
+                            recoveredEntries: this.recoveredEntries,
+                        },
+                        insights: {
+                            tracked: this.modules.nativeInsight.getInsights().length,
+                            recommendations: this.modules.nativeInsight.getSignalRecommendations().length,
+                        },
+                        tiers: {
+                            warmKeys: tierStats.warmKeys,
+                            coldKeys: tierStats.coldKeys,
+                        },
+                        auditChain: {
+                            entries: Number(auditHealth.entries ?? 0),
+                            lastVerifyValid: auditHealth.lastVerifyValid ?? null,
+                        },
+                        resilience: {
+                            circuitState: this.resilience.getCircuitState(),
+                            pendingOps: this.resilience.getPendingOps(),
+                        },
+                        modules: modulesHealth,
                     };
 
-                    // MemTable metrics
-                    health.memTable = {
-                        count: this.memTable.count,
-                        sizeBytes: this.memTable.sizeBytes,
-                        dirtyCount: this.memTable.dirtyCount,
-                    };
-
-                    // WAL metrics
-                    health.wal = {
-                        type: this.walType,
-                        fsyncMode: this.walFsyncMode,
-                        maxSizeMB: this.walMaxSizeMB,
-                        recoveredEntries: this.recoveredEntries,
-                    };
-
-                    // Insight engine metrics
-                    health.insights = {
-                        tracked: this.insightTracker.count,
-                        recommendations: this.predictiveSignals.getRecommendations().length,
-                    };
-
-                    // Tier metrics (fast, just counts)
-                    health.tiers = {
-                        warmKeys: this.tierIndexWarm.size,
-                        coldKeys: this.tierIndexCold.size,
-                    };
-
-                    // Audit chain metrics (O(1) — no I/O)
-                    if (this.auditChain) {
-                        const auditStats = this.auditChain.getQuickStats();
-                        health.auditChain = {
-                            entries: auditStats.totalEntries,
-                            lastVerifyValid: auditStats.lastVerifyValid,
-                        };
-                    }
-
-                    // Resilience metrics
-                    health.resilience = {
-                        circuitState: this.resilience.getCircuitState(),
-                        pendingOps: this.resilience.getPendingOps(),
-                    };
-
-                    // PromptDistiller metrics (if enabled)
-                    if (this.promptDistiller) {
+                    if (this.modules.promptDistiller) {
                         try {
-                            const distillerStats = await this.promptDistiller.getStats();
-                            health.distiller = {
-                                tiers: distillerStats.map(t => ({
-                                    tier: t.tier,
-                                    recordCount: t.recordCount,
-                                    sizeBytes: t.sizeBytes,
-                                })),
-                            };
+                            health.distiller = await this.modules.promptDistiller.health();
                         } catch {
                             health.distiller = { error: 'unavailable' };
                         }
                     }
 
                     health.responseTimeMs = Date.now() - healthStart;
-
                     return { jsonrpc: '2.0', id, result: health };
                 }
 
-                case 'ping':
+                case 'ping': {
                     const segments = await this.countSegmentFiles();
                     const coldSegments = await this.countColdSegmentFiles();
+                    const tierStats = this.getTierIndexStats();
                     return {
                         jsonrpc: '2.0',
                         id,
@@ -1338,18 +1358,19 @@ export class GICSDaemon {
                             segments,
                             coldSegments,
                             tiers: {
-                                hot: this.memTable.count,
+                                hot: tierStats.hotKeys,
                                 warmSegments: segments,
-                                coldSegments
+                                coldSegments,
                             },
                             tierIndex: {
-                                warmKeys: this.tierIndexWarm.size,
-                                coldKeys: this.tierIndexCold.size
+                                warmKeys: tierStats.warmKeys,
+                                coldKeys: tierStats.coldKeys,
                             },
-                            insightsTracked: this.insightTracker.count,
-                            supervisorState: this.supervisor.getState()
-                        }
+                            insightsTracked: this.modules.nativeInsight.getInsights().length,
+                            supervisorState: this.supervisor.getState(),
+                        },
                     };
+                }
 
                 default:
                     return { jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found' } };

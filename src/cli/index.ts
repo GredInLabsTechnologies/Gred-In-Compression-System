@@ -13,6 +13,8 @@ import {
     infoCommand,
     benchCommand,
     profileCommand,
+    moduleCommand,
+    rpcCommand,
     daemonCommand,
     type CLIContext
 } from './commands.js';
@@ -25,6 +27,8 @@ const COMMANDS = {
     info: infoCommand,
     bench: benchCommand,
     profile: profileCommand,
+    module: moduleCommand,
+    rpc: rpcCommand,
     daemon: daemonCommand,
 };
 
@@ -40,6 +44,8 @@ ${c.bold('Commands:')}
   ${c.green('info')}     Display archive metadata
   ${c.green('bench')}    Benchmark encode/decode performance
   ${c.green('profile')}  Find optimal compression settings
+  ${c.green('module')}   Manage daemon modules
+  ${c.green('rpc')}      Call daemon RPC methods with JSON output
   ${c.green('daemon')}   Manage the GICS background daemon
 
 ${c.bold('Examples:')}
@@ -48,6 +54,7 @@ ${c.bold('Examples:')}
   ${c.dim('gics verify data.gics')}
   ${c.dim('gics info data.gics')}
   ${c.dim('gics bench data.json --runs 5')}
+  ${c.dim('gics rpc scan --params-json "{\"prefix\":\"orders:\"}" --pretty')}
   ${c.dim('gics daemon start')}
 
 Run ${c.cyan('gics <command> --help')} for detailed usage of each command.

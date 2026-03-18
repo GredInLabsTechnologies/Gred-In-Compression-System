@@ -137,3 +137,10 @@ export type { Anomaly, TrendForecast, Recommendation } from './insight/signals.j
 export { ConfidenceTracker } from './insight/confidence.js';
 export type { InsightConfidence, Outcome } from './insight/confidence.js';
 export { InsightPersistence } from './insight/persistence.js';
+export { StateIndex } from './daemon/state-index.js';
+export type { StateIndexEntry, StateIndexScanOptions, StateIndexScanResult } from './daemon/state-index.js';
+export { ModuleRegistry } from './daemon/module-registry.js';
+export type { InferenceRequest, InferenceDecision, RecommendationQuery } from './daemon/module-registry.js';
+export type { GICSModuleRuntimeConfig, GICSDaemonFileConfig, ResolvedDaemonConfig } from './daemon/config.js';
+export { createBuiltinModuleSet, NativeInsightModule, AuditChainModule, PromptDistillerModule } from './daemon/builtin-modules.js';
+export { GICSInferenceEngine } from './inference/engine.js';

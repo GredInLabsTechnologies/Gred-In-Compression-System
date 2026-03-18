@@ -156,6 +156,15 @@ export class MemTable {
     }
 
     /**
+     * Fully evict all HOT records, usually after a durable flush.
+     */
+    clear(): void {
+        this.records.clear();
+        this._sizeBytes = 0;
+        this._dirtyCount = 0;
+    }
+
+    /**
      * Rough estimation of record size in bytes
      */
     private estimateRecordSize(record: MemRecord): number {
