@@ -121,7 +121,7 @@ describe('CLI Tool (Phase 10)', () => {
 
             const { stdout } = await execFileAsync('node', [cliPath, 'info', encodedPath]);
             expect(stdout).toContain('info_test');
-            expect(stdout).toContain('Snapshots: 2');
+            expect(stdout).toMatch(/Snapshots\s*│\s*2/);
         });
     });
 

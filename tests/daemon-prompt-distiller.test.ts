@@ -2,9 +2,22 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PromptDistiller, type PromptRecord } from '../src/daemon/prompt-distiller.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { existsSync, mkdirSync, rmSync } from 'fs';
+import * as os from 'os';
 
-const TEST_DATA_PATH = path.join(process.cwd(), 'test-data-distiller');
+async function cleanupDirWithRetry(dirPath: string, maxAttempts = 8): Promise<void> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            await fs.rm(dirPath, { recursive: true, force: true });
+            return;
+        } catch (err: any) {
+            const retryable = err?.code === 'EPERM' || err?.code === 'EBUSY';
+            if (!retryable || attempt === maxAttempts) {
+                throw err;
+            }
+            await new Promise((resolve) => setTimeout(resolve, attempt * 50));
+        }
+    }
+}
 
 function createTestRecord(key: string, timestamp: number, tokenCount = 1000): PromptRecord {
     return {
@@ -24,15 +37,13 @@ function createTestRecord(key: string, timestamp: number, tokenCount = 1000): Pr
 
 describe('PromptDistiller', () => {
     let distiller: PromptDistiller;
+    let testDataPath: string;
 
     beforeEach(async () => {
-        if (existsSync(TEST_DATA_PATH)) {
-            rmSync(TEST_DATA_PATH, { recursive: true, force: true });
-        }
-        mkdirSync(TEST_DATA_PATH, { recursive: true });
+        testDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'gics-distiller-test-'));
 
         distiller = new PromptDistiller({
-            dataPath: TEST_DATA_PATH,
+            dataPath: testDataPath,
             rawRetentionMs: 7 * 24 * 60 * 60 * 1000,        // 7 days
             compressedRetentionMs: 30 * 24 * 60 * 60 * 1000, // 30 days
             diskCheckIntervalMs: 60 * 1000,                   // 1 min for tests
@@ -44,9 +55,7 @@ describe('PromptDistiller', () => {
 
     afterEach(async () => {
         await distiller.stop();
-        if (existsSync(TEST_DATA_PATH)) {
-            rmSync(TEST_DATA_PATH, { recursive: true, force: true });
-        }
+        await cleanupDirWithRetry(testDataPath);
     });
 
     it('should store and retrieve records from RAW tier', async () => {
@@ -106,7 +115,7 @@ describe('PromptDistiller', () => {
 
         // Create new distiller with 0 retention to force distillation
         const newDistiller = new PromptDistiller({
-            dataPath: TEST_DATA_PATH,
+            dataPath: testDataPath,
             rawRetentionMs: 999 * 24 * 60 * 60 * 1000,
             compressedRetentionMs: 0, // Force distillation
             emergencyPurgeEnabled: false,
@@ -256,7 +265,7 @@ describe('PromptDistiller', () => {
         await distiller.stop();
 
         // Manually create files with old timestamps
-        const rawDir = path.join(TEST_DATA_PATH, 'distiller-raw');
+        const rawDir = path.join(testDataPath, 'distiller-raw');
         await fs.mkdir(rawDir, { recursive: true });
 
         const tenDaysAgo = Date.now() - (10 * 24 * 60 * 60 * 1000);
@@ -289,7 +298,7 @@ describe('PromptDistiller', () => {
 
         // Initialize new distiller - should classify existing data
         const newDistiller = new PromptDistiller({
-            dataPath: TEST_DATA_PATH,
+            dataPath: testDataPath,
             rawRetentionMs: 7 * 24 * 60 * 60 * 1000,
             compressedRetentionMs: 30 * 24 * 60 * 60 * 1000,
             emergencyPurgeEnabled: false
