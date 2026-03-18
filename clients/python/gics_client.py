@@ -235,10 +235,18 @@ class GICSClient:
         resp = self._call("getInsights", params)
         return self._unwrap_result(resp)
 
-    def report_outcome(self, insight_id, result, context=None):
-        params = {"insightId": insight_id, "result": result}
+    def report_outcome(self, insight_id=None, result=None, context=None, domain=None, decision_id=None, metrics=None):
+        params = {"result": result}
+        if insight_id is not None:
+            params["insightId"] = insight_id
+        if domain is not None:
+            params["domain"] = domain
+        if decision_id is not None:
+            params["decisionId"] = decision_id
         if context is not None:
             params["context"] = context
+        if metrics is not None:
+            params["metrics"] = metrics
         resp = self._call("reportOutcome", params)
         return self._unwrap_result(resp).get('ok', False)
 
@@ -281,12 +289,18 @@ class GICSClient:
         resp = self._call("getAnomalies", params)
         return self._unwrap_result(resp)
 
-    def get_recommendations(self, filter_type=None, target=None):
+    def get_recommendations(self, filter_type=None, target=None, domain=None, subject=None, limit=None):
         params = {}
         if filter_type is not None:
             params["type"] = filter_type
         if target is not None:
             params["target"] = target
+        if domain is not None:
+            params["domain"] = domain
+        if subject is not None:
+            params["subject"] = subject
+        if limit is not None:
+            params["limit"] = limit
         resp = self._call("getRecommendations", params)
         return self._unwrap_result(resp)
 
@@ -386,10 +400,26 @@ class GICSClient:
         resp = await self._acall("getInsights", params)
         return self._unwrap_result(resp)
 
-    async def areport_outcome(self, insight_id: str, result: str, context: Optional[str] = None) -> bool:
-        params = {"insightId": insight_id, "result": result}
+    async def areport_outcome(
+        self,
+        insight_id: Optional[str] = None,
+        result: Optional[str] = None,
+        context: Optional[dict] = None,
+        domain: Optional[str] = None,
+        decision_id: Optional[str] = None,
+        metrics: Optional[dict] = None,
+    ) -> bool:
+        params = {"result": result}
+        if insight_id is not None:
+            params["insightId"] = insight_id
+        if domain is not None:
+            params["domain"] = domain
+        if decision_id is not None:
+            params["decisionId"] = decision_id
         if context is not None:
             params["context"] = context
+        if metrics is not None:
+            params["metrics"] = metrics
         resp = await self._acall("reportOutcome", params)
         return self._unwrap_result(resp).get('ok', False)
 
@@ -432,12 +462,25 @@ class GICSClient:
         resp = await self._acall("getAnomalies", params)
         return self._unwrap_result(resp)
 
-    async def aget_recommendations(self, filter_type: Optional[str] = None, target: Optional[str] = None):
+    async def aget_recommendations(
+        self,
+        filter_type: Optional[str] = None,
+        target: Optional[str] = None,
+        domain: Optional[str] = None,
+        subject: Optional[str] = None,
+        limit: Optional[int] = None,
+    ):
         params = {}
         if filter_type is not None:
             params["type"] = filter_type
         if target is not None:
             params["target"] = target
+        if domain is not None:
+            params["domain"] = domain
+        if subject is not None:
+            params["subject"] = subject
+        if limit is not None:
+            params["limit"] = limit
         resp = await self._acall("getRecommendations", params)
         return self._unwrap_result(resp)
 

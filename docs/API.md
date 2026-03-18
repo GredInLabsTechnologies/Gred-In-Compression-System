@@ -2,6 +2,8 @@
 
 > Complete reference for consuming, integrating, and operating GICS.
 
+> `v1.3.3-pre` note: this file remains the legacy `v1.3.2` API reference. For the current development branch, use `docs/API_v1_3_3_PRE_RELEASE.md` together with `docs/FAILURE_MODES_v1_3_3_PRE_RELEASE.md`.
+
 ---
 
 ## Table of Contents

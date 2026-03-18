@@ -1,7 +1,7 @@
 # GICS — Deterministic Time-Series Compression
 
 ![Version](https://img.shields.io/badge/version-1.3.3--prep-blue)
-![Status](https://img.shields.io/badge/status-production-green)
+![Status](https://img.shields.io/badge/status-pre--release-orange)
 ![License](https://img.shields.io/badge/license-proprietary-red)
 
 > ⚠️ **Documentation Transition Notice (v1.3.3 prep):** Documentation generated for cycles up to **v1.3.2** is now considered **legacy/deprecated for new implementation work**. Use the v1.3.3 preparation docs as source of truth for upcoming planning and execution.
@@ -14,8 +14,28 @@
 - **Deterministic encoding** (same input + same config = same output bytes)
 - **Fail-closed safety** (rejects corrupted/incomplete data, never returns partial results)
 - **Domain-agnostic** (works with any monotonic time-series via Schema Profiles)
-- **22x-42x compression** on structured data (vs 5x-11x with raw Zstd)
+- **High-ratio compression on structured workloads** with current benchmark references documented in `BENCHMARKS-RESULTS.md`
 - **Zero ML, zero approximation** — pure algorithmic compression
+
+---
+
+## v1.3.3 Pre-Release Documentation
+
+For the current development branch, use these documents as source of truth:
+
+- Release snapshot: `docs/releases/2026-03-18_GICS_v1_3_3_PRE_RELEASE.md`
+- Failure modes and recoverability: `docs/FAILURE_MODES_v1_3_3_PRE_RELEASE.md`
+- API reference: `docs/API_v1_3_3_PRE_RELEASE.md`
+- Binary/file format: `docs/FORMAT.md`
+- Security model: `docs/SECURITY_MODEL.md`
+- Production planning: `docs/PRODUCTION_PLAN_V1_3_3.md`
+- Benchmarks and validation index: `BENCHMARKS-RESULTS.md`
+
+Important:
+
+- `docs/API.md` remains the legacy `v1.3.2` API reference.
+- `1.3.3-pre` docs describe the current daemon, `StateIndex`, durable tombstones, module runtime and inference runtime.
+- Benchmark claims should be tied to the concrete artifacts under `bench/results/latest/`.
 
 ---
 
