@@ -1,11 +1,12 @@
 import { pbkdf2Sync, createHmac, createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto';
 import { IntegrityError } from './errors.js';
+import { GICS_ENC_MODE_LEGACY_STREAM, GICS_ENC_MODE_SEGMENT_STREAM } from './format.js';
 
 /**
  * GICS v1.3 Encryption Implementation
  * 
  * Provides AES-256-GCM encryption with PBKDF2 key derivation.
- * Ensures deterministic IVs per stream using HMAC(key, fileNonce || streamId).
+ * Ensures deterministic IVs per stream/segment using HMAC(key, fileNonce || ...).
  */
 
 const AUTH_CONSTANT = Buffer.from('GICS_V1.3_AUTH_VERIFY');
@@ -13,6 +14,11 @@ const AUTH_CONSTANT = Buffer.from('GICS_V1.3_AUTH_VERIFY');
 export interface EncryptionContext {
     key: Buffer;
     fileNonce: Uint8Array;
+}
+
+export interface SectionEncryptionOptions {
+    encMode?: number;
+    segmentOrdinal?: number;
 }
 
 /**
@@ -42,14 +48,46 @@ export function verifyAuth(key: Buffer, storedAuthVerify: Uint8Array): boolean {
 }
 
 /**
- * Derives a deterministic 12-byte IV for a specific stream.
+ * Derives the legacy deterministic 12-byte IV for a specific stream.
  * IV = HMAC-SHA256(key, fileNonce || streamId).slice(0, 12)
  */
-function deriveStreamIV(key: Buffer, fileNonce: Uint8Array, streamId: number): Buffer {
+function deriveLegacyStreamIV(key: Buffer, fileNonce: Uint8Array, streamId: number): Buffer {
     const hmac = createHmac('sha256', key);
     hmac.update(Buffer.from(fileNonce));
     hmac.update(Buffer.from([streamId]));
     return Buffer.from(hmac.digest().subarray(0, 12));
+}
+
+function deriveSegmentStreamIV(key: Buffer, fileNonce: Uint8Array, segmentOrdinal: number, streamId: number): Buffer {
+    const hmac = createHmac('sha256', key);
+    hmac.update(Buffer.from(fileNonce));
+
+    const segmentBuf = Buffer.allocUnsafe(4);
+    segmentBuf.writeUInt32LE(segmentOrdinal >>> 0, 0);
+    hmac.update(segmentBuf);
+
+    const streamBuf = Buffer.allocUnsafe(4);
+    streamBuf.writeUInt32LE(streamId >>> 0, 0);
+    hmac.update(streamBuf);
+
+    return Buffer.from(hmac.digest().subarray(0, 12));
+}
+
+function deriveSectionIV(
+    key: Buffer,
+    fileNonce: Uint8Array,
+    streamId: number,
+    encMode: number,
+    segmentOrdinal: number
+): Buffer {
+    switch (encMode) {
+        case GICS_ENC_MODE_LEGACY_STREAM:
+            return deriveLegacyStreamIV(key, fileNonce, streamId);
+        case GICS_ENC_MODE_SEGMENT_STREAM:
+            return deriveSegmentStreamIV(key, fileNonce, segmentOrdinal, streamId);
+        default:
+            throw new Error(`GICS v1.3: Unsupported encryption mode ${encMode}`);
+    }
 }
 
 /**
@@ -60,9 +98,12 @@ export function encryptSection(
     key: Buffer,
     fileNonce: Uint8Array,
     streamId: number,
-    aad: Uint8Array
+    aad: Uint8Array,
+    options: SectionEncryptionOptions = {}
 ): { ciphertext: Uint8Array; tag: Uint8Array } {
-    const iv = deriveStreamIV(key, fileNonce, streamId);
+    const encMode = options.encMode ?? GICS_ENC_MODE_LEGACY_STREAM;
+    const segmentOrdinal = options.segmentOrdinal ?? 0;
+    const iv = deriveSectionIV(key, fileNonce, streamId, encMode, segmentOrdinal);
     const cipher = createCipheriv('aes-256-gcm', key, iv);
 
     cipher.setAAD(Buffer.from(aad));
@@ -89,9 +130,12 @@ export function decryptSection(
     key: Buffer,
     fileNonce: Uint8Array,
     streamId: number,
-    aad: Uint8Array
+    aad: Uint8Array,
+    options: SectionEncryptionOptions = {}
 ): Uint8Array {
-    const iv = deriveStreamIV(key, fileNonce, streamId);
+    const encMode = options.encMode ?? GICS_ENC_MODE_LEGACY_STREAM;
+    const segmentOrdinal = options.segmentOrdinal ?? 0;
+    const iv = deriveSectionIV(key, fileNonce, streamId, encMode, segmentOrdinal);
     const decipher = createDecipheriv('aes-256-gcm', key, iv);
 
     decipher.setAAD(Buffer.from(aad));

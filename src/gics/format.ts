@@ -59,7 +59,7 @@ export enum GICS_FLAGS_V3 {
 export const SCHEMA_STREAM_BASE = 100;
 
 export interface EncryptionHeaderV3 {
-    encMode: number;      // 1: AES-256-GCM
+    encMode: number;      // 1: legacy stream-only IV, 2: segment+stream IV
     salt: Uint8Array;    // 16 bytes
     authVerify: Uint8Array; // 32 bytes (HMAC of a known constant to verify password)
     kdfId: number;       // 1: PBKDF2
@@ -69,6 +69,8 @@ export interface EncryptionHeaderV3 {
 }
 
 export const GICS_ENC_HEADER_SIZE_V3 = 1 + 16 + 32 + 1 + 4 + 1 + 12; // 67 bytes
+export const GICS_ENC_MODE_LEGACY_STREAM = 1;
+export const GICS_ENC_MODE_SEGMENT_STREAM = 2;
 
 // Block Header layout:
 // [stream_id (u8)] [codec_id (u8)] [n_items (u32)] [payload_len (u32)] [flags_low (u8)]

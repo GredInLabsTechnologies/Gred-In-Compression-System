@@ -7,6 +7,7 @@ import {
     encryptSection,
     decryptSection,
 } from '../src/gics/encryption.js';
+import { GICS_ENC_MODE_SEGMENT_STREAM } from '../src/gics/format.js';
 import { performance } from 'node:perf_hooks';
 
 describe('GICS cryptographic security checks', () => {
@@ -64,6 +65,25 @@ describe('GICS cryptographic security checks', () => {
 
         const a = encryptSection(payload, key, fileNonce, 10, aad);
         const b = encryptSection(payload, key, fileNonce, 20, aad);
+
+        expect(Buffer.compare(Buffer.from(a.ciphertext), Buffer.from(b.ciphertext))).not.toBe(0);
+        expect(Buffer.compare(Buffer.from(a.tag), Buffer.from(b.tag))).not.toBe(0);
+    });
+
+    it('segment+stream IV mode separates ciphertext/tag across segment ordinals', () => {
+        const { salt, fileNonce } = generateEncryptionSecrets();
+        const key = deriveKey('segment-ordinal-password', salt, 100_000);
+        const aad = new Uint8Array([0x47, 0x49, 0x43, 0x53, 0x03]);
+        const payload = Buffer.from('same-plaintext-same-stream-different-segment');
+
+        const a = encryptSection(payload, key, fileNonce, 10, aad, {
+            encMode: GICS_ENC_MODE_SEGMENT_STREAM,
+            segmentOrdinal: 0,
+        });
+        const b = encryptSection(payload, key, fileNonce, 10, aad, {
+            encMode: GICS_ENC_MODE_SEGMENT_STREAM,
+            segmentOrdinal: 1,
+        });
 
         expect(Buffer.compare(Buffer.from(a.ciphertext), Buffer.from(b.ciphertext))).not.toBe(0);
         expect(Buffer.compare(Buffer.from(a.tag), Buffer.from(b.tag))).not.toBe(0);

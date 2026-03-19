@@ -1,6 +1,11 @@
 
 import { encodeVarint, decodeVarint, decodeVarintAt, encodeRLE, decodeRLE } from '../gics-utils.js';
 import { ContextV0 } from './context.js';
+import { IntegrityError } from './errors.js';
+
+interface DecodeFixed64Options {
+    allowLegacyIntFallback?: boolean;
+}
 
 export class Codecs {
 
@@ -167,7 +172,7 @@ export class Codecs {
                 if (idx < context.dictionary.length) {
                     result.push(context.dictionary[idx]);
                 } else {
-                    result.push(0);
+                    throw new IntegrityError(`GICS v1.3: Dictionary index ${idx} out of range (${context.dictionary.length})`);
                 }
             } else {
                 // Miss
@@ -191,28 +196,38 @@ export class Codecs {
         return result;
     }
 
-    static decodeFixed64(data: Uint8Array, count: number): number[] {
+    static decodeFixed64(data: Uint8Array, count: number, options: DecodeFixed64Options = {}): number[] {
+        if (data.length !== count * Codecs.FLOAT64_BYTES) {
+            throw new IntegrityError(`GICS v1.3: FIXED64 payload length ${data.length} does not match item count ${count}`);
+        }
         const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+        const allowLegacyIntFallback = options.allowLegacyIntFallback ?? false;
 
         // Try Float64 first (current encoding format).
         const floatResult: number[] = [];
-        let hasNormalFloat = false;
+        let hasStrongFloatSignal = false;
         for (let i = 0; i < count; i++) {
             const v = view.getFloat64(i * 8, true);
             floatResult.push(v);
-            // A "normal" Float64: not NaN, not subnormal, not zero
-            // If at least one normal value exists, this is genuine Float64 data.
-            if (v === v && (v === 0 || Math.abs(v) >= 2.2e-308)) {
-                hasNormalFloat = true;
+            // Preserve explicit float markers. Leave NaN undecided so legacy
+            // integer payloads that decode to mixed subnormal/NaN patterns can
+            // still fall back if their BigInt interpretation is fully safe.
+            if ((!Number.isNaN(v) && !Number.isFinite(v)) || v === 0 || Math.abs(v) >= 2.2250738585072014e-308) {
+                hasStrongFloatSignal = true;
             }
         }
-        if (hasNormalFloat || count === 0) return floatResult;
+        if (!allowLegacyIntFallback || hasStrongFloatSignal || count === 0) return floatResult;
 
         // All values are NaN or subnormal → legacy BigInt64 encoding (pre-9db2b66).
         // Small integers stored as BigInt64 produce subnormal/NaN when read as Float64.
         const result: number[] = [];
         for (let i = 0; i < count; i++) {
-            result.push(Number(view.getBigInt64(i * 8, true)));
+            const asBigInt = view.getBigInt64(i * 8, true);
+            const asNumber = Number(asBigInt);
+            if (!Number.isSafeInteger(asNumber)) {
+                return floatResult;
+            }
+            result.push(asNumber);
         }
         return result;
     }
@@ -266,30 +281,35 @@ export class Codecs {
 
     static decodeFOR(data: Uint8Array, count: number): number[] {
         if (count === 0) return [];
-        if (data.length === 0) return [];
+        if (data.length === 0) throw new IntegrityError('GICS v1.3: FOR payload is empty');
 
         let min = 0;
         let offset = 0;
         try {
             const decoded = decodeVarintAt(data, 0);
-            min = decoded.values[0] ?? 0;
+            if (decoded.values.length !== 1 || decoded.values[0] === undefined) {
+                throw new IntegrityError('GICS v1.3: FOR header is missing base value');
+            }
+            min = decoded.values[0];
             offset = decoded.nextPos;
         } catch {
-            return [];
+            throw new IntegrityError('GICS v1.3: FOR base value is malformed');
         }
 
-        if (offset >= data.length) return [];
+        if (offset >= data.length) throw new IntegrityError('GICS v1.3: FOR bit width is missing');
         const bitWidth = data[offset];
         const payload = data.subarray(offset + 1);
 
-        if (bitWidth > 53) return [];
+        if (bitWidth > 53) throw new IntegrityError(`GICS v1.3: FOR bit width ${bitWidth} exceeds safe integer width`);
 
         if (bitWidth === 0) {
             return new Array(count).fill(min);
         }
 
         const expectedBits = count * bitWidth;
-        if ((payload.length * 8) < expectedBits) return [];
+        if ((payload.length * 8) < expectedBits) {
+            throw new IntegrityError('GICS v1.3: FOR payload is truncated');
+        }
 
         const reader = new BitReader(payload);
         const values: number[] = new Array(count);

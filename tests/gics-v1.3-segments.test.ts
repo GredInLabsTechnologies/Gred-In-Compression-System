@@ -65,6 +65,53 @@ describe('GICS v1.3 Segments & Append', () => {
         await fs.unlink(tempPath);
     });
 
+    it('should append to an encrypted encMode=2 GICS file', async () => {
+        const password = 'encmode2-append-password';
+        const tempPath = join(tmpdir(), `gics_test_append_enc_${Date.now()}.gics`);
+
+        try {
+            const handle1 = await fs.open(tempPath, 'w+');
+            const encoder1 = await GICSv2Encoder.openFile(handle1, { password });
+            const snaps1 = createSnapshots(5, 1600000010000, 301);
+            for (const s of snaps1) await encoder1.push(s);
+            await encoder1.sealToFile();
+            await handle1.close();
+
+            const handle2 = await fs.open(tempPath, 'r+');
+            const encoder2 = await GICSv2Encoder.openFile(handle2, { password });
+            const snaps2 = createSnapshots(5, 1600000015000, 302);
+            for (const s of snaps2) await encoder2.push(s);
+            await encoder2.sealToFile();
+            await handle2.close();
+
+            const data = await fs.readFile(tempPath);
+            const decoded = await new GICSv2Decoder(data, { password }).getAllSnapshots();
+
+            expect(decoded.length).toBe(10);
+            expect(decoded[0].items.has(301)).toBe(true);
+            expect(decoded[5].items.has(302)).toBe(true);
+        } finally {
+            await fs.unlink(tempPath).catch(() => { });
+        }
+    });
+
+    it('should reject append against legacy encrypted encMode=1 fixtures', async () => {
+        const tempPath = join(tmpdir(), `gics_test_legacy_append_${Date.now()}.gics`);
+
+        try {
+            const legacyFixture = await fs.readFile(new URL('./fixtures/golden/legacy_encrypted.gics', import.meta.url));
+            await fs.writeFile(tempPath, legacyFixture);
+
+            const handle = await fs.open(tempPath, 'r+');
+            await expect(
+                GICSv2Encoder.openFile(handle, { password: 'correct-horse-battery-staple' })
+            ).rejects.toThrow(/encMode=1/);
+            await handle.close();
+        } finally {
+            await fs.unlink(tempPath).catch(() => { });
+        }
+    });
+
     it('should perform optimized query using segment index', async () => {
         const encoder = new GICSv2Encoder({ segmentSizeLimit: 200 });
 
@@ -92,6 +139,28 @@ describe('GICS v1.3 Segments & Append', () => {
         // Query for non-existent
         const q999 = await decoder.query(999);
         expect(q999.length).toBe(0);
+    });
+
+    it('should perform optimized query on encrypted multi-segment files', async () => {
+        const password = 'encrypted-query-password';
+        const encoder = new GICSv2Encoder({ password, segmentSizeLimit: 200 });
+
+        for (const s of createSnapshots(5, 1600000020000, 401)) await encoder.push(s);
+        await encoder.flush();
+
+        for (const s of createSnapshots(5, 1600000025000, 402)) await encoder.push(s);
+        await encoder.flush();
+
+        const data = await encoder.seal();
+        const decoder = new GICSv2Decoder(data, { password });
+
+        const q401 = await decoder.query(401);
+        expect(q401.length).toBe(5);
+        expect([...q401[0].items.keys()]).toContain(401);
+
+        const q402 = await decoder.query(402);
+        expect(q402.length).toBe(5);
+        expect([...q402[0].items.keys()]).toContain(402);
     });
 
     it('should verify file-level integrity chain', async () => {

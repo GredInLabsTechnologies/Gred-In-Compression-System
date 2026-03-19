@@ -4,6 +4,7 @@ import {
     GICS_MAGIC_V2, V12_FLAGS, StreamId, InnerCodecId, OuterCodecId,
     GICS_VERSION_BYTE, HealthTag, GICS_HEADER_SIZE_V3, FILE_EOS_SIZE,
     GICS_EOS_MARKER, SEGMENT_FOOTER_SIZE, GICS_FLAGS_V3, GICS_ENC_HEADER_SIZE_V3,
+    GICS_ENC_MODE_SEGMENT_STREAM,
     SCHEMA_STREAM_BASE, BLOCK_FLAGS, SEGMENT_FLAGS
 } from './format.js';
 import { ContextV0, ContextSnapshot } from './context.js';
@@ -25,7 +26,8 @@ import {
     deriveKey,
     generateAuthVerify,
     encryptSection,
-    generateEncryptionSecrets
+    generateEncryptionSecrets,
+    verifyAuth
 } from './encryption.js';
 
 interface DataFeatures {
@@ -78,11 +80,13 @@ export class GICSv2Encoder {
     private fileHandle: FileHandle | null = null;
     private fileOffset = 0;
     private lastFlushSegmentCount = 0;
+    private nextSegmentOrdinal = 0;
     private readonly accumulatedBytes: Uint8Array[] = [];
-    private readonly encryptionKey: Buffer | null = null;
-    private readonly encryptionSalt: Uint8Array | null = null;
-    private readonly encryptionFileNonce: Uint8Array | null = null;
-    private readonly authVerify: Uint8Array | null = null;
+    private encryptionKey: Buffer | null = null;
+    private encryptionSalt: Uint8Array | null = null;
+    private encryptionFileNonce: Uint8Array | null = null;
+    private authVerify: Uint8Array | null = null;
+    private encryptionMode = 0;
     private pbkdf2Iterations: number = 600_000;
 
     static reset() {
@@ -96,11 +100,36 @@ export class GICSv2Encoder {
     static async openFile(handle: FileHandle, options: GICSv2EncoderOptions = {}): Promise<GICSv2Encoder> {
         const encoder = new GICSv2Encoder(options);
         encoder.fileHandle = handle;
-        const prevHash = await FileAccess.prepareForAppend(handle);
+        const appendState = await FileAccess.prepareForAppend(handle);
         const stats = await handle.stat();
         encoder.fileOffset = stats.size;
-        if (prevHash) {
-            encoder.integrity = new IntegrityChain(prevHash);
+
+        if (appendState.prevRootHash && appendState.encryptionHeader) {
+            if (!options.password) {
+                throw new Error('Cannot append encrypted GICS file without password.');
+            }
+            if (appendState.encryptionHeader.encMode !== GICS_ENC_MODE_SEGMENT_STREAM) {
+                throw new Error(`Cannot append encrypted legacy GICS file with encMode=${appendState.encryptionHeader.encMode}. Re-encode to encMode=2 first.`);
+            }
+
+            encoder.encryptionMode = appendState.encryptionHeader.encMode;
+            encoder.encryptionSalt = appendState.encryptionHeader.salt;
+            encoder.encryptionFileNonce = appendState.encryptionHeader.fileNonce;
+            encoder.authVerify = appendState.encryptionHeader.authVerify;
+            encoder.pbkdf2Iterations = appendState.encryptionHeader.iterations;
+            encoder.encryptionKey = deriveKey(options.password, encoder.encryptionSalt, encoder.pbkdf2Iterations);
+
+            if (!verifyAuth(encoder.encryptionKey, encoder.authVerify)) {
+                throw new Error('Cannot append encrypted GICS file: invalid password.');
+            }
+        } else if (appendState.prevRootHash && encoder.encryptionKey) {
+            throw new Error('Cannot append encrypted data to an unencrypted GICS file.');
+        }
+
+        encoder.nextSegmentOrdinal = appendState.segmentCount;
+
+        if (appendState.prevRootHash) {
+            encoder.integrity = new IntegrityChain(appendState.prevRootHash);
             encoder.hasEmittedHeader = true;
         }
         return encoder;
@@ -142,6 +171,7 @@ export class GICSv2Encoder {
             this.encryptionFileNonce = secrets.fileNonce;
             this.encryptionKey = deriveKey(this.options.password, this.encryptionSalt, iterations);
             this.authVerify = generateAuthVerify(this.encryptionKey);
+            this.encryptionMode = GICS_ENC_MODE_SEGMENT_STREAM;
             this.pbkdf2Iterations = iterations;
         }
 
@@ -208,7 +238,7 @@ export class GICSv2Encoder {
 
         if (isEncrypted) {
             let pos = GICS_HEADER_SIZE_V3;
-            view.setUint8(pos++, 1); // encMode: AES-256-GCM
+            view.setUint8(pos++, this.encryptionMode);
             headerBytes.set(this.encryptionSalt!, pos); pos += 16;
             headerBytes.set(this.authVerify!, pos); pos += 32;
             view.setUint8(pos++, 1); // kdfId: PBKDF2
@@ -281,7 +311,8 @@ export class GICSv2Encoder {
 
         const blockStats: BlockStats[] = [];
         for (const group of groups) {
-            const { segment, stats } = await this.encodeSegment(group);
+            const segmentOrdinal = this.nextSegmentOrdinal++;
+            const { segment, stats } = await this.encodeSegment(group, segmentOrdinal);
             const bytes = segment.serialize();
             if (allBytes) {
                 allBytes.push(bytes);
@@ -302,7 +333,7 @@ export class GICSv2Encoder {
         return finalBytes;
     }
 
-    private async encodeSegment(snapshots: Array<Snapshot | GenericSnapshot<Record<string, number | string>>>): Promise<{ segment: Segment, stats: BlockStats[] }> {
+    private async encodeSegment(snapshots: Array<Snapshot | GenericSnapshot<Record<string, number | string>>>, segmentOrdinal: number): Promise<{ segment: Segment, stats: BlockStats[] }> {
         const streamBlocks: Map<number, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }> = new Map();
         const blockStats: BlockStats[] = [];
 
@@ -349,8 +380,8 @@ export class GICSv2Encoder {
         // Legacy path uses fixed stream order for byte-identical output;
         // schema path sorts by stream ID for deterministic dynamic ordering.
         const sections = useSchemaPath
-            ? await this.wrapSectionsGeneric(streamBlocks)
-            : await this.wrapSections(streamBlocks as Map<StreamId, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>);
+            ? await this.wrapSectionsGeneric(streamBlocks, segmentOrdinal)
+            : await this.wrapSections(streamBlocks as Map<StreamId, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>, segmentOrdinal);
         return this.assembleSegment(sections, segmentIndex, blockStats, segmentFlags, itemsPerSnapshot);
     }
 
@@ -378,7 +409,8 @@ export class GICSv2Encoder {
     }
 
     private async wrapSections(
-        streamBlocks: Map<StreamId, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>
+        streamBlocks: Map<StreamId, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>,
+        segmentOrdinal: number
     ): Promise<StreamSection[]> {
         const sections: StreamSection[] = [];
         const order = [StreamId.TIME, StreamId.SNAPSHOT_LEN, StreamId.ITEM_ID, StreamId.VALUE, StreamId.QUANTITY];
@@ -388,7 +420,7 @@ export class GICSv2Encoder {
             const data = streamBlocks.get(streamId);
             if (!data) continue;
 
-            const section = await this.wrapSingleSection(streamId, data, outerCodec);
+            const section = await this.wrapSingleSection(streamId, data, outerCodec, segmentOrdinal);
             sections.push(section);
         }
         return sections;
@@ -399,7 +431,8 @@ export class GICSv2Encoder {
      * Iterates all stream blocks in deterministic order (sorted by stream ID).
      */
     private async wrapSectionsGeneric(
-        streamBlocks: Map<number, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>
+        streamBlocks: Map<number, { manifest: BlockManifestEntry[], payloads: Uint8Array[] }>,
+        segmentOrdinal: number
     ): Promise<StreamSection[]> {
         const sections: StreamSection[] = [];
         const outerCodec = getOuterCodec(OuterCodecId.ZSTD);
@@ -409,7 +442,7 @@ export class GICSv2Encoder {
 
         for (const streamId of sortedIds) {
             const data = streamBlocks.get(streamId)!;
-            const section = await this.wrapSingleSection(streamId, data, outerCodec);
+            const section = await this.wrapSingleSection(streamId, data, outerCodec, segmentOrdinal);
             sections.push(section);
         }
         return sections;
@@ -418,13 +451,14 @@ export class GICSv2Encoder {
     private async wrapSingleSection(
         streamId: StreamId,
         data: { manifest: BlockManifestEntry[], payloads: Uint8Array[] },
-        outerCodec: { compress(data: Uint8Array, level?: number): Promise<Uint8Array> }
+        outerCodec: { compress(data: Uint8Array, level?: number): Promise<Uint8Array> },
+        segmentOrdinal: number
     ): Promise<StreamSection> {
         const concatenated = this.concatArrays(data.payloads);
         const compressed = await outerCodec.compress(concatenated, this.compressionLevel);
         const manifestBytes = StreamSection.serializeManifest(data.manifest);
 
-        const { finalPayload, authTag } = this.encryptPayloadIfNeeded(streamId, compressed);
+        const { finalPayload, authTag } = this.encryptPayloadIfNeeded(streamId, compressed, segmentOrdinal);
         const sectionHash = this.calculateSectionHash(streamId, data.manifest.length, manifestBytes, finalPayload);
 
         return new StreamSection(
@@ -440,12 +474,15 @@ export class GICSv2Encoder {
         );
     }
 
-    private encryptPayloadIfNeeded(streamId: StreamId, compressed: Uint8Array): { finalPayload: Uint8Array, authTag: Uint8Array | null } {
+    private encryptPayloadIfNeeded(streamId: StreamId, compressed: Uint8Array, segmentOrdinal: number): { finalPayload: Uint8Array, authTag: Uint8Array | null } {
         if (!this.encryptionKey) {
             return { finalPayload: compressed, authTag: null };
         }
         const aad = this.emitFileHeader().subarray(0, GICS_HEADER_SIZE_V3);
-        const encrypted = encryptSection(compressed, this.encryptionKey, this.encryptionFileNonce!, streamId, aad);
+        const encrypted = encryptSection(compressed, this.encryptionKey, this.encryptionFileNonce!, streamId, aad, {
+            encMode: this.encryptionMode,
+            segmentOrdinal,
+        });
         return { finalPayload: encrypted.ciphertext, authTag: encrypted.tag };
     }
 

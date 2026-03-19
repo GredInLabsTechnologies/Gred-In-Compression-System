@@ -57,10 +57,12 @@ export class GICSv2Decoder {
     private readonly options: Required<GICSv2DecoderOptions>;
     private encryptionKey: Buffer | null = null;
     private encryptionFileNonce: Uint8Array | null = null;
+    private encryptionMode = 0;
     private isEncrypted: boolean = false;
     private hasSchema: boolean = false;
     private schema: SchemaProfile = LEGACY_SCHEMA;
     private fileHeaderBytes: Uint8Array | null = null;
+    private fileVersion = 0;
 
 
     constructor(data: Uint8Array, options: GICSv2DecoderOptions = {}) {
@@ -118,20 +120,7 @@ export class GICSv2Decoder {
         if (this.data[this.data.length - FILE_EOS_SIZE] !== GICS_EOS_MARKER) {
             throw new IncompleteDataError('GICS v1.3: Missing File EOS marker (0xFF)');
         }
-
-        this.pos = 5;
-        const flags = this.getUint32();
-        this.isEncrypted = (flags & GICS_FLAGS_V3.ENCRYPTED) !== 0;
-        this.hasSchema = (flags & GICS_FLAGS_V3.HAS_SCHEMA) !== 0;
-        this.fileHeaderBytes = this.data.subarray(0, GICS_HEADER_SIZE_V3);
-
-        this.pos = GICS_HEADER_SIZE_V3;
-        if (this.isEncrypted) {
-            await this.setupEncryption();
-        }
-        if (this.hasSchema) {
-            await this.readSchemaSection();
-        }
+        await this.bootstrapV3();
 
         return this.getAllGenericSnapshotsV3();
     }
@@ -140,11 +129,13 @@ export class GICSv2Decoder {
         const snapshots: GenericSnapshot<Record<string, number | string>>[] = [];
         const dataEnd = this.data.length - FILE_EOS_SIZE;
         const integrity = new IntegrityChain();
+        let segmentOrdinal = 0;
 
         while (this.pos < dataEnd) {
-            const { snapshots: segmentSnaps, nextPos } = await this.decodeSegmentGeneric(integrity);
+            const { snapshots: segmentSnaps, nextPos } = await this.decodeSegmentGeneric(integrity, segmentOrdinal);
             snapshots.push(...segmentSnaps);
             this.pos = nextPos;
+            segmentOrdinal++;
         }
 
         this.verifyFileEOS(integrity);
@@ -163,23 +154,7 @@ export class GICSv2Decoder {
         if (this.data[this.data.length - FILE_EOS_SIZE] !== GICS_EOS_MARKER) {
             throw new IncompleteDataError('GICS v1.3: Missing File EOS marker (0xFF)');
         }
-
-        // Re-read header with flags
-        this.pos = 5;
-        const flags = this.getUint32();
-        this.isEncrypted = (flags & GICS_FLAGS_V3.ENCRYPTED) !== 0;
-        this.hasSchema = (flags & GICS_FLAGS_V3.HAS_SCHEMA) !== 0;
-        this.fileHeaderBytes = this.data.subarray(0, GICS_HEADER_SIZE_V3);
-
-        this.pos = GICS_HEADER_SIZE_V3;
-        if (this.isEncrypted) {
-            await this.setupEncryption();
-        }
-
-        // Read schema section if present
-        if (this.hasSchema) {
-            await this.readSchemaSection();
-        }
+        await this.bootstrapV3();
 
         return this.getAllSnapshotsV3();
     }
@@ -217,12 +192,18 @@ export class GICSv2Decoder {
      * After calling this, getSchema() returns the embedded schema.
      */
     async parseHeader(): Promise<void> {
+        await this.bootstrapV3();
+    }
+
+    private async bootstrapV3(): Promise<void> {
+        this.resetBootstrapState();
         if (!this.verifyMagic()) {
             throw new IntegrityError("GICS Decoder: Invalid magic bytes.");
         }
         this.pos = GICS_MAGIC_V2.length;
         const version = this.getUint8();
         if (version !== 0x03) throw new IntegrityError(`Unsupported version: ${version}`);
+        this.fileVersion = version;
 
         this.pos = 5;
         const flags = this.getUint32();
@@ -243,7 +224,8 @@ export class GICSv2Decoder {
         if (!this.options.password) throw new Error("GICS v1.3: Password required for encrypted file");
 
         const encMode = this.getUint8();
-        if (encMode !== 1) throw new Error(`GICS v1.3: Unsupported encryption mode ${encMode}`);
+        if (encMode !== 1 && encMode !== 2) throw new Error(`GICS v1.3: Unsupported encryption mode ${encMode}`);
+        this.encryptionMode = encMode;
 
         const salt = this.data.slice(this.pos, this.pos + 16); this.pos += 16;
         const authVerify = this.data.slice(this.pos, this.pos + 32); this.pos += 32;
@@ -262,6 +244,7 @@ export class GICSv2Decoder {
         if (this.data.at(-1) !== 0xFF) {
             throw new IncompleteDataError('GICS v1.2: Missing EOS marker (0xFF)');
         }
+        this.fileVersion = 0x02;
         this.pos = 9;
         return this.getAllSnapshotsV2();
     }
@@ -271,40 +254,20 @@ export class GICSv2Decoder {
      */
     async query(itemId: number): Promise<Snapshot[]> {
         if (this.data.length < GICS_HEADER_SIZE_V3) throw new Error(ERR_DATA_TOO_SHORT);
-        this.pos = 0;
-        const magicMatch = GICS_MAGIC_V2.every((b, i) => this.data[i] === b);
-        if (!magicMatch) throw new IntegrityError("Invalid Magic");
-        this.pos = 4;
-        const version = this.getUint8();
-        if (version !== 0x03) throw new Error("Query only supported on v1.3 segments");
-
-        // Read flags to detect schema
-        this.pos = 5;
-        const flags = this.getUint32();
-        const hasSchemaFlag = (flags & GICS_FLAGS_V3.HAS_SCHEMA) !== 0;
-
-        this.pos = GICS_HEADER_SIZE_V3;
-
-        // Skip schema section if present (bounds-checked, fail-closed)
-        if (hasSchemaFlag) {
-            if (this.pos + 4 > this.data.length) {
-                throw new IncompleteDataError('GICS v1.3: Truncated schema section length');
-            }
-            const schemaLen = this.getUint32();
-            const dataEnd = this.data.length - FILE_EOS_SIZE;
-            if (this.pos + schemaLen > dataEnd) {
-                throw new IncompleteDataError('GICS v1.3: Truncated schema section payload');
-            }
-            this.pos += schemaLen;
+        await this.parseHeader();
+        if (this.hasSchema) {
+            throw new IntegrityError('query() only supports legacy numeric files. Use queryGeneric() for schema-based files.');
         }
 
         const dataEnd = this.data.length - FILE_EOS_SIZE;
         const result: Snapshot[] = [];
+        let segmentOrdinal = 0;
 
         while (this.pos < dataEnd) {
-            const { snapshots, nextPos } = await this.decodeSegment(true, itemId);
+            const { snapshots, nextPos } = await this.decodeSegment(true, itemId, undefined, segmentOrdinal);
             result.push(...snapshots);
             this.pos = nextPos;
+            segmentOrdinal++;
         }
         return result;
     }
@@ -318,15 +281,17 @@ export class GICSv2Decoder {
 
         const dataEnd = this.data.length - FILE_EOS_SIZE;
         const result: GenericSnapshot<Record<string, number | string>>[] = [];
+        let segmentOrdinal = 0;
 
         while (this.pos < dataEnd) {
-            const snapshots = await this.querySegmentForGeneric(itemKey);
+            const snapshots = await this.querySegmentForGeneric(itemKey, segmentOrdinal);
             if (snapshots) result.push(...snapshots);
+            segmentOrdinal++;
         }
         return result;
     }
 
-    private async querySegmentForGeneric(itemKey: number | string): Promise<GenericSnapshot<Record<string, number | string>>[] | null> {
+    private async querySegmentForGeneric(itemKey: number | string, segmentOrdinal: number): Promise<GenericSnapshot<Record<string, number | string>>[] | null> {
         const { header, sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
         this.verifySegmentIntegrity(segmentStart, nextPos, footer);
 
@@ -342,11 +307,11 @@ export class GICSv2Decoder {
         let snapshots: GenericSnapshot<Record<string, number | string>>[];
 
         if (this.hasSchema) {
-            const data = await this.decompressAndDecodeGeneric(sections);
+            const data = await this.decompressAndDecodeGeneric(sections, undefined, segmentOrdinal);
             snapshots = this.reconstructGenericSnapshots(data, index);
             snapshots = snapshots.filter(s => s.items.has(itemKey));
         } else {
-            const data = await this.decompressAndDecode(sections);
+            const data = await this.decompressAndDecode(sections, undefined, segmentOrdinal);
             this.reverseItemMajorIfNeeded(header, data);
             const legacySnaps = this.reconstructSnapshots(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
             const numKey = typeof itemKey === 'number' ? itemKey : Number.parseInt(itemKey, 10);
@@ -448,18 +413,20 @@ export class GICSv2Decoder {
         const snapshots: Snapshot[] = [];
         const dataEnd = this.data.length - FILE_EOS_SIZE;
         const integrity = new IntegrityChain();
+        let segmentOrdinal = 0;
 
         while (this.pos < dataEnd) {
-            snapshots.push(...await this.decodeNextSegment(integrity));
+            snapshots.push(...await this.decodeNextSegment(integrity, segmentOrdinal));
+            segmentOrdinal++;
         }
 
         this.verifyFileEOS(integrity);
         return snapshots;
     }
 
-    private async decodeNextSegment(integrity: IntegrityChain): Promise<Snapshot[]> {
+    private async decodeNextSegment(integrity: IntegrityChain, segmentOrdinal: number): Promise<Snapshot[]> {
         try {
-            const { snapshots: segmentSnaps, nextPos } = await this.decodeSegment(false, undefined, integrity);
+            const { snapshots: segmentSnaps, nextPos } = await this.decodeSegment(false, undefined, integrity, segmentOrdinal);
             this.pos = nextPos;
             return segmentSnaps;
         } catch (err) {
@@ -480,7 +447,12 @@ export class GICSv2Decoder {
         }
     }
 
-    private async decodeSegment(skipIfMissing: boolean, itemId?: number, chain?: IntegrityChain): Promise<{ snapshots: Snapshot[], nextPos: number, index: SegmentIndex }> {
+    private async decodeSegment(
+        skipIfMissing: boolean,
+        itemId?: number,
+        chain?: IntegrityChain,
+        segmentOrdinal: number = 0
+    ): Promise<{ snapshots: Snapshot[], nextPos: number, index: SegmentIndex }> {
         const { header, sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
 
         this.verifySegmentIntegrity(segmentStart, nextPos, footer);
@@ -490,7 +462,7 @@ export class GICSv2Decoder {
             return { snapshots: [], nextPos, index };
         }
 
-        const data = await this.decompressAndDecode(sections, chain);
+        const data = await this.decompressAndDecode(sections, chain, segmentOrdinal);
         this.reverseItemMajorIfNeeded(header, data);
         let snapshots = this.reconstructSnapshots(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
 
@@ -501,19 +473,19 @@ export class GICSv2Decoder {
         return { snapshots, nextPos, index };
     }
 
-    private async decodeSegmentGeneric(chain?: IntegrityChain): Promise<{
+    private async decodeSegmentGeneric(chain?: IntegrityChain, segmentOrdinal: number = 0): Promise<{
         snapshots: GenericSnapshot<Record<string, number | string>>[], nextPos: number, index: SegmentIndex
     }> {
         const { header, sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
         this.verifySegmentIntegrity(segmentStart, nextPos, footer);
 
         if (this.hasSchema) {
-            const data = await this.decompressAndDecodeGeneric(sections, chain);
+            const data = await this.decompressAndDecodeGeneric(sections, chain, segmentOrdinal);
             const snapshots = this.reconstructGenericSnapshots(data, index);
             return { snapshots, nextPos, index };
         } else {
             // Legacy: convert Snapshot[] to GenericSnapshot[]
-            const data = await this.decompressAndDecode(sections, chain);
+            const data = await this.decompressAndDecode(sections, chain, segmentOrdinal);
             this.reverseItemMajorIfNeeded(header, data);
             const legacySnaps = this.reconstructSnapshots(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
             const genericSnaps: GenericSnapshot<Record<string, number | string>>[] = legacySnaps.map(s => ({
@@ -526,7 +498,11 @@ export class GICSv2Decoder {
         }
     }
 
-    private async decompressAndDecodeGeneric(sections: StreamSection[], chain?: IntegrityChain): Promise<GenericDecompressionResult> {
+    private async decompressAndDecodeGeneric(
+        sections: StreamSection[],
+        chain?: IntegrityChain,
+        segmentOrdinal: number = 0
+    ): Promise<GenericDecompressionResult> {
         const res: GenericDecompressionResult = { time: [], lengths: [], itemIds: [], fieldArrays: new Map() };
         const segmentContext = new ContextV0('segment_chain_marker');
 
@@ -536,7 +512,7 @@ export class GICSv2Decoder {
 
             let payload = section.payload;
             if (this.isEncrypted) {
-                payload = this.decryptSectionPayload(section);
+                payload = this.decryptSectionPayload(section, segmentOrdinal);
             }
 
             const decompressed = await getOuterCodec(section.outerCodecId).decompress(payload);
@@ -598,10 +574,22 @@ export class GICSv2Decoder {
 
         for (let s = 0; s < data.lengths.length; s++) {
             const count = data.lengths[s];
+            if (!Number.isInteger(count) || count < 0) {
+                throw new IntegrityError(`Invalid snapshot length at index ${s}: ${count}`);
+            }
+
+            const timestamp = data.time[s];
+            if (timestamp === undefined) {
+                throw new IntegrityError(`Missing TIME value for snapshot ${s}`);
+            }
+
             const items = new Map<number | string, Record<string, number | string>>();
 
             for (let j = 0; j < count; j++) {
                 const numericId = data.itemIds[itemOffset];
+                if (numericId === undefined) {
+                    throw new IntegrityError(`Missing ITEM_ID value at item offset ${itemOffset}`);
+                }
                 const key = (schema.itemIdType === 'string' && stringDict)
                     ? (stringDict.entries[numericId] ?? numericId)
                     : numericId;
@@ -610,7 +598,7 @@ export class GICSv2Decoder {
                 itemOffset++;
             }
 
-            result.push({ timestamp: data.time[s] ?? 0, items });
+            result.push({ timestamp, items });
         }
 
         return result;
@@ -655,7 +643,15 @@ export class GICSv2Decoder {
         for (let f = 0; f < this.schema.fields.length; f++) {
             const field = this.schema.fields[f];
             const streamId = SCHEMA_STREAM_BASE + f;
-            const rawVal = data.fieldArrays.get(streamId)![itemOffset];
+            const fieldValues = data.fieldArrays.get(streamId);
+            if (!fieldValues) {
+                throw new IntegrityError(`Missing field stream ${streamId} (${field.name})`);
+            }
+
+            const rawVal = fieldValues[itemOffset];
+            if (rawVal === undefined) {
+                throw new IntegrityError(`Missing value for field '${field.name}' at item offset ${itemOffset}`);
+            }
 
             if (field.type === 'categorical' && reverseEnumMaps.has(field.name)) {
                 const reverseMap = reverseEnumMaps.get(field.name)!;
@@ -746,16 +742,26 @@ export class GICSv2Decoder {
         }
     }
 
-    private async decompressAndDecode(sections: StreamSection[], chain?: IntegrityChain) {
+    private async decompressAndDecode(
+        sections: StreamSection[],
+        chain?: IntegrityChain,
+        segmentOrdinal: number = 0
+    ) {
         const res: DecompressionResult = { time: [], lengths: [], itemIds: [], prices: [], quantities: [] };
         const segmentContext = new ContextV0('segment_chain_marker');
         for (const section of sections) {
-            await this.processSection(section, res, segmentContext, chain);
+            await this.processSection(section, res, segmentContext, chain, segmentOrdinal);
         }
         return res;
     }
 
-    private async processSection(section: StreamSection, res: DecompressionResult, context: ContextV0, chain?: IntegrityChain) {
+    private async processSection(
+        section: StreamSection,
+        res: DecompressionResult,
+        context: ContextV0,
+        chain?: IntegrityChain,
+        segmentOrdinal: number = 0
+    ) {
         if (chain) {
             this.verifySectionHash(section, chain);
         }
@@ -764,7 +770,7 @@ export class GICSv2Decoder {
 
         let payload = section.payload;
         if (this.isEncrypted) {
-            payload = this.decryptSectionPayload(section);
+            payload = this.decryptSectionPayload(section, segmentOrdinal);
         }
 
         const decompressed = await getOuterCodec(section.outerCodecId).decompress(payload);
@@ -783,7 +789,7 @@ export class GICSv2Decoder {
         }
     }
 
-    private decryptSectionPayload(section: StreamSection): Uint8Array {
+    private decryptSectionPayload(section: StreamSection, segmentOrdinal: number): Uint8Array {
         if (!this.encryptionKey || !this.encryptionFileNonce) throw new Error("Encryption key or nonce missing");
         return decryptSection(
             section.payload,
@@ -791,7 +797,11 @@ export class GICSv2Decoder {
             this.encryptionKey,
             this.encryptionFileNonce,
             section.streamId,
-            this.fileHeaderBytes!
+            this.fileHeaderBytes!,
+            {
+                encMode: this.encryptionMode,
+                segmentOrdinal,
+            }
         );
     }
 
@@ -900,11 +910,13 @@ export class GICSv2Decoder {
             case InnerCodecId.FOR_BITPACK:
                 return Codecs.decodeFOR(payload, nItems);
             case InnerCodecId.FIXED64_LE:
-                return Codecs.decodeFixed64(payload, nItems);
+                return Codecs.decodeFixed64(payload, nItems, {
+                    allowLegacyIntFallback: true,
+                });
             case InnerCodecId.XOR_FLOAT:
                 return Codecs.decodeXorFloat(payload, nItems);
             default:
-                return [];
+                throw new IntegrityError(`Unsupported inner codec: ${codecId}`);
         }
     }
 
@@ -915,15 +927,33 @@ export class GICSv2Decoder {
         let itemOffset = 0;
         for (let s = 0; s < snapshotLengths.length; s++) {
             const count = snapshotLengths[s];
+            if (!Number.isInteger(count) || count < 0) {
+                throw new IntegrityError(`Invalid snapshot length at index ${s}: ${count}`);
+            }
+
+            const timestamp = timeData[s];
+            if (timestamp === undefined) {
+                throw new IntegrityError(`Missing TIME value for snapshot ${s}`);
+            }
+
             const map = new Map<number, { price: number; quantity: number }>();
             for (let j = 0; j < count; j++) {
-                const id = itemIds[itemOffset] ?? 0;
-                const price = priceData[itemOffset] ?? 0;
-                const quantity = quantityData[itemOffset] ?? 0;
+                const id = itemIds[itemOffset];
+                const price = priceData[itemOffset];
+                const quantity = quantityData[itemOffset];
+                if (id === undefined) {
+                    throw new IntegrityError(`Missing ITEM_ID value at item offset ${itemOffset}`);
+                }
+                if (price === undefined) {
+                    throw new IntegrityError(`Missing VALUE value at item offset ${itemOffset}`);
+                }
+                if (quantity === undefined) {
+                    throw new IntegrityError(`Missing QUANTITY value at item offset ${itemOffset}`);
+                }
                 map.set(id, { price, quantity });
                 itemOffset++;
             }
-            result.push({ timestamp: timeData[s] ?? 0, items: map });
+            result.push({ timestamp, items: map });
         }
         return result;
     }
@@ -935,6 +965,13 @@ export class GICSv2Decoder {
 
         if (timeData.length !== snapshotLengths.length) {
             throw new IntegrityError(`Cross-stream mismatch: TIME length (${timeData.length}) != SNAPSHOT_LEN length (${snapshotLengths.length})`);
+        }
+
+        for (let i = 0; i < snapshotLengths.length; i++) {
+            const count = snapshotLengths[i];
+            if (!Number.isInteger(count) || count < 0) {
+                throw new IntegrityError(`SNAPSHOT_LEN contains invalid count at index ${i}: ${count}`);
+            }
         }
 
         const totalItemsExpected = snapshotLengths.reduce((a, b) => a + b, 0);
@@ -980,6 +1017,18 @@ export class GICSv2Decoder {
         const val = new DataView(sub.buffer, sub.byteOffset, 4).getUint32(0, true);
         this.pos += 4;
         return val;
+    }
+
+    private resetBootstrapState(): void {
+        this.pos = 0;
+        this.encryptionKey = null;
+        this.encryptionFileNonce = null;
+        this.encryptionMode = 0;
+        this.isEncrypted = false;
+        this.hasSchema = false;
+        this.schema = LEGACY_SCHEMA;
+        this.fileHeaderBytes = null;
+        this.fileVersion = 0;
     }
 
     private concatArrays(arrays: Uint8Array[]): Uint8Array {
