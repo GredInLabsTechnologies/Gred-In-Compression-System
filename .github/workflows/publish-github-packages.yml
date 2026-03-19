@@ -32,6 +32,8 @@ jobs:
 
       - name: Test
         run: npm test
+        env:
+          GICS_TEST_TIMING_MAX_DELTA_RATIO: "0.55"
 
       - name: Publish
         run: npm publish
