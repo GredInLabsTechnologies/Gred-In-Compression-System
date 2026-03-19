@@ -554,7 +554,7 @@ describe('AUDIT §4 — WAL Crash Safety & Recovery', () => {
 
     describe('§4.2 — Binary vs JSONL WAL equivalence', () => {
         it('PROBE: same ops → identical recovered state', async () => {
-            const ops = [
+            const ops: Array<{ op: Operation; key: string; payload: Record<string, number | string> }> = [
                 { op: Operation.PUT, key: 'a', payload: { v: 1 } },
                 { op: Operation.PUT, key: 'b', payload: { v: 2 } },
                 { op: Operation.DELETE, key: 'b', payload: {} },
