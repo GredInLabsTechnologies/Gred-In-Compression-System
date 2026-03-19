@@ -1,6 +1,6 @@
-# GICS v1.3.3 Pre-Release API Reference
+# GICS v1.3.3 API Reference
 
-This is the API reference for the current `v1.3.3-pre` branch.
+This is the API reference for `v1.3.3`.
 
 It covers:
 
