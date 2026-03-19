@@ -7,6 +7,16 @@ import threading
 import subprocess
 from typing import Callable, Optional
 
+DEFAULT_GICS_HOME = os.path.expanduser('~/.gics')
+DEFAULT_UNIX_SOCKET_PATH = os.path.join(DEFAULT_GICS_HOME, 'gics.sock')
+DEFAULT_WINDOWS_PIPE_PATH = r'\\.\pipe\gics-daemon'
+DEFAULT_TOKEN_PATH = os.path.join(DEFAULT_GICS_HOME, 'gics.token')
+LEGACY_TOKEN_SEARCH_PATHS = [
+    '.gics_token',
+    os.path.expanduser('~/.gics_token'),
+    '../.gics_token',
+]
+
 class GICSClient:
     """
     A zero-dependency Python client for the GICS Daemon.
@@ -21,21 +31,23 @@ class GICSClient:
         retry_delay=0.1,
         request_timeout=5.0,
         pool_size=4,
+        token_path=None,
     ):
         """
         :param address: Path to the socket or named pipe. 
-                        Defaults to /tmp/gics.sock or \\.\\pipe\\gics.
-        :param token: Security token from .gics_token.
+                        Defaults to ~/.gics/gics.sock or \\.\\pipe\\gics-daemon.
+        :param token: Security token from ~/.gics/gics.token.
         """
         if address is None:
             if os.name == 'nt':
-                self.address = r'\\.\pipe\gics'
+                self.address = DEFAULT_WINDOWS_PIPE_PATH
             else:
-                self.address = '/tmp/gics.sock'
+                self.address = DEFAULT_UNIX_SOCKET_PATH
         else:
             self.address = address
 
         self._token = token
+        self._token_path = token_path
         self._request_id = 1
         self._max_retries = max_retries
         self._retry_delay = retry_delay
@@ -54,13 +66,12 @@ class GICSClient:
     def _get_token(self):
         if self._token:
             return self._token
-        
-        # Try to find .gics_token in current or parent dirs
-        paths = [
-            '.gics_token',
-            os.path.expanduser('~/.gics_token'),
-            '../.gics_token'
-        ]
+
+        paths = []
+        if self._token_path:
+            paths.append(self._token_path)
+        paths.append(DEFAULT_TOKEN_PATH)
+        paths.extend(LEGACY_TOKEN_SEARCH_PATHS)
         for p in paths:
             if os.path.exists(p):
                 with open(p, 'r') as f:
@@ -717,7 +728,7 @@ class GICSDaemonSupervisor:
 
     def wait_until_ready(self, timeout=10.0):
         deadline = time.time() + timeout
-        client = GICSClient(address=self.address, token=None if self.token_path else None)
+        client = GICSClient(address=self.address, token_path=self.token_path)
         while time.time() < deadline:
             try:
                 client.address = self.address or client.address
@@ -742,7 +753,7 @@ class GICSDaemonSupervisor:
         return 0
 
     def status(self):
-        client = GICSClient(address=self.address)
+        client = GICSClient(address=self.address, token_path=self.token_path)
         if self.token_path and os.path.exists(self.token_path):
             with open(self.token_path, 'r') as f:
                 client._token = f.read().strip()

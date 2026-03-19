@@ -146,8 +146,10 @@ describe('GICSDaemon WAL recovery (Phase 1.2 bootstrap)', () => {
             await daemonB.start();
 
             const ping = await rpcCall(socketPathB, {
-                method: 'ping',
+                method: 'pingVerbose',
                 id: 3
+                ,
+                token
             });
             expect(ping.error).toBeUndefined();
             expect(ping.result?.recoveredEntries).toBe(2);
@@ -199,7 +201,7 @@ describe('GICSDaemon WAL recovery (Phase 1.2 bootstrap)', () => {
             });
             expect(put.error).toBeUndefined();
 
-            const prePing = await rpcCall(socketPath, { method: 'ping', id: 11 });
+            const prePing = await rpcCall(socketPath, { method: 'pingVerbose', id: 11, token });
             expect(prePing.error).toBeUndefined();
             expect(prePing.result?.dirtyCount).toBeGreaterThan(0);
 
@@ -213,7 +215,7 @@ describe('GICSDaemon WAL recovery (Phase 1.2 bootstrap)', () => {
             expect(typeof flush.result?.flushDurationMs).toBe('number');
             expect(flush.result?.segmentCreated).toBeTruthy();
 
-            const postPing = await rpcCall(socketPath, { method: 'ping', id: 13 });
+            const postPing = await rpcCall(socketPath, { method: 'pingVerbose', id: 13, token });
             expect(postPing.error).toBeUndefined();
             expect(postPing.result?.dirtyCount).toBe(0);
             expect(postPing.result?.segments).toBeGreaterThan(0);
@@ -261,7 +263,7 @@ describe('GICSDaemon WAL recovery (Phase 1.2 bootstrap)', () => {
             expect(put.result?.flush?.recordsFlushed).toBeGreaterThan(0);
             expect(put.result?.flush?.segmentCreated).toBeTruthy();
 
-            const ping = await rpcCall(socketPath, { method: 'ping', id: 71 });
+            const ping = await rpcCall(socketPath, { method: 'pingVerbose', id: 71, token });
             expect(ping.error).toBeUndefined();
             expect(ping.result?.dirtyCount).toBe(0);
             expect(ping.result?.segments).toBeGreaterThan(0);
@@ -320,7 +322,7 @@ describe('GICSDaemon WAL recovery (Phase 1.2 bootstrap)', () => {
             expect(flush2.error).toBeUndefined();
             expect(flush2.result?.ok).toBe(true);
 
-            const preCompactPing = await rpcCall(socketPath, { method: 'ping', id: 86 });
+            const preCompactPing = await rpcCall(socketPath, { method: 'pingVerbose', id: 86, token });
             expect(preCompactPing.error).toBeUndefined();
             expect(preCompactPing.result?.segments).toBeGreaterThanOrEqual(2);
 
@@ -331,7 +333,7 @@ describe('GICSDaemon WAL recovery (Phase 1.2 bootstrap)', () => {
             expect(compact.result?.segmentsMerged).toBeGreaterThanOrEqual(2);
             expect(compact.result?.outputSegment).toBeTruthy();
 
-            const postCompactPing = await rpcCall(socketPath, { method: 'ping', id: 88 });
+            const postCompactPing = await rpcCall(socketPath, { method: 'pingVerbose', id: 88, token });
             expect(postCompactPing.error).toBeUndefined();
             expect(postCompactPing.result?.segments).toBe(1);
 
@@ -380,7 +382,7 @@ describe('GICSDaemon WAL recovery (Phase 1.2 bootstrap)', () => {
             });
             await rpcCall(socketPath, { method: 'flush', id: 91, token });
 
-            const pre = await rpcCall(socketPath, { method: 'ping', id: 92 });
+            const pre = await rpcCall(socketPath, { method: 'pingVerbose', id: 92, token });
             expect(pre.error).toBeUndefined();
             expect(pre.result?.segments).toBeGreaterThan(0);
 
@@ -389,7 +391,7 @@ describe('GICSDaemon WAL recovery (Phase 1.2 bootstrap)', () => {
             expect(rotate.result?.ok).toBe(true);
             expect(rotate.result?.filesArchived).toBeGreaterThan(0);
 
-            const post = await rpcCall(socketPath, { method: 'ping', id: 94 });
+            const post = await rpcCall(socketPath, { method: 'pingVerbose', id: 94, token });
             expect(post.error).toBeUndefined();
             expect(post.result?.segments).toBe(0);
             expect(post.result?.coldSegments).toBeGreaterThan(0);
@@ -553,8 +555,9 @@ describe('GICSDaemon WAL recovery (Phase 1.2 bootstrap)', () => {
             });
 
             await daemon.start();
+            const token = (await fs.readFile(tokenPath, 'utf8')).trim();
 
-            const ping = await rpcCall(socketPath, { method: 'ping', id: 20 });
+            const ping = await rpcCall(socketPath, { method: 'pingVerbose', id: 20, token });
             expect(ping.error).toBeUndefined();
             expect(ping.result?.walType).toBe('jsonl');
             expect(ping.result?.walFsyncMode).toBe('strict');
@@ -584,8 +587,10 @@ describe('GICSDaemon WAL recovery (Phase 1.2 bootstrap)', () => {
             });
             expect((ping as any).jsonrpc).toBe('2.0');
             expect(ping.error).toBeUndefined();
-            expect(ping.result?.segments).toBe(0);
-            expect(ping.result?.memtable_size).toBeTypeOf('number');
+            expect(ping.result?.status).toBe('ok');
+            expect(ping.result?.version).toBe('1.3.4');
+            expect(ping.result?.service).toBe('gics-core');
+            expect(typeof ping.result?.timestamp).toBe('number');
 
             const invalid = await rawLineCall(socketPath, JSON.stringify({ id: 31 }));
             expect(invalid.jsonrpc).toBe('2.0');

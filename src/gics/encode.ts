@@ -23,6 +23,9 @@ import type { FileHandle } from 'node:fs/promises';
 import { BlockStats } from './telemetry-types.js';
 import { FieldMath } from './field-math.js';
 import {
+    assertValidEncryptionHeader,
+    assertValidPbkdf2Iterations,
+    DEFAULT_PBKDF2_ITERATIONS,
     deriveKey,
     generateAuthVerify,
     encryptSection,
@@ -88,7 +91,7 @@ export class GICSv2Encoder {
     private encryptionFileNonce: Uint8Array | null = null;
     private authVerify: Uint8Array | null = null;
     private encryptionMode = 0;
-    private pbkdf2Iterations: number = 600_000;
+    private pbkdf2Iterations: number = DEFAULT_PBKDF2_ITERATIONS;
 
     static reset() {
         // Backward-compat for existing tests. No global mutable state is used anymore.
@@ -123,6 +126,7 @@ export class GICSv2Encoder {
                 throw new Error(`Cannot append encrypted legacy GICS file with encMode=${appendState.encryptionHeader.encMode}. Re-encode to encMode=2 first.`);
             }
 
+            assertValidEncryptionHeader(appendState.encryptionHeader);
             encoder.encryptionMode = appendState.encryptionHeader.encMode;
             encoder.encryptionSalt = appendState.encryptionHeader.salt;
             encoder.encryptionFileNonce = appendState.encryptionHeader.fileNonce;
@@ -169,7 +173,7 @@ export class GICSv2Encoder {
             maxItemsPerSegment: 1_000_000,
             autoFlushThreshold: 0,
             password: '',
-            pbkdf2Iterations: 600_000,
+            pbkdf2Iterations: DEFAULT_PBKDF2_ITERATIONS,
             schema: undefined as unknown as import('../gics-types.js').SchemaProfile,
             preset: options.preset ?? 'balanced',
             compressionLevel: presetConfig.compressionLevel,
@@ -180,10 +184,8 @@ export class GICSv2Encoder {
         this.compressionLevel = this.options.compressionLevel;
 
         if (this.options.password) {
-            const iterations = this.options.pbkdf2Iterations ?? 600_000;
-            if (iterations < 100_000) {
-                throw new Error(`PBKDF2 iterations must be >= 100,000 (got ${iterations})`);
-            }
+            const iterations = this.options.pbkdf2Iterations ?? DEFAULT_PBKDF2_ITERATIONS;
+            assertValidPbkdf2Iterations(iterations);
             const secrets = generateEncryptionSecrets();
             this.encryptionSalt = secrets.salt;
             this.encryptionFileNonce = secrets.fileNonce;
@@ -731,12 +733,51 @@ export class GICSv2Encoder {
         blockStats: BlockStats[],
         ctx: ContextV0
     ) {
-        const candidates = this.getCandidatesForStrategy(codecStrategy, ctx);
-
         for (let i = 0; i < data.length; i += this.blockSize) {
             const chunk = data.slice(i, i + this.blockSize);
+            if (this.hasNonIntegerValues(chunk)) {
+                this.processFloatFieldBlock(streamId as StreamId, chunk, addToStream, blockStats);
+                continue;
+            }
+
+            const candidates = this.getCandidatesForStrategy(codecStrategy, ctx);
             this.processStructuralBlock(streamId as StreamId, chunk, candidates, addToStream, blockStats);
         }
+    }
+
+    private processFloatFieldBlock(
+        streamId: StreamId,
+        chunk: number[],
+        addToStream: (streamId: StreamId, manifest: BlockManifestEntry, payload: Uint8Array) => void,
+        stats: BlockStats[],
+    ) {
+        const candidates = [
+            { id: InnerCodecId.XOR_FLOAT, encode: (data: number[]) => Codecs.encodeXorFloat(data) },
+            { id: InnerCodecId.FIXED64_LE, encode: (data: number[]) => Codecs.encodeFixed64(data) },
+        ];
+
+        let bestEncoded: Uint8Array | null = null;
+        let bestCodec: InnerCodecId = InnerCodecId.FIXED64_LE;
+        for (const candidate of candidates) {
+            const encoded = candidate.encode(chunk);
+            if (bestEncoded === null || encoded.length < bestEncoded.length) {
+                bestEncoded = encoded;
+                bestCodec = candidate.id;
+            }
+        }
+
+        const finalEncoded = bestEncoded ?? Codecs.encodeFixed64(chunk);
+        addToStream(
+            streamId,
+            {
+                innerCodecId: bestCodec,
+                nItems: chunk.length,
+                payloadLen: finalEncoded.length,
+                flags: 0,
+            },
+            finalEncoded,
+        );
+        this.recordSimpleBlockStats(streamId, chunk, finalEncoded, stats, bestCodec);
     }
 
     /**

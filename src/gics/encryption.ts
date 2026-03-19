@@ -11,6 +11,12 @@ import { GICS_ENC_MODE_LEGACY_STREAM, GICS_ENC_MODE_SEGMENT_STREAM } from './for
 
 const AUTH_CONSTANT = Buffer.from('GICS_V1.3_AUTH_VERIFY');
 
+export const PBKDF2_KDF_ID = 1;
+export const SHA256_DIGEST_ID = 1;
+export const MIN_PBKDF2_ITERATIONS = 100_000;
+export const DEFAULT_PBKDF2_ITERATIONS = 600_000;
+export const MAX_PBKDF2_ITERATIONS = 10_000_000;
+
 export interface EncryptionContext {
     key: Buffer;
     fileNonce: Uint8Array;
@@ -21,10 +27,51 @@ export interface SectionEncryptionOptions {
     segmentOrdinal?: number;
 }
 
+export interface ParsedEncryptionHeader {
+    encMode: number;
+    salt: Uint8Array;
+    authVerify: Uint8Array;
+    kdfId: number;
+    iterations: number;
+    digestId: number;
+    fileNonce: Uint8Array;
+}
+
+export function assertValidPbkdf2Iterations(iterations: number): void {
+    if (!Number.isSafeInteger(iterations) || iterations < MIN_PBKDF2_ITERATIONS || iterations > MAX_PBKDF2_ITERATIONS) {
+        throw new Error(
+            `GICS v1.3: PBKDF2 iterations must be between ${MIN_PBKDF2_ITERATIONS.toLocaleString('en-US')} and ${MAX_PBKDF2_ITERATIONS.toLocaleString('en-US')} (got ${iterations})`,
+        );
+    }
+}
+
+export function assertValidEncryptionHeader(header: ParsedEncryptionHeader): void {
+    if (header.encMode !== GICS_ENC_MODE_LEGACY_STREAM && header.encMode !== GICS_ENC_MODE_SEGMENT_STREAM) {
+        throw new Error(`GICS v1.3: Unsupported encryption mode ${header.encMode}`);
+    }
+    if (header.salt.length !== 16) {
+        throw new Error(`GICS v1.3: Invalid encryption salt length ${header.salt.length}`);
+    }
+    if (header.authVerify.length !== 32) {
+        throw new Error(`GICS v1.3: Invalid authVerify length ${header.authVerify.length}`);
+    }
+    if (header.kdfId !== PBKDF2_KDF_ID) {
+        throw new Error(`GICS v1.3: Unsupported KDF id ${header.kdfId}`);
+    }
+    assertValidPbkdf2Iterations(header.iterations);
+    if (header.digestId !== SHA256_DIGEST_ID) {
+        throw new Error(`GICS v1.3: Unsupported digest id ${header.digestId}`);
+    }
+    if (header.fileNonce.length !== 12) {
+        throw new Error(`GICS v1.3: Invalid file nonce length ${header.fileNonce.length}`);
+    }
+}
+
 /**
  * Derives a 256-bit key from a password and salt using PBKDF2-SHA256.
  */
 export function deriveKey(password: string, salt: Uint8Array, iterations: number): Buffer {
+    assertValidPbkdf2Iterations(iterations);
     return pbkdf2Sync(password, Buffer.from(salt), iterations, 32, 'sha256');
 }
 

@@ -8,14 +8,9 @@ import {
     GICS_MAGIC_V2,
 } from './format.js';
 import { SegmentHeader } from './segment.js';
+import { assertValidEncryptionHeader, type ParsedEncryptionHeader } from './encryption.js';
 
-export interface ExistingEncryptionHeader {
-    encMode: number;
-    salt: Uint8Array;
-    authVerify: Uint8Array;
-    iterations: number;
-    fileNonce: Uint8Array;
-}
+export interface ExistingEncryptionHeader extends ParsedEncryptionHeader {}
 
 export interface AppendPreparationResult {
     prevRootHash: Uint8Array | null;
@@ -133,18 +128,21 @@ export class FileAccess {
             const encMode = raw[pos++];
             const salt = raw.slice(pos, pos + 16); pos += 16;
             const authVerify = raw.slice(pos, pos + 32); pos += 32;
-            pos += 1; // kdfId
+            const kdfId = raw[pos++];
             const iterations = view.getUint32(pos, true); pos += 4;
-            pos += 1; // digestId
+            const digestId = raw[pos++];
             const fileNonce = raw.slice(pos, pos + 12); pos += 12;
 
             encryptionHeader = {
                 encMode,
                 salt,
                 authVerify,
+                kdfId,
                 iterations,
+                digestId,
                 fileNonce,
             };
+            assertValidEncryptionHeader(encryptionHeader);
         }
 
         if (hasSchema) {

@@ -79,10 +79,10 @@ export const GICS = {
     },
 
     /**
-     * Verifies the entire file integrity (Hash Chain, CRCs) WITHOUT decompressing payloads.
+     * Verifies file integrity and payload readability without materializing snapshot objects.
      */
-    verify: async (data: Uint8Array): Promise<boolean> => {
-        const decoder = new GICSv2Decoder(data);
+    verify: async (data: Uint8Array, options?: GICSv2DecoderOptions): Promise<boolean> => {
+        const decoder = new GICSv2Decoder(data, options);
         return await decoder.verifyIntegrityOnly();
     },
 

@@ -196,7 +196,7 @@ describe('Lifecycle Actions (Phase 12)', () => {
             // Verify final state
             const pingRes = await sendRequest(socketPath, {
                 jsonrpc: '2.0',
-                method: 'ping',
+                method: 'pingVerbose',
                 params: {},
                 token,
                 id: 'final_ping',

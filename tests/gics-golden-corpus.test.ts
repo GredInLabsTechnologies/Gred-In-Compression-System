@@ -74,8 +74,8 @@ describe('GICS v1.3 Golden Corpus', () => {
         const password = 'correct-horse-battery-staple';
         const { bytes, json } = await loadFixture('legacy_encrypted');
 
-        // verify() does not need password: it validates chain+CRCs without decompression
-        await expect(GICS.verify(bytes)).resolves.toBe(true);
+        await expect(GICS.verify(bytes)).resolves.toBe(false);
+        await expect(GICS.verify(bytes, { password })).resolves.toBe(true);
 
         // unpack without password must fail
         await expect(GICS.unpack(bytes)).rejects.toThrow();

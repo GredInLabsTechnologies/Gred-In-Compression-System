@@ -20,18 +20,52 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - `docs/API_v1_3_4.md`
   - `docs/releases/2026-03-19_GICS_v1_3_4_iteration_open.md`
   - `GICS_1_3_4_ARCHITECTURE.MD`
+- Official package surface for `@gredinlabstechnologies/gics-core@1.3.4`.
+- Official Node/TypeScript daemon client with retries, `putMany`, summaries, verify helpers, and strict types.
+- Expanded official Python client with `put_many`, summaries, `ping_verbose`, inference seeding, and daemon supervision.
+- Runtime primitives:
+  - `putMany(records, atomic, idempotency_key, verify)`
+  - `countPrefix(prefix, ...)`
+  - `latestByPrefix(prefix, ...)`
+  - `scanSummary(prefix, ...)`
+- Inference seeding:
+  - `seedProfile`
+  - `seedPolicy`
+- Runtime and inference telemetry with CLI access through `gics daemon telemetry`.
+- Verification hardening regression coverage, including encrypted header checks and schema float-field coverage.
 
 ### Changed
 
 - Bumped the working package version from `1.3.3` to `1.3.4`.
-- Moved the repository into a new iteration posture: preparation first, implementation later.
 - Deprecated `1.3.3` and earlier planning documents for new implementation work.
 - Updated top-level references so `1.3.4` is the active development line.
+- Introduced `encMode=2` with IV derivation from `fileNonce + segmentOrdinal + streamId`.
+- Encrypted append now rejects unsafe legacy append paths from `encMode=1`.
+- `query()` and encrypted bootstrap now share the same header preparation path.
+- `verify()` now validates encrypted metadata and payload readability, not only outer hashes.
+- Public `GICS.verify(data, options?)` now forwards decoder options such as `password`.
+- `delete()` is now durable as an atomic WAL batch with tombstone write.
+- Daemon startup now holds a real cross-process lock for the active `dataPath`.
+- `ping` is anonymous/minimal and `pingVerbose` is authenticated/detailed.
+- Resilience shell now clears timers correctly, applies hysteresis, and caps half-open probes.
+- Audit chain mutation paths are serialized.
+- Generic schema encoding now routes floating numeric fields through float-safe codecs instead of integer-only codecs.
 
-### Notes
+### Fixed
 
-- No runtime features were implemented in this step.
-- This change prepares the repository for `1.3.4` as a new iteration, not as a patch train over `1.3.3`.
+- Unknown codecs no longer degrade to empty data.
+- Malformed DICT/FOR/FIXED64 payloads now raise explicit integrity errors.
+- Encrypted/header parsing now rejects malformed KDF metadata and reserved-byte misuse.
+- Strict verification now catches payload unreadability in addition to CRC/hash failures.
+- Encrypted files correctly fail verification when no password is supplied.
+- Mixed daemon insight/system snapshots with float fields no longer produce invalid `DICT_VARINT` payloads.
+- `verify` passes again in the daemon soak path for both binary and `jsonl` WAL modes.
+
+### Validation
+
+- `npm.cmd run build`
+- `npm.cmd test -- --run tests/gics-generic-roundtrip.test.ts tests/gics-verify-hardening.test.ts tests/gics-security-crypto.test.ts tests/gics-golden-corpus.test.ts tests/gics-v1.3-segments.test.ts tests/daemon-realworld-soak.test.ts`
+- `npm.cmd pack --dry-run`
 
 ## [1.3.3] - 2026-03-18
 

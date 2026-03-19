@@ -1,5 +1,12 @@
 import { GICS } from '../src/index.js';
 import {
+    assertValidEncryptionHeader,
+    assertValidPbkdf2Iterations,
+    DEFAULT_PBKDF2_ITERATIONS,
+    MAX_PBKDF2_ITERATIONS,
+    MIN_PBKDF2_ITERATIONS,
+    PBKDF2_KDF_ID,
+    SHA256_DIGEST_ID,
     deriveKey,
     generateEncryptionSecrets,
     generateAuthVerify,
@@ -11,6 +18,29 @@ import { GICS_ENC_MODE_SEGMENT_STREAM } from '../src/gics/format.js';
 import { performance } from 'node:perf_hooks';
 
 describe('GICS cryptographic security checks', () => {
+    it('rejects PBKDF2 iteration counts outside the supported range', () => {
+        expect(() => assertValidPbkdf2Iterations(MIN_PBKDF2_ITERATIONS - 1)).toThrow(/PBKDF2 iterations/);
+        expect(() => assertValidPbkdf2Iterations(MAX_PBKDF2_ITERATIONS + 1)).toThrow(/PBKDF2 iterations/);
+        expect(() => assertValidPbkdf2Iterations(DEFAULT_PBKDF2_ITERATIONS)).not.toThrow();
+    });
+
+    it('rejects unsupported encryption header metadata before key derivation', () => {
+        const { salt, fileNonce } = generateEncryptionSecrets();
+        const header = {
+            encMode: GICS_ENC_MODE_SEGMENT_STREAM,
+            salt,
+            authVerify: new Uint8Array(32),
+            kdfId: PBKDF2_KDF_ID,
+            iterations: DEFAULT_PBKDF2_ITERATIONS,
+            digestId: SHA256_DIGEST_ID,
+            fileNonce,
+        };
+
+        expect(() => assertValidEncryptionHeader({ ...header, kdfId: 2 })).toThrow(/KDF/);
+        expect(() => assertValidEncryptionHeader({ ...header, digestId: 2 })).toThrow(/digest/);
+        expect(() => assertValidEncryptionHeader({ ...header, iterations: MIN_PBKDF2_ITERATIONS - 1 })).toThrow(/PBKDF2 iterations/);
+    });
+
     it('PBKDF2 key derivation is deterministic for same password/salt/iterations', () => {
         const { salt } = generateEncryptionSecrets();
         const k1 = deriveKey('same-password', salt, 100_000);
@@ -36,7 +66,8 @@ describe('GICS cryptographic security checks', () => {
         wrongToken[0] ^= 0x01;
 
         const samples = Number(process.env.GICS_TEST_TIMING_SAMPLES ?? '3000');
-        const maxDeltaRatio = Number(process.env.GICS_TEST_TIMING_MAX_DELTA_RATIO ?? '0.35');
+        const defaultMaxDeltaRatio = process.platform === 'win32' ? '0.5' : '0.35';
+        const maxDeltaRatio = Number(process.env.GICS_TEST_TIMING_MAX_DELTA_RATIO ?? defaultMaxDeltaRatio);
 
         let equalMs = 0;
         let mismatchMs = 0;

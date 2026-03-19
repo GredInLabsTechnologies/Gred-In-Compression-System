@@ -16,7 +16,9 @@ import type { GICSv2DecoderOptions } from './types.js';
 import { SegmentHeader, SegmentFooter, SegmentIndex } from './segment.js';
 import { FieldMath } from './field-math.js';
 import {
+    assertValidEncryptionHeader,
     deriveKey,
+    type ParsedEncryptionHeader,
     verifyAuth,
     decryptSection
 } from './encryption.js';
@@ -48,6 +50,8 @@ const LEGACY_SCHEMA: SchemaProfile = {
         { name: 'quantity', type: 'numeric', codecStrategy: 'structural' },
     ],
 };
+
+const LEGACY_STREAM_COUNT = 5;
 
 const ERR_DATA_TOO_SHORT = 'Data too short';
 
@@ -234,6 +238,9 @@ export class GICSv2Decoder {
 
     private async bootstrapV3(): Promise<void> {
         this.resetBootstrapState();
+        if (this.data.length < GICS_HEADER_SIZE_V3) {
+            throw new IncompleteDataError('GICS v1.3: Truncated file header');
+        }
         if (!this.verifyMagic()) {
             throw new IntegrityError("GICS Decoder: Invalid magic bytes.");
         }
@@ -247,6 +254,8 @@ export class GICSv2Decoder {
         this.isEncrypted = (flags & GICS_FLAGS_V3.ENCRYPTED) !== 0;
         this.hasSchema = (flags & GICS_FLAGS_V3.HAS_SCHEMA) !== 0;
         this.fileHeaderBytes = this.data.subarray(0, GICS_HEADER_SIZE_V3);
+        const declaredStreamCount = this.data[9];
+        this.validateFixedHeaderFields(declaredStreamCount);
 
         this.pos = GICS_HEADER_SIZE_V3;
         if (this.isEncrypted) {
@@ -255,25 +264,59 @@ export class GICSv2Decoder {
         if (this.hasSchema) {
             await this.readSchemaSection();
         }
+        this.validateDeclaredStreamCount(declaredStreamCount);
     }
 
     private async setupEncryption() {
         if (!this.options.password) throw new Error("GICS v1.3: Password required for encrypted file");
+        if (this.pos + GICS_ENC_HEADER_SIZE_V3 > this.data.length) {
+            throw new IncompleteDataError('GICS v1.3: Truncated encryption header');
+        }
 
         const encMode = this.getUint8();
-        if (encMode !== 1 && encMode !== 2) throw new Error(`GICS v1.3: Unsupported encryption mode ${encMode}`);
-        this.encryptionMode = encMode;
-
         const salt = this.data.slice(this.pos, this.pos + 16); this.pos += 16;
         const authVerify = this.data.slice(this.pos, this.pos + 32); this.pos += 32;
-        this.getUint8(); // kdfId
+        const kdfId = this.getUint8();
         const iterations = this.getUint32();
-        this.getUint8(); // digestId
-        this.encryptionFileNonce = this.data.slice(this.pos, this.pos + 12); this.pos += 12;
+        const digestId = this.getUint8();
+        const fileNonce = this.data.slice(this.pos, this.pos + 12); this.pos += 12;
+
+        const header: ParsedEncryptionHeader = {
+            encMode,
+            salt,
+            authVerify,
+            kdfId,
+            iterations,
+            digestId,
+            fileNonce,
+        };
+        assertValidEncryptionHeader(header);
+        this.encryptionMode = header.encMode;
+        this.encryptionFileNonce = header.fileNonce;
 
         this.encryptionKey = deriveKey(this.options.password, salt, iterations);
         if (!verifyAuth(this.encryptionKey, authVerify)) {
             throw new IntegrityError("GICS v1.3: Invalid password");
+        }
+    }
+
+    private validateFixedHeaderFields(declaredStreamCount: number): void {
+        if (declaredStreamCount === 0) {
+            throw new IntegrityError('GICS v1.3: streamCount must be greater than zero');
+        }
+        for (let i = 10; i < GICS_HEADER_SIZE_V3; i++) {
+            if (this.data[i] !== 0) {
+                throw new IntegrityError('GICS v1.3: Reserved header bytes must be zero');
+            }
+        }
+    }
+
+    private validateDeclaredStreamCount(declaredStreamCount: number): void {
+        const expected = this.hasSchema
+            ? 3 + this.schema.fields.length
+            : LEGACY_STREAM_COUNT;
+        if (declaredStreamCount !== expected) {
+            throw new IntegrityError(`GICS v1.3: streamCount mismatch (declared=${declaredStreamCount}, expected=${expected})`);
         }
     }
 
@@ -464,43 +507,26 @@ export class GICSv2Decoder {
     }
 
     /**
-     * Verifies the entire file integrity (Hash Chain, CRCs) WITHOUT decompressing payloads.
+     * Verifies the full file structure, integrity chain, encrypted metadata, and payload readability
+     * without materializing snapshot objects.
      */
     async verifyIntegrityOnly(): Promise<boolean> {
         const startedAt = Date.now();
         try {
-            if (!this.verifyMagic()) return false;
-            this.pos = 4;
-            const version = this.getUint8();
-            if (version !== 0x03) return false;
-
-            this.pos = 5;
-            const flags = this.getUint32();
-            this.isEncrypted = (flags & GICS_FLAGS_V3.ENCRYPTED) !== 0;
-            const hasSchemaFlag = (flags & GICS_FLAGS_V3.HAS_SCHEMA) !== 0;
-
+            if (this.data.length < GICS_HEADER_SIZE_V3 + FILE_EOS_SIZE) return false;
+            await this.bootstrapV3();
             const dataEnd = this.data.length - FILE_EOS_SIZE;
-
-            this.pos = GICS_HEADER_SIZE_V3;
-            if (this.isEncrypted) this.pos += GICS_ENC_HEADER_SIZE_V3;
-
-            // Skip schema section if present (bounds-checked)
-            if (hasSchemaFlag) {
-                if (this.pos + 4 > this.data.length) return false;
-                const schemaLen = this.getUint32();
-                if (this.pos + schemaLen > dataEnd) return false;
-                this.pos += schemaLen;
-            }
-
             const integrity = new IntegrityChain();
+            let segmentOrdinal = 0;
 
             while (this.pos < dataEnd) {
-                const result = this.verifySegmentAt(this.pos, integrity);
+                const result = await this.verifySegmentAt(this.pos, integrity, segmentOrdinal);
                 if (!result.success) return false;
                 this.pos = result.nextPos;
+                segmentOrdinal++;
             }
 
-            this.verifyFileEOS(integrity);
+            this.verifyFileEOS(integrity, true);
             this.options.telemetry?.incrementCounter(
                 'gics_verify_total',
                 { result: 'ok', ...this.fileLabels() },
@@ -538,17 +564,24 @@ export class GICSv2Decoder {
         }
     }
 
-    private verifySegmentAt(pos: number, integrity: IntegrityChain): { success: boolean, nextPos: number } {
+    private async verifySegmentAt(pos: number, integrity: IntegrityChain, segmentOrdinal: number): Promise<{ success: boolean, nextPos: number }> {
         try {
-            const { sections, footer, nextPos, segmentStart, footerPos } = this.parseSegmentParts(pos);
+            const { header, sections, footer, nextPos, segmentStart, footerPos } = this.parseSegmentParts(pos);
 
             // 1. Verify CRC
             const preFooter = this.data.subarray(segmentStart, footerPos);
             if (calculateCRC32(preFooter) !== footer.crc32) return { success: false, nextPos: pos };
 
-            // 2. Update Chain and verify root
-            this.updateIntegrityChain(integrity, sections);
+            // 2. Verify stored section hashes and file-level root chain.
+            for (const section of sections) {
+                if (!this.advanceSectionIntegrity(integrity, section)) {
+                    return { success: false, nextPos: pos };
+                }
+            }
             if (!this.compareHashes(integrity.getRootHash(), footer.rootHash)) return { success: false, nextPos: pos };
+
+            // 3. Verify payloads remain decryptable/decompressible and codec metadata is coherent.
+            await this.verifySegmentPayloads(header, sections, segmentOrdinal);
 
             return { success: true, nextPos };
         } catch {
@@ -601,13 +634,20 @@ export class GICSv2Decoder {
         }
     }
 
-    private verifyFileEOS(integrity: IntegrityChain) {
+    private verifyFileEOS(integrity: IntegrityChain, forceStrict: boolean = false) {
         const dataEnd = this.data.length - FILE_EOS_SIZE;
         const eosBytes = this.data.subarray(dataEnd, this.data.length);
         if (eosBytes[0] !== GICS_EOS_MARKER) throw new IncompleteDataError("Missing File EOS");
         const fileRootHash = eosBytes.slice(1, 33);
+        const storedCrc = new DataView(eosBytes.buffer, eosBytes.byteOffset, eosBytes.byteLength).getUint32(33, true);
+        const expectedCrc = calculateCRC32(fileRootHash);
+        if (storedCrc !== expectedCrc) {
+            if (forceStrict || this.options.integrityMode === 'strict') {
+                throw new IntegrityError('File EOS CRC mismatch');
+            }
+        }
         if (!this.compareHashes(fileRootHash, integrity.getRootHash())) {
-            if (this.options.integrityMode === 'strict') {
+            if (forceStrict || this.options.integrityMode === 'strict') {
                 throw new IntegrityError("File-level integrity chain mismatch");
             }
         }
@@ -682,6 +722,9 @@ export class GICSv2Decoder {
             }
 
             const decompressed = await getOuterCodec(section.outerCodecId).decompress(payload);
+            if (decompressed.length !== section.uncompressedLen) {
+                throw new IntegrityError(`Section uncompressed length mismatch for stream ${section.streamId}`);
+            }
             this.decodeGenericSectionBlocks(section, decompressed, segmentContext, res);
         }
         return res;
@@ -690,6 +733,9 @@ export class GICSv2Decoder {
     private decodeGenericSectionBlocks(section: StreamSection, decompressed: Uint8Array, context: ContextV0, res: GenericDecompressionResult) {
         let offset = 0;
         for (const entry of section.manifest) {
+            if (offset + entry.payloadLen > decompressed.length) {
+                throw new IntegrityError(`Section payload exceeds decompressed boundary for stream ${section.streamId}`);
+            }
             const blockPayload = decompressed.subarray(offset, offset + entry.payloadLen);
             offset += entry.payloadLen;
 
@@ -706,6 +752,9 @@ export class GICSv2Decoder {
                 if (!res.fieldArrays.has(streamId)) res.fieldArrays.set(streamId, []);
                 res.fieldArrays.get(streamId)!.push(...values);
             }
+        }
+        if (offset !== decompressed.length) {
+            throw new IntegrityError(`Section payload length mismatch for stream ${section.streamId}`);
         }
     }
 
@@ -901,11 +950,33 @@ export class GICSv2Decoder {
 
     private updateIntegrityChain(chain: IntegrityChain, sections: StreamSection[]) {
         for (const s of sections) {
-            const blockCountBytes = new Uint8Array(2);
-            new DataView(blockCountBytes.buffer).setUint16(0, s.blockCount, true);
-            const manifestBytes = StreamSection.serializeManifest(s.manifest);
-            chain.update(this.concatArrays([new Uint8Array([s.streamId]), blockCountBytes, manifestBytes, s.payload]));
+            chain.update(this.buildSectionIntegrityInput(s));
         }
+    }
+
+    private buildSectionIntegrityInput(section: StreamSection): Uint8Array {
+        const blockCountBytes = new Uint8Array(2);
+        new DataView(blockCountBytes.buffer).setUint16(0, section.blockCount, true);
+        const manifestBytes = StreamSection.serializeManifest(section.manifest);
+        return this.concatArrays([new Uint8Array([section.streamId]), blockCountBytes, manifestBytes, section.payload]);
+    }
+
+    private advanceSectionIntegrity(chain: IntegrityChain, section: StreamSection): boolean {
+        const calculatedHash = chain.update(this.buildSectionIntegrityInput(section));
+        return this.compareHashes(calculatedHash, section.sectionHash);
+    }
+
+    private async verifySegmentPayloads(header: SegmentHeader, sections: StreamSection[], segmentOrdinal: number): Promise<void> {
+        if (this.hasSchema) {
+            const data = await this.decompressAndDecodeGeneric(sections, undefined, segmentOrdinal);
+            const totalItems = data.lengths.reduce((sum, count) => sum + count, 0);
+            this.validateGenericDataLengths(data, totalItems);
+            return;
+        }
+
+        const data = await this.decompressAndDecode(sections, undefined, segmentOrdinal);
+        this.reverseItemMajorIfNeeded(header, data);
+        this.validateCrossStreams(data.time, data.lengths, data.itemIds, data.prices, data.quantities);
     }
 
     private async decompressAndDecode(
@@ -940,17 +1011,14 @@ export class GICSv2Decoder {
         }
 
         const decompressed = await getOuterCodec(section.outerCodecId).decompress(payload);
+        if (decompressed.length !== section.uncompressedLen) {
+            throw new IntegrityError(`Section uncompressed length mismatch for stream ${section.streamId}`);
+        }
         this.decodeAndDistributeSection(section.streamId, section.manifest, decompressed, context, res);
     }
 
     private verifySectionHash(section: StreamSection, chain: IntegrityChain) {
-        const blockCountBytes = new Uint8Array(2);
-        new DataView(blockCountBytes.buffer).setUint16(0, section.blockCount, true);
-        const manifestBytes = StreamSection.serializeManifest(section.manifest);
-        const dataToHash = this.concatArrays([new Uint8Array([section.streamId]), blockCountBytes, manifestBytes, section.payload]);
-        const calculatedHash = chain.update(dataToHash);
-
-        if (!this.compareHashes(calculatedHash, section.sectionHash)) {
+        if (!this.advanceSectionIntegrity(chain, section)) {
             if (this.options.integrityMode === 'strict') throw new IntegrityError(`Hash mismatch for stream ${section.streamId}`);
         }
     }
@@ -984,10 +1052,16 @@ export class GICSv2Decoder {
     private decodeAndDistributeSection(streamId: StreamId, manifest: BlockManifestEntry[], decompressed: Uint8Array, context: ContextV0, res: DecompressionResult) {
         let offset = 0;
         for (const entry of manifest) {
+            if (offset + entry.payloadLen > decompressed.length) {
+                throw new IntegrityError(`Section payload exceeds decompressed boundary for stream ${streamId}`);
+            }
             const blockPayload = decompressed.subarray(offset, offset + entry.payloadLen);
             offset += entry.payloadLen;
             const values = this.decodeBlock(streamId, entry.innerCodecId, entry.nItems, blockPayload, entry.flags, context);
             this.distributeValues(streamId, values, res);
+        }
+        if (offset !== decompressed.length) {
+            throw new IntegrityError(`Section payload length mismatch for stream ${streamId}`);
         }
     }
 

@@ -186,7 +186,7 @@ describe('GICSDaemon real-world soak / fault-line test', () => {
                             }
 
                             if (i % 30 === 0) {
-                                const ping = await call('ping');
+                                const ping = await call('pingVerbose');
                                 expect(ping.status).toBe('ok');
                                 expect(typeof ping.count).toBe('number');
                             }
@@ -256,7 +256,7 @@ describe('GICSDaemon real-world soak / fault-line test', () => {
                 const verifyB = await callAfterRestart('verify');
                 expect(verifyB.valid).toBe(true);
 
-                const pingB = await callAfterRestart('ping');
+                const pingB = await callAfterRestart('pingVerbose');
                 expect(pingB.status).toBe('ok');
                 expect(typeof pingB.tiers?.warmSegments).toBe('number');
                 expect(typeof pingB.tiers?.coldSegments).toBe('number');

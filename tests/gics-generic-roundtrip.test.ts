@@ -56,6 +56,17 @@ const MINIMAL_SCHEMA: SchemaProfile = {
     ],
 };
 
+const FLOAT_SCHEMA: SchemaProfile = {
+    id: 'float_metrics_v1',
+    version: 1,
+    itemIdType: 'string',
+    fields: [
+        { name: 'velocity', type: 'numeric', codecStrategy: 'value' },
+        { name: 'volatility', type: 'numeric', codecStrategy: 'value' },
+        { name: 'target_key', type: 'categorical', enumMap: { '__MISSING__': 0, 'rw:key:17': 1, 'rw:key:29': 2 } },
+    ],
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeTrustSnapshots(count: number): GenericSnapshot<Record<string, number | string>>[] {
@@ -105,6 +116,28 @@ function makeSensorSnapshots(count: number): GenericSnapshot<Record<string, numb
         items.set(3, { temperature: 2500, humidity: 40 + (i % 10), pressure: 101500 - (i % 100) });
         snapshots.push({ timestamp: base + i * 60, items });
     }
+    return snapshots;
+}
+
+function makeFloatSnapshots(count: number): GenericSnapshot<Record<string, number | string>>[] {
+    const base = 1700000000;
+    const snapshots: GenericSnapshot<Record<string, number | string>>[] = [];
+
+    for (let i = 0; i < count; i++) {
+        const items = new Map<string, Record<string, number | string>>();
+        items.set(`_insight/behavior/rw:key:${i}`, {
+            velocity: i / 3 + 0.125,
+            volatility: (i % 7) / 10 + 0.05,
+            target_key: i % 2 === 0 ? 'rw:key:17' : 'rw:key:29',
+        });
+        items.set(`_insight/behavior/rw:key:${i + 100}`, {
+            velocity: i / 5 + 0.375,
+            volatility: (i % 5) / 8 + 0.15,
+            target_key: 'rw:key:17',
+        });
+        snapshots.push({ timestamp: base + i * 60, items });
+    }
+
     return snapshots;
 }
 
@@ -194,6 +227,28 @@ describe('Generic Encoder/Decoder Round-Trip', () => {
                     expect(decData.temperature).toBe(origData.temperature);
                     expect(decData.humidity).toBe(origData.humidity);
                     expect(decData.pressure).toBe(origData.pressure);
+                }
+            }
+        });
+
+        it('round-trips floating numeric fields and verifies them', async () => {
+            const original = makeFloatSnapshots(12);
+            const encoder = new GICSv2Encoder({ schema: FLOAT_SCHEMA });
+            for (const snapshot of original) await encoder.addSnapshot(snapshot);
+            const packed = await encoder.finish();
+
+            const decoder = new GICSv2Decoder(packed);
+            const decoded = await decoder.getAllGenericSnapshots();
+
+            expect(await GICS.verify(packed)).toBe(true);
+            expect(decoded).toHaveLength(original.length);
+
+            for (let i = 0; i < original.length; i++) {
+                for (const [key, origData] of original[i].items) {
+                    const decData = decoded[i].items.get(key)!;
+                    expect(decData.velocity).toBe(origData.velocity);
+                    expect(decData.volatility).toBe(origData.volatility);
+                    expect(decData.target_key).toBe(origData.target_key);
                 }
             }
         });
