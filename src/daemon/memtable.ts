@@ -29,7 +29,7 @@ export class MemTable {
     public static readonly DEFAULT_MAX_MEMTABLE_BYTES = 4 * 1024 * 1024; // 4MB
     public static readonly DEFAULT_MAX_DIRTY_RECORDS = 1000;
 
-    private records: Map<string, MemRecord> = new Map();
+    private readonly records: Map<string, MemRecord> = new Map();
     private _sizeBytes: number = 0;
     private _dirtyCount: number = 0;
     private readonly maxMemTableBytes: number;
@@ -152,6 +152,15 @@ export class MemTable {
         for (const record of this.records.values()) {
             record.dirty = false;
         }
+        this._dirtyCount = 0;
+    }
+
+    /**
+     * Fully evict all HOT records, usually after a durable flush.
+     */
+    clear(): void {
+        this.records.clear();
+        this._sizeBytes = 0;
         this._dirtyCount = 0;
     }
 

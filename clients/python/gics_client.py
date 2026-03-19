@@ -160,12 +160,12 @@ class GICSClient:
 
                             response_line = buffer.split(b'\n')[0]
                             return json.loads(response_line.decode('utf-8'))
-                        except (OSError, ConnectionError, TimeoutError, json.JSONDecodeError):
+                        except (OSError, json.JSONDecodeError):
                             healthy = False
                             raise
                     finally:
                         self._release_unix_socket(s, healthy=healthy)
-            except (FileNotFoundError, ConnectionRefusedError, OSError, json.JSONDecodeError) as e:
+            except (OSError, json.JSONDecodeError) as e:
                 last_error = e
                 if attempt < self._max_retries:
                     time.sleep(self._retry_delay)
@@ -196,8 +196,13 @@ class GICSClient:
         resp = self._call("delete", {"key": key})
         return self._unwrap_result(resp).get('ok', False)
 
-    def scan(self, prefix=""):
-        resp = self._call("scan", {"prefix": prefix})
+    def scan(self, prefix="", tiers="all", include_system=False, limit=None, cursor=None, mode="current"):
+        params = {"prefix": prefix, "tiers": tiers, "includeSystem": include_system, "mode": mode}
+        if limit is not None:
+            params["limit"] = limit
+        if cursor is not None:
+            params["cursor"] = cursor
+        resp = self._call("scan", params)
         return self._unwrap_result(resp).get('items', [])
 
     def flush(self):
@@ -230,10 +235,18 @@ class GICSClient:
         resp = self._call("getInsights", params)
         return self._unwrap_result(resp)
 
-    def report_outcome(self, insight_id, result, context=None):
-        params = {"insightId": insight_id, "result": result}
+    def report_outcome(self, insight_id=None, result=None, context=None, domain=None, decision_id=None, metrics=None):
+        params = {"result": result}
+        if insight_id is not None:
+            params["insightId"] = insight_id
+        if domain is not None:
+            params["domain"] = domain
+        if decision_id is not None:
+            params["decisionId"] = decision_id
         if context is not None:
             params["context"] = context
+        if metrics is not None:
+            params["metrics"] = metrics
         resp = self._call("reportOutcome", params)
         return self._unwrap_result(resp).get('ok', False)
 
@@ -276,14 +289,48 @@ class GICSClient:
         resp = self._call("getAnomalies", params)
         return self._unwrap_result(resp)
 
-    def get_recommendations(self, filter_type=None, target=None):
+    def get_recommendations(self, filter_type=None, target=None, domain=None, subject=None, limit=None):
         params = {}
         if filter_type is not None:
             params["type"] = filter_type
         if target is not None:
             params["target"] = target
+        if domain is not None:
+            params["domain"] = domain
+        if subject is not None:
+            params["subject"] = subject
+        if limit is not None:
+            params["limit"] = limit
         resp = self._call("getRecommendations", params)
         return self._unwrap_result(resp)
+
+    def infer(self, domain, objective=None, subject=None, context=None, candidates=None):
+        params = {"domain": domain}
+        if objective is not None:
+            params["objective"] = objective
+        if subject is not None:
+            params["subject"] = subject
+        if context is not None:
+            params["context"] = context
+        if candidates is not None:
+            params["candidates"] = candidates
+        resp = self._call("infer", params)
+        return self._unwrap_result(resp)
+
+    def get_profile(self, scope=None):
+        params = {}
+        if scope is not None:
+            params["scope"] = scope
+        resp = self._call("getProfile", params)
+        return self._unwrap_result(resp)
+
+    def get_inference_runtime(self):
+        resp = self._call("getInferenceRuntime")
+        return self._unwrap_result(resp)
+
+    def flush_inference(self):
+        resp = self._call("flushInference")
+        return self._unwrap_result(resp).get('ok', False)
 
     def get_accuracy(self, insight_type=None, scope=None):
         params = {}
@@ -294,7 +341,7 @@ class GICSClient:
         resp = self._call("getAccuracy", params)
         return self._unwrap_result(resp)
 
-    def subscribe(self, event_types, callback: Optional[Callable[[dict], None]] = None):
+    def subscribe(self, event_types):
         resp = self._call("subscribe", {"events": event_types})
         result = self._unwrap_result(resp)
         # Callback wiring for streaming transport is deferred to daemon event-stream phase.
@@ -353,10 +400,26 @@ class GICSClient:
         resp = await self._acall("getInsights", params)
         return self._unwrap_result(resp)
 
-    async def areport_outcome(self, insight_id: str, result: str, context: Optional[str] = None) -> bool:
-        params = {"insightId": insight_id, "result": result}
+    async def areport_outcome(
+        self,
+        insight_id: Optional[str] = None,
+        result: Optional[str] = None,
+        context: Optional[dict] = None,
+        domain: Optional[str] = None,
+        decision_id: Optional[str] = None,
+        metrics: Optional[dict] = None,
+    ) -> bool:
+        params = {"result": result}
+        if insight_id is not None:
+            params["insightId"] = insight_id
+        if domain is not None:
+            params["domain"] = domain
+        if decision_id is not None:
+            params["decisionId"] = decision_id
         if context is not None:
             params["context"] = context
+        if metrics is not None:
+            params["metrics"] = metrics
         resp = await self._acall("reportOutcome", params)
         return self._unwrap_result(resp).get('ok', False)
 
@@ -399,12 +462,25 @@ class GICSClient:
         resp = await self._acall("getAnomalies", params)
         return self._unwrap_result(resp)
 
-    async def aget_recommendations(self, filter_type: Optional[str] = None, target: Optional[str] = None):
+    async def aget_recommendations(
+        self,
+        filter_type: Optional[str] = None,
+        target: Optional[str] = None,
+        domain: Optional[str] = None,
+        subject: Optional[str] = None,
+        limit: Optional[int] = None,
+    ):
         params = {}
         if filter_type is not None:
             params["type"] = filter_type
         if target is not None:
             params["target"] = target
+        if domain is not None:
+            params["domain"] = domain
+        if subject is not None:
+            params["subject"] = subject
+        if limit is not None:
+            params["limit"] = limit
         resp = await self._acall("getRecommendations", params)
         return self._unwrap_result(resp)
 
@@ -416,6 +492,14 @@ class GICSClient:
             params["scope"] = scope
         resp = await self._acall("getAccuracy", params)
         return self._unwrap_result(resp)
+
+    async def aget_inference_runtime(self):
+        resp = await self._acall("getInferenceRuntime")
+        return self._unwrap_result(resp)
+
+    async def aflush_inference(self) -> bool:
+        resp = await self._acall("flushInference")
+        return self._unwrap_result(resp).get('ok', False)
 
     async def asubscribe(self, event_types: list[str]):
         resp = await self._acall("subscribe", {"events": event_types})

@@ -205,6 +205,7 @@ export class ResilienceShell {
             this.retryBaseDelayMs * Math.pow(2, attempt - 1),
             this.retryMaxDelayMs
         );
+        // eslint-disable-next-line sonarjs/pseudo-random
         const jitter = baseDelay * this.jitterFactor * (Math.random() - 0.5);
         const delay = Math.max(0, baseDelay + jitter);
         await new Promise(r => setTimeout(r, delay));

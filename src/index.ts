@@ -6,18 +6,30 @@
 
 import { GICSv2Encoder } from './gics/encode.js';
 import { GICSv2Decoder } from './gics/decode.js';
-import type { Snapshot } from './gics-types.js';
-import type { GICSv2EncoderOptions, GICSv2DecoderOptions } from './gics/types.js';
+import { GICSv2RotatingEncoder, readSession, verifySession } from './gics/rotating-encoder.js';
+import type { GICSv2EncoderOptions, GICSv2DecoderOptions, GICSSessionReadOptions } from './gics/types.js';
 
 // Re-export specific types and errors
-export type { Snapshot, GenericSnapshot, SchemaProfile, FieldDef } from './gics-types.js';
-export type { GICSv2EncoderOptions as EncoderOptions, GICSv2DecoderOptions as DecoderOptions, GICSv2Logger as Logger, CompressionPreset } from './gics/types.js';
+export type { GenericSnapshot, FieldDef } from './gics-types.js';
+import type { Snapshot as ISnapshot, SchemaProfile as ISchemaProfile } from './gics-types.js';
+export type Snapshot = ISnapshot;
+export type SchemaProfile = ISchemaProfile;
+
+export type {
+    GICSv2EncoderOptions as EncoderOptions,
+    GICSv2DecoderOptions as DecoderOptions,
+    GICSv2Logger as Logger,
+    CompressionPreset,
+    GICSv2RotationOptions as RotationOptions,
+    GICSv2AdaptiveRotationOptions as AdaptiveRotationOptions,
+    GICSSessionManifest as SessionManifest,
+    GICSSessionReadOptions as SessionReadOptions
+} from './gics/types.js';
 export { COMPRESSION_PRESETS } from './gics/types.js';
 export { IncompleteDataError, IntegrityError } from './gics/errors.js';
 export { CompressionProfiler } from './gics/profiler.js';
 export type { ProfileResult, ProfileMode, TrialResult, ProfileMeta } from './gics/profiler.js';
-
-import type { SchemaProfile } from './gics-types.js';
+export { GICSv2RotatingEncoder } from './gics/rotating-encoder.js';
 
 /** Predefined schema profiles */
 const PREDEFINED_SCHEMAS: Record<string, SchemaProfile> = {
@@ -75,9 +87,28 @@ export const GICS = {
     },
 
     /**
+     * Reads a rotated session manifest and returns concatenated snapshots.
+     */
+    readSession: async (manifestPath: string, options?: GICSSessionReadOptions): Promise<Snapshot[]> => {
+        return await readSession(manifestPath, options);
+    },
+
+    /**
+     * Verifies rotated session integrity without full decode.
+     */
+    verifySession: async (manifestPath: string, options?: GICSSessionReadOptions): Promise<boolean> => {
+        return await verifySession(manifestPath, options);
+    },
+
+    /**
      * GICS Encoder class for streaming/append operations.
      */
     Encoder: GICSv2Encoder,
+
+    /**
+     * GICS Rotating Encoder for indefinite sessions.
+     */
+    RotatingEncoder: GICSv2RotatingEncoder,
 
     /**
      * GICS Decoder class for advanced reading/querying.
@@ -107,3 +138,23 @@ export type { Anomaly, TrendForecast, Recommendation } from './insight/signals.j
 export { ConfidenceTracker } from './insight/confidence.js';
 export type { InsightConfidence, Outcome } from './insight/confidence.js';
 export { InsightPersistence } from './insight/persistence.js';
+export { StateIndex } from './daemon/state-index.js';
+export type { StateIndexEntry, StateIndexScanOptions, StateIndexScanResult } from './daemon/state-index.js';
+export { ModuleRegistry } from './daemon/module-registry.js';
+export type { InferenceRequest, InferenceDecision, RecommendationQuery } from './daemon/module-registry.js';
+export type { GICSModuleRuntimeConfig, GICSDaemonFileConfig, ResolvedDaemonConfig } from './daemon/config.js';
+export { createBuiltinModuleSet, NativeInsightModule, AuditChainModule, PromptDistillerModule } from './daemon/builtin-modules.js';
+export { GICSInferenceEngine } from './inference/engine.js';
+export type { InferenceArtifacts, OutcomeArtifacts } from './inference/engine.js';
+export { InferenceEngineModule } from './inference/module.js';
+export type { InferenceEngineModuleOptions } from './inference/module.js';
+export { InferenceStateStore, InferenceKeys } from './inference/state-store.js';
+export type {
+    CandidateOutcomeStats,
+    ScopeProfile,
+    ScopeProfileStats,
+    StoredPolicyRecord,
+    StoredDecisionRecord,
+    StoredFeedbackRecord,
+    InferenceRuntimeState,
+} from './inference/state-store.js';

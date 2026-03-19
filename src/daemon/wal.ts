@@ -1,7 +1,7 @@
-import * as fs from 'fs/promises';
-import { createWriteStream, existsSync, readFileSync, WriteStream } from 'fs';
-import * as path from 'path';
-import { createHash } from 'crypto';
+import * as fs from 'node:fs/promises';
+import { createWriteStream, existsSync, readFileSync, WriteStream } from 'node:fs';
+import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 
 export enum Operation {
     PUT = 0x01,
@@ -39,8 +39,8 @@ for (let i = 0; i < 256; i++) {
 
 function crc32(buffer: Buffer): number {
     let crc = 0xFFFFFFFF;
-    for (let i = 0; i < buffer.length; i++) {
-        crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i]) & 0xFF];
+    for (const byte of buffer) {
+        crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ byte) & 0xFF];
     }
     return (crc ^ 0xFFFFFFFF) >>> 0;
 }
@@ -59,8 +59,8 @@ function stableStringify(value: unknown): string {
     if (value === null || typeof value !== 'object') return JSON.stringify(value);
     if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
     const obj = value as Record<string, unknown>;
-    const keys = Object.keys(obj).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`;
+    const keys = Object.keys(obj).sort((a, b) => a.localeCompare(b));
+    return '{' + keys.map((k) => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') + '}';
 }
 
 type StateEntry = { lsn: bigint; payload: WALPayload };
@@ -93,6 +93,7 @@ abstract class BaseWALProvider implements WALProvider {
     protected state: StateMap = new Map();
     private initPromise: Promise<void> | null = null;
     private fsyncWarningLogged = false;
+    private mutationQueue: Promise<void> = Promise.resolve();
 
     constructor(filePath: string, options: WALProviderOptions = {}) {
         this.filePath = filePath;
@@ -105,9 +106,9 @@ abstract class BaseWALProvider implements WALProvider {
     }
 
     protected async ensureInitialized(): Promise<void> {
-        if (!this.initPromise) {
-            this.initPromise = this.initialize();
-        }
+        this.initPromise ??= this.initialize();
+            // removed
+        // removed
         await this.initPromise;
     }
 
@@ -125,9 +126,24 @@ abstract class BaseWALProvider implements WALProvider {
     protected abstract compactToState(): Promise<void>;
 
     protected async ensureOpen(): Promise<void> {
-        if (!this.writeStream) {
-            this.writeStream = createWriteStream(this.filePath, { flags: 'a' });
-        }
+        this.writeStream ??= createWriteStream(this.filePath, { flags: 'a' });
+    }
+
+    protected async closeStream(): Promise<void> {
+        if (!this.writeStream) return;
+        await new Promise<void>((resolve, reject) => {
+            this.writeStream!.end((err?: Error | null) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+        this.writeStream = null;
+    }
+
+    private async enqueueMutation<T>(task: () => Promise<T>): Promise<T> {
+        const run = this.mutationQueue.then(task, task);
+        this.mutationQueue = run.then(() => undefined, () => undefined);
+        return run;
     }
 
     protected async fsyncFile(): Promise<void> {
@@ -165,7 +181,7 @@ abstract class BaseWALProvider implements WALProvider {
         if (!shouldCheckpoint) return;
 
         const orderedState: Record<string, WALPayload> = {};
-        for (const key of Array.from(this.state.keys()).sort()) {
+        for (const key of Array.from(this.state.keys()).sort((a, b) => a.localeCompare(b))) {
             orderedState[key] = { ...this.state.get(key)!.payload };
         }
 
@@ -210,18 +226,20 @@ abstract class BaseWALProvider implements WALProvider {
     }
 
     async append(op: Operation, key: string, payload: WALPayload): Promise<void> {
-        await this.ensureInitialized();
-        await this.ensureOpen();
+        await this.enqueueMutation(async () => {
+            await this.ensureInitialized();
+            await this.ensureOpen();
 
-        const nextLsn = this.lastLsn + 1n;
-        const ts = Date.now();
-        await this.appendEntry(nextLsn, op, key, payload, ts);
-        await this.fsyncFile();
+            const nextLsn = this.lastLsn + 1n;
+            const ts = Date.now();
+            await this.appendEntry(nextLsn, op, key, payload, ts);
+            await this.fsyncFile();
 
-        this.lastLsn = nextLsn;
-        this.opsSinceCheckpoint++;
-        this.applyState(op, key, payload, nextLsn);
-        await this.maybeCheckpointAndCompact();
+            this.lastLsn = nextLsn;
+            this.opsSinceCheckpoint++;
+            this.applyState(op, key, payload, nextLsn);
+            await this.maybeCheckpointAndCompact();
+        });
     }
 
     async replay(handler: (op: Operation, key: string, payload: WALPayload) => void): Promise<void> {
@@ -232,7 +250,7 @@ abstract class BaseWALProvider implements WALProvider {
 
         if (checkpoint) {
             checkpointLsn = checkpoint.lsn;
-            const ordered = Object.keys(checkpoint.state).sort();
+            const ordered = Object.keys(checkpoint.state).sort((a, b) => a.localeCompare(b));
             for (const key of ordered) {
                 handler(Operation.PUT, key, checkpoint.state[key]);
             }
@@ -244,32 +262,21 @@ abstract class BaseWALProvider implements WALProvider {
     }
 
     async truncate(): Promise<void> {
-        await this.ensureInitialized();
-        if (this.writeStream) {
-            await new Promise<void>((resolve, reject) => {
-                this.writeStream!.end((err?: Error | null) => {
-                    if (err) reject(err);
-                    else resolve();
-                });
-            });
-            this.writeStream = null;
-        }
-        await fs.writeFile(this.filePath, '');
-        await fs.writeFile(this.checkpointPath, '');
-        this.lastLsn = 0n;
-        this.opsSinceCheckpoint = 0;
-        this.state.clear();
+        await this.enqueueMutation(async () => {
+            await this.ensureInitialized();
+            await this.closeStream();
+            await fs.writeFile(this.filePath, '');
+            await fs.writeFile(this.checkpointPath, '');
+            this.lastLsn = 0n;
+            this.opsSinceCheckpoint = 0;
+            this.state.clear();
+        });
     }
 
     async close(): Promise<void> {
-        if (!this.writeStream) return;
-        await new Promise<void>((resolve, reject) => {
-            this.writeStream!.end((err?: Error | null) => {
-                if (err) reject(err);
-                else resolve();
-            });
+        await this.enqueueMutation(async () => {
+            await this.closeStream();
         });
-        this.writeStream = null;
     }
 }
 
@@ -420,7 +427,7 @@ export class BinaryWALProvider extends BaseWALProvider {
 
         const entries = parseBinaryV2Entries(raw);
         for (const e of entries) {
-            this.lastLsn = e.lsn > this.lastLsn ? e.lsn : this.lastLsn;
+            if (e.lsn > this.lastLsn) this.lastLsn = e.lsn;
             this.applyState(e.op, e.key, e.payload, e.lsn);
         }
     }
@@ -448,7 +455,7 @@ export class BinaryWALProvider extends BaseWALProvider {
 
     protected async compactToState(): Promise<void> {
         if (this.writeStream) {
-            await this.close();
+            await this.closeStream();
         }
         const tempPath = `${this.filePath}.tmp`;
         const chunks: Buffer[] = [Buffer.concat([BIN_MAGIC, Buffer.from([BIN_VERSION])])];
@@ -558,7 +565,7 @@ export class JsonlWALProvider extends BaseWALProvider {
     protected async loadStateFromWal(): Promise<void> {
         const entries = this.parseAllV2();
         for (const e of entries) {
-            this.lastLsn = e.lsn > this.lastLsn ? e.lsn : this.lastLsn;
+            if (e.lsn > this.lastLsn) this.lastLsn = e.lsn;
             this.applyState(e.op, e.key, e.payload, e.lsn);
         }
     }
@@ -584,7 +591,7 @@ export class JsonlWALProvider extends BaseWALProvider {
 
     protected async compactToState(): Promise<void> {
         if (this.writeStream) {
-            await this.close();
+            await this.closeStream();
         }
 
         const lines: string[] = [JSON.stringify({ __wal: 'gics', version: 2 })];

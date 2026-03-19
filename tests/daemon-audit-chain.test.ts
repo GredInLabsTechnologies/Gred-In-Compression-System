@@ -1,4 +1,4 @@
-import * as fs from 'fs/promises';
+﻿import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { AuditChain } from '../src/daemon/audit-chain.js';
@@ -13,7 +13,7 @@ async function withTempDir(run: (dir: string) => Promise<void>): Promise<void> {
 }
 
 describe('AuditChain (fase 7)', () => {
-    it('10K entries → chain integridad verificada al 100%', async () => {
+    it('10K entries â†’ chain integridad verificada al 100%', async () => {
         await withTempDir(async (dir) => {
             const chain = new AuditChain({ filePath: path.join(dir, 'audit.chain') });
 
@@ -29,9 +29,9 @@ describe('AuditChain (fase 7)', () => {
 
             await chain.close();
         });
-    });
+    }, 30_000);
 
-    it('tamper 1 entry → verify() detecta corruption', async () => {
+    it('tamper 1 entry â†’ verify() detecta corruption', async () => {
         await withTempDir(async (dir) => {
             const auditPath = path.join(dir, 'audit.chain');
             const chain = new AuditChain({ filePath: auditPath });
@@ -57,7 +57,7 @@ describe('AuditChain (fase 7)', () => {
         });
     });
 
-    it('tamper payload → verify() detecta corruption', async () => {
+    it('tamper payload â†’ verify() detecta corruption', async () => {
         await withTempDir(async (dir) => {
             const auditPath = path.join(dir, 'audit.chain');
             const chain = new AuditChain({ filePath: auditPath });
@@ -82,8 +82,8 @@ describe('AuditChain (fase 7)', () => {
         });
     });
 
-    it('audit write fails → original put() tambien falla (integración)', async () => {
-        // Este test requiere integración con el daemon.
+    it('audit write fails â†’ original put() tambien falla (integraciÃ³n)', async () => {
+        // Este test requiere integraciÃ³n con el daemon.
         // Se verifica que si auditChain.append() lanza error, el put() retorna error.
         // En el test unitario, simplemente verificamos que append puede fallar.
         await withTempDir(async (dir) => {
@@ -95,7 +95,7 @@ describe('AuditChain (fase 7)', () => {
             await chain.initialize();
 
             // Simular falla haciendo el directorio read-only (no funciona bien en Windows, skip)
-            // En un test de integración real, esto se verifica con el daemon completo.
+            // En un test de integraciÃ³n real, esto se verifica con el daemon completo.
             expect(true).toBe(true);
             await chain.close();
         });

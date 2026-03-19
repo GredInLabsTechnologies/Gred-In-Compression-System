@@ -1,10 +1,8 @@
 # GICS — Deterministic Time-Series Compression
 
-![Version](https://img.shields.io/badge/version-1.3.3--prep-blue)
-![Status](https://img.shields.io/badge/status-production-green)
+![Version](https://img.shields.io/badge/version-1.3.3-blue)
+![Status](https://img.shields.io/badge/status-stable-green)
 ![License](https://img.shields.io/badge/license-proprietary-red)
-
-> ⚠️ **Documentation Transition Notice (v1.3.3 prep):** Documentation generated for cycles up to **v1.3.2** is now considered **legacy/deprecated for new implementation work**. Use the v1.3.3 preparation docs as source of truth for upcoming planning and execution.
 
 ## What Is GICS?
 
@@ -14,8 +12,19 @@
 - **Deterministic encoding** (same input + same config = same output bytes)
 - **Fail-closed safety** (rejects corrupted/incomplete data, never returns partial results)
 - **Domain-agnostic** (works with any monotonic time-series via Schema Profiles)
-- **22x-42x compression** on structured data (vs 5x-11x with raw Zstd)
+- **High-ratio compression on structured workloads** with current benchmark references documented in `BENCHMARKS-RESULTS.md`
 - **Zero ML, zero approximation** — pure algorithmic compression
+
+---
+
+## Documentation
+
+- **[API Reference (v1.3.3)](./docs/API_v1_3_3.md)** — Full public API, daemon RPC, inference, CLI
+- **[Failure Modes](./docs/FAILURE_MODES_v1_3_3.md)** — Recoverability and error semantics
+- **[Binary Format](./docs/FORMAT.md)** — Wire format specification
+- **[Security Model](./docs/SECURITY_MODEL.md)** — Encryption, integrity, threat model
+- **[Benchmarks](./BENCHMARKS-RESULTS.md)** — Compression ratios and throughput
+- **[CHANGELOG](./CHANGELOG.md)** — Version history
 
 ---
 
@@ -112,29 +121,36 @@ const restored = await GICS.unpack(encrypted, { password: 'secret' });
 
 ## Architecture
 
-### v1.3.2 Module Map
+### v1.3.3 Module Map
 
 ```
 @gredinlabstechnologies/gics-core
 ├── Core Engine         Encode/decode with auto-codec selection
 │   ├── Encoder         Streaming or batch, with segment assembly
 │   ├── Decoder         Query by item ID, Bloom filter skip
-│   ├── Codecs          DELTA, RLE, DELTA_RLE, HUFFMAN, RAW (trial-by-size)
+│   ├── Codecs          Varint, RLE, Bitpack, XOR Float, Fixed64 (trial-by-size)
 │   ├── Segments        Indexed segments with SHA-256 integrity chain
 │   └── Item-Major      Auto-transpose for multi-item data (+90% compression)
 ├── Daemon              Persistent process for continuous ingestion
 │   ├── MemTable        In-memory buffer with auto-flush
-│   ├── WAL             Write-ahead log for crash recovery
+│   ├── WAL             Binary write-ahead log for crash recovery
+│   ├── StateIndex      Durable key→tier index with tombstone support
 │   ├── IPC Server      JSON-RPC 2.0 over named pipe / Unix socket
-│   └── File Lock       AsyncRWLock (in-process) + marker files (cross-process)
+│   ├── File Lock       AsyncRWLock (in-process) + marker files (cross-process)
+│   └── Module Registry Pluggable lifecycle hooks (onPut/onFlush/onScan)
 ├── Insight Engine      Behavioral intelligence (zero ML)
 │   ├── Tracker         Per-item velocity, entropy, volatility, streaks
 │   ├── Correlation     Pearson pairwise + Union-Find clustering
 │   └── Signals         Anomaly detection, trend forecasting, recommendations
+├── Inference Engine    Deterministic decision ranking
+│   ├── Domains         compression.encode, ops.provider_select, ops.plan_rank
+│   ├── Profile Store   Durable learned profiles
+│   └── Feedback Loop   Outcome tracking → policy refinement
+├── CLI                 gics encode|decode|verify|bench|profile|daemon|inference|rpc
 └── Profiler            Encoder parameter optimizer (level × blockSize matrix)
 ```
 
-### Item-Major Layout (v1.3.2)
+### Item-Major Layout
 
 When all snapshots contain the same items, GICS automatically transposes data from snapshot-major to item-major order before compression. This groups each item's values contiguously, producing dramatically better deltas.
 
@@ -186,11 +202,15 @@ await daemon.start();
 
 | Method | Description |
 |--------|-------------|
-| `ingest` | Add snapshots to MemTable (auto-flushes to segments) |
-| `query` | Query by item ID with Bloom filter skip |
+| `put` | Write/update a key with fields |
+| `get` | Read latest visible state for a key |
+| `delete` | Durable tombstone delete |
+| `scan` | Prefix scan over current visible state |
 | `flush` | Force MemTable to disk as GICS segment |
-| `compact` | Merge segments for better compression |
-| `rotate` | Archive old segments (HOT → WARM → COLD) |
+| `compact` | Merge/deduplicate warm segments |
+| `rotate` | Archive WARM → COLD (with optional encryption) |
+| `verify` | Verify WARM/COLD artifact integrity |
+| `infer` | Inference engine ranked decision |
 | `getInsights` | Behavioral metrics, correlations, anomalies |
 
 ### Python Client
@@ -198,12 +218,11 @@ await daemon.start();
 ```python
 from gics_client import GICSClient
 
-client = GICSClient(pipe_name="gics-prod")
-client.connect()
-
-client.ingest([{"timestamp": 1700000000, "items": {"1": {"price": 100, "quantity": 10}}}])
-results = client.query(item_id=1)
-insights = client.get_insights()
+with GICSClient() as client:
+    client.put("sensor:1", {"temperature": 22.5, "humidity": 65})
+    record = client.get("sensor:1")
+    items = client.scan("sensor:")
+    client.flush()
 ```
 
 ---
@@ -245,7 +264,7 @@ const result = await CompressionProfiler.profile(sampleSnapshots, 'quick');
 
 ## Performance
 
-### Compression Ratios (v1.3.2 benchmarks)
+### Compression Ratios
 
 | Dataset | GICS | Zstd Baseline | Multiplier |
 |---------|------|---------------|------------|
@@ -268,7 +287,7 @@ const result = await CompressionProfiler.profile(sampleSnapshots, 'quick');
 ## Testing & Verification
 
 ```bash
-npm test          # 188 tests (vitest)
+npm test          # 284 tests (vitest)
 npm run verify    # Integrity chain verification
 npm run bench     # Full benchmark suite
 npm run profile   # Encoder parameter profiler
@@ -280,14 +299,15 @@ npm run profile   # Encoder parameter profiler
 |--------|-------|--------|
 | Core encode/decode | 80+ | Stable |
 | Segments & format | 20+ | Stable |
-| Encryption | 10+ | Stable |
+| Encryption & security | 10+ | Stable |
 | Schema profiles | 15+ | Stable |
-| Daemon (MemTable, WAL, IPC, lock) | 21 | Stable |
+| Daemon (MemTable, WAL, IPC, supervisor, recovery) | 40+ | Stable |
 | Insight Engine | 15+ | Stable |
+| Inference Engine | 10+ | Stable |
 | Item-major layout | 5 | Stable |
 | Profiler | 6 | Stable |
 | Regression suite | 7 | Stable |
-| Adversarial / fuzzing | 10+ | Stable |
+| Adversarial / forensics | 10+ | Stable |
 
 ---
 
@@ -298,20 +318,21 @@ npm run profile   # Encoder parameter profiler
 | **Determinism** | Same input + same options = identical output bytes |
 | **Lossless** | `unpack(pack(data)) === data` — exact roundtrip, zero precision loss |
 | **Fail-closed** | Corrupt/truncated/tampered data always throws, never returns partial results |
-| **Backward compatible** | v1.3.2 decoder reads v1.2 and v1.3.0 files |
+| **Backward compatible** | v1.3.3 decoder reads v1.2, v1.3.0, and v1.3.2 files |
 | **Schema embedded** | Schema profile stored inside the file; decoder is self-describing |
 | **Segment isolation** | Corruption in segment N does not affect segments N-1 or N+1 |
 | **No external state** | No network calls, no filesystem reads during encode/decode |
 
 ---
 
-## Documentation
+## Documentation Index
 
-- **[API Reference](./docs/API.md)** — Full public API with examples
+- **[API Reference (v1.3.3)](./docs/API_v1_3_3.md)** — Full API, daemon RPC, inference, CLI
 - **[CHANGELOG](./CHANGELOG.md)** — Version history with detailed changes
 - **[Format Spec](./docs/FORMAT.md)** — Binary format specification
 - **[Security Model](./docs/SECURITY_MODEL.md)** — Threat model and encryption details
 - **[Versioning](./docs/VERSIONING.md)** — Version matrix and archive pointers
+- **[Repo Layout](./docs/REPO_LAYOUT.md)** — Project structure overview
 
 ---
 
@@ -321,4 +342,4 @@ npm run profile   # Encoder parameter profiler
 
 ---
 
-*v1.3.3-prep | 2026-03-15*
+*v1.3.3 | 2026-03-19*

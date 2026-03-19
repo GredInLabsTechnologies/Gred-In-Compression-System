@@ -7,7 +7,7 @@
  * - Recommendations (rule-based over insights)
  */
 
-import type { ItemBehavior, FieldTrend, LifecycleStage } from './tracker.js';
+import type { ItemBehavior } from './tracker.js';
 import type { ConfidenceTracker, OutcomeResult } from './confidence.js';
 
 export interface Anomaly {
@@ -150,7 +150,9 @@ export class PredictiveSignals {
         if (!trend) return null;
 
         const h = horizon ?? this.forecastHorizon;
-        const momentum = trend.direction === 'up' ? trend.magnitude : trend.direction === 'down' ? -trend.magnitude : 0;
+        let momentum = 0;
+        if (trend.direction === 'up') momentum = trend.magnitude;
+        else if (trend.direction === 'down') momentum = -trend.magnitude;
         const range = trend.max - trend.min;
         const projectedDelta = momentum * range * h;
         const projectedValue = trend.ema + projectedDelta;

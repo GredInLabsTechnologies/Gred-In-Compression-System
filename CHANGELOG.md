@@ -7,6 +7,67 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.3.3] - 2026-03-18
+
+### Added
+
+- **StateIndex / current-state directory**: persistent visible-state index for daemon reads across `HOT`, `WARM` and `COLD`, including segment references, deletion status and latest materialized fields.
+- **Durable tombstones**: `delete()` now persists deletion state so keys stay hidden across flush, compact, rotate and restart.
+- **Hidden system namespaces**: reserved runtime prefixes for internal state:
+  - `_sys|*`
+  - `_insight|*`
+  - `_infer|*`
+- **Module registry runtime**: built-in modules now run through an explicit registry and lifecycle hooks instead of ad hoc daemon wiring.
+- **Inference runtime artifacts**: persistent `_infer|profile|*`, `_infer|policy|*`, `_infer|decision|*` and `_infer|feedback|*` records.
+- **Inference runtime health and flush control**: added `getInferenceRuntime` and `flushInference`.
+- **Inference CLI surface**: added `gics inference infer|profile|recommendations|health|flush`.
+- **Machine-readable automation surface**: added/extended JSON-oriented CLI paths such as `gics rpc ...`, `gics daemon status --json` and `gics module status --json`.
+- **Python client inference methods**: added `infer()`, `get_profile()`, `get_recommendations()`, `get_inference_runtime()` and `flush_inference()`.
+- **Release documentation pack**:
+  - `docs/releases/2026-03-18_GICS_v1_3_3.md`
+  - `docs/API_v1_3_3.md`
+  - `docs/FAILURE_MODES_v1_3_3.md`
+
+### Changed
+
+- **Unified tier semantics**: `get()` and `scan()` now operate on current visible state across all tiers by default, instead of effectively privileging hot-only visibility in older daemon behavior.
+- **Warm/cold point reads**: single-key resolution prefers selective decode paths instead of whole-archive decode where current metadata is available.
+- **Scan contract**: `scan(prefix, options?)` now defaults to current-state behavior with hidden system keys excluded unless `includeSystem=true`.
+- **Inference runtime persistence**: replaced per-event synchronous saves with batched persistence plus explicit durable flush.
+- **Inference engine scope**: deterministic policies and ranking are now first-class runtime behavior for:
+  - `compression.encode`
+  - `ops.provider_select`
+  - `ops.plan_rank`
+  - `storage.policy`
+
+### Fixed
+
+- **Warm-scan visibility regression**: scans after flush/restart now see current visible state from persisted tiers via `StateIndex`.
+- **Delete durability regression**: deleted keys no longer resurface after persistence boundaries because tombstones are stored durably.
+- **Inference write amplification**: runtime no longer writes inference state to disk on every hook/event.
+- **CLI automation gap**: daemon RPC usage from scripts now has a stable JSON-oriented path.
+- **JSONL WAL race under load**: append/close/truncate interactions were serialized to avoid `write after end` under soak conditions.
+- **StateIndex ordering hazard**: older records can no longer overwrite newer visible state during rebuild/replay ordering.
+- **Module activation semantics**: `gics daemon start --modules ...` now behaves authoritatively instead of allowing unspecified modules to remain implicitly enabled.
+
+### Validation
+
+- Tests: `reports/vitest-junit.xml`
+  - `284 tests`
+  - `0 failures`
+  - `0 errors`
+- Benchmark references:
+  - `bench/results/latest/empirical-report.md`
+  - `bench/results/latest/validate-50x-report.md`
+  - `bench/results/latest/empirical-security-report.md`
+  - `bench/results/latest/long-horizon-report.md`
+
+### Boundaries
+
+- Embedded inference runtime is considered closed for the current dev cycle.
+- Sidecar inference worker remains planned, not closed.
+- Long-horizon support has benchmark evidence, but not a universal multi-year proof across all workloads.
+
 ## [1.3.2] - 2026-02-12
 
 ### Added

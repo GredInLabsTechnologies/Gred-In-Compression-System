@@ -12,3 +12,8 @@ export * from './resilience.js';
 export * from './audit-chain.js';
 export * from './prompt-distiller.js';
 export * from './bandit-router.js';
+export * from './config.js';
+export * from './state-index.js';
+export * from './module-registry.js';
+export * from './builtin-modules.js';
+export * from './system-keys.js';

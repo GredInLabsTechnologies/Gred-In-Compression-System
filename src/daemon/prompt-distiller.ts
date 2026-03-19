@@ -110,8 +110,10 @@ export interface PromptDistillerConfig {
     maxDiskUsageMB?: number;         // 500 default - fallback limit for own directories
 }
 
+export type StorageTier = 'raw' | 'compressed' | 'distilled';
+
 export interface TierStats {
-    tier: 'raw' | 'compressed' | 'distilled';
+    tier: StorageTier;
     recordCount: number;
     sizeBytes: number;
     oldestTimestamp: number;
@@ -390,7 +392,7 @@ export class PromptDistiller {
             weekGroups.get(week)!.push(file);
         }
 
-        for (const [_week, files] of weekGroups) {
+        for (const [, files] of weekGroups) {
             if (files.length > 1) {
                 // Aggregate into single file
                 const aggregated: DistilledRecord[] = [];
@@ -431,7 +433,6 @@ export class PromptDistiller {
     private async compressRecord(rawFilePath: string): Promise<void> {
         try {
             const content = await fs.readFile(rawFilePath, 'utf8');
-            const record = JSON.parse(content) as PromptRecord;
 
             // Compress with zstd (aligned with architecture spec)
             const compressed = await zstdCompress(Buffer.from(content, 'utf8'));
@@ -483,11 +484,18 @@ export class PromptDistiller {
     }
 
     private async searchTier(
-        tier: 'raw' | 'compressed' | 'distilled',
+        tier: StorageTier,
         key: string,
         timestamp?: number
     ): Promise<PromptRecord | DistilledRecord | null> {
-        const dir = tier === 'raw' ? this.rawDir : tier === 'compressed' ? this.compressedDir : this.distilledDir;
+        let dir: string;
+        if (tier === 'raw') {
+            dir = this.rawDir;
+        } else if (tier === 'compressed') {
+            dir = this.compressedDir;
+        } else {
+            dir = this.distilledDir;
+        }
         const files = await this.listFiles(dir);
 
         for (const file of files) {
@@ -522,8 +530,15 @@ export class PromptDistiller {
         return null;
     }
 
-    private async getTierStats(tier: 'raw' | 'compressed' | 'distilled'): Promise<TierStats> {
-        const dir = tier === 'raw' ? this.rawDir : tier === 'compressed' ? this.compressedDir : this.distilledDir;
+    private async getTierStats(tier: StorageTier): Promise<TierStats> {
+        let dir: string;
+        if (tier === 'raw') {
+            dir = this.rawDir;
+        } else if (tier === 'compressed') {
+            dir = this.compressedDir;
+        } else {
+            dir = this.distilledDir;
+        }
         const allFiles = await this.listFiles(dir);
 
         // Filter files by tier type
@@ -619,8 +634,8 @@ export class PromptDistiller {
     }
 
     private extractTimestamp(fileName: string): number {
-        const match = fileName.match(/^(\d+)-/);
-        return match ? parseInt(match[1], 10) : 0;
+        const match = /^(\d+)-/.exec(fileName);
+        return match ? parseInt(match[1]!, 10) : 0;
     }
 
     private async classifyExistingData(): Promise<void> {

@@ -112,7 +112,7 @@ export function daemonBanner(): string {
 }
 
 function stripAnsi(s: string): string {
-    return s.replace(/\x1b\[[0-9;]*m/g, '');
+    return s.replace(new RegExp('\\\\x1b\\\\[[0-9;]*m', 'g'), '');
 }
 
 function mapReplacer(_key: string, value: unknown): unknown {

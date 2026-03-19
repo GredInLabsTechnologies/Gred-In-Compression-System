@@ -168,22 +168,26 @@ function weightedRatioCritical(results: DatasetResult[]): number {
 
 function renderMarkdown(report: BenchmarkReport): string {
     const lines: string[] = [];
-    lines.push('# GICS Empirical Benchmark Report');
-    lines.push(`- Run: ${report.runId}`);
-    lines.push(`- Timestamp: ${report.timestampUtc}`);
-    lines.push(`- Threshold (critical weighted): ${report.threshold50x}x`);
-    lines.push(`- Pass: ${report.summary.pass ? 'YES' : 'NO'}`);
-    lines.push('');
-    lines.push('## Datasets');
-    lines.push('| Dataset | Category | Raw MB | GICS MB | GICS Ratio | ZSTD Ratio | Integrity |');
-    lines.push('|---|---|---:|---:|---:|---:|---|');
+    lines.push(
+        '# GICS Empirical Benchmark Report',
+        `- Run: ${report.runId}`,
+        `- Timestamp: ${report.timestampUtc}`,
+        `- Threshold (critical weighted): ${report.threshold50x}x`,
+        `- Pass: ${report.summary.pass ? 'YES' : 'NO'}`,
+        '',
+        '## Datasets',
+        '| Dataset | Category | Raw MB | GICS MB | GICS Ratio | ZSTD Ratio | Integrity |',
+        '|---|---|---:|---:|---:|---:|---|'
+    );
     for (const d of report.datasets) {
         lines.push(`| ${d.id} | ${d.category} | ${(d.rawBytes / 1024 / 1024).toFixed(2)} | ${(d.gics.outputBytes / 1024 / 1024).toFixed(2)} | ${d.gics.ratioX.toFixed(2)}x | ${d.baselineZstd.ratioX.toFixed(2)}x | ${d.gics.integrityOk && d.baselineZstd.integrityOk ? 'OK' : 'FAIL'} |`);
     }
-    lines.push('');
-    lines.push('## Gate Summary');
-    lines.push(`- Weighted critical ratio (GICS): ${report.summary.weightedRatioCriticalGics.toFixed(2)}x`);
-    lines.push(`- All critical integrity OK: ${report.summary.allCriticalIntegrityOk}`);
+    lines.push(
+        '',
+        '## Gate Summary',
+        `- Weighted critical ratio (GICS): ${report.summary.weightedRatioCriticalGics.toFixed(2)}x`,
+        `- All critical integrity OK: ${report.summary.allCriticalIntegrityOk}`
+    );
     if (report.summary.failReasons.length > 0) {
         lines.push('- Fail reasons:');
         for (const r of report.summary.failReasons) lines.push(`  - ${r}`);
@@ -193,7 +197,7 @@ function renderMarkdown(report: BenchmarkReport): string {
 
 async function main() {
     const now = new Date();
-    const runId = `empirical-${now.toISOString().replace(/[:.]/g, '-')}`;
+    const runId = `empirical-${now.toISOString().replaceAll(/[:.]/g, '-')}`;
     const threshold = Number(process.env.GICS_MIN_RATIO_X ?? '50');
 
     const datasets: Dataset[] = [
@@ -268,7 +272,9 @@ async function main() {
     }
 }
 
-main().catch((err) => {
+try {
+    await main();
+} catch (err) {
     console.error(err);
     process.exitCode = 1;
-});
+}
