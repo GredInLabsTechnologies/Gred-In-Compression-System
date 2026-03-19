@@ -12,7 +12,7 @@
 /**
  * GICS Format Version Constants
  */
-export const GICS_VERSION = '1.3.0';
+export const GICS_VERSION = '1.3.3';
 export const GICS_VERSION_1_1 = 0x11; // Binary version byte
 
 // ============================================================================
