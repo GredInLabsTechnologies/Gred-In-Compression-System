@@ -106,6 +106,7 @@ export class AsyncRWLock {
  * race-free and zero-cost. Used by the daemon for all operations.
  */
 export class FileLock {
+    private static readonly STALE_LOCK_GRACE_MS = 1000;
     private readonly targetFilePath: string;
     private readonly lockDirPath: string;
     private readonly exclusiveLockPath: string;
@@ -147,7 +148,16 @@ export class FileLock {
     private async getSharedLockFiles(): Promise<string[]> {
         try {
             const files = await fs.readdir(this.lockDirPath);
-            return files.filter((name) => name.startsWith('shared-') && name.endsWith('.lock'));
+            const active: string[] = [];
+            for (const name of files) {
+                if (!name.startsWith('shared-') || !name.endsWith('.lock')) continue;
+                const filePath = `${this.lockDirPath}/${name}`;
+                const removed = await this.removeStaleLockIfNeeded(filePath, 'shared');
+                if (!removed) {
+                    active.push(name);
+                }
+            }
+            return active;
         } catch (err: any) {
             if (err.code === 'ENOENT') return [];
             throw err;
@@ -157,11 +167,74 @@ export class FileLock {
     private async existsExclusiveLock(): Promise<boolean> {
         try {
             await fs.access(this.exclusiveLockPath);
-            return true;
+            const removed = await this.removeStaleLockIfNeeded(this.exclusiveLockPath, 'exclusive');
+            return !removed;
         } catch (err: any) {
             if (err.code === 'ENOENT') return false;
             throw err;
         }
+    }
+
+    private isProcessAlive(pid: number): boolean {
+        if (!Number.isInteger(pid) || pid <= 0) return false;
+        try {
+            process.kill(pid, 0);
+            return true;
+        } catch (err: any) {
+            return err?.code !== 'ESRCH';
+        }
+    }
+
+    private async isFreshLockFile(filePath: string, acquiredAtMs?: number): Promise<boolean> {
+        const candidateTimestamp = typeof acquiredAtMs === 'number' && Number.isFinite(acquiredAtMs)
+            ? acquiredAtMs
+            : null;
+        if (candidateTimestamp != null) {
+            return Date.now() - candidateTimestamp < FileLock.STALE_LOCK_GRACE_MS;
+        }
+        try {
+            const stat = await fs.stat(filePath);
+            return Date.now() - stat.mtimeMs < FileLock.STALE_LOCK_GRACE_MS;
+        } catch (err: any) {
+            if (err.code === 'ENOENT') return false;
+            throw err;
+        }
+    }
+
+    private async removeStaleLockIfNeeded(filePath: string, expectedMode: FileLockMode): Promise<boolean> {
+        let raw: string;
+        try {
+            raw = await fs.readFile(filePath, 'utf8');
+        } catch (err: any) {
+            if (err.code === 'ENOENT') return false;
+            throw err;
+        }
+
+        let parsed: Record<string, unknown>;
+        try {
+            parsed = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+            if (await this.isFreshLockFile(filePath)) {
+                return false;
+            }
+            await fs.unlink(filePath).catch(() => undefined);
+            return true;
+        }
+
+        const pid = typeof parsed.pid === 'number' ? parsed.pid : Number.NaN;
+        const acquiredAtMs = typeof parsed.acquiredAt === 'number' ? parsed.acquiredAt : Number.NaN;
+        if (parsed.mode === expectedMode && this.isProcessAlive(pid)) {
+            return false;
+        }
+        if (await this.isFreshLockFile(filePath, acquiredAtMs)) {
+            return false;
+        }
+        if (parsed.mode !== expectedMode || !this.isProcessAlive(pid)) {
+            await fs.unlink(filePath).catch(() => undefined);
+            return true;
+        }
+
+        return false;
     }
 
     private async tryAcquireShared(): Promise<boolean> {
@@ -207,6 +280,10 @@ export class FileLock {
             });
         } catch (err: any) {
             if (err.code === 'EEXIST') {
+                const removed = await this.removeStaleLockIfNeeded(this.exclusiveLockPath, 'exclusive');
+                if (removed) {
+                    return await this.tryAcquireExclusive();
+                }
                 return false;
             }
             throw err;

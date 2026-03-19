@@ -15,6 +15,7 @@ Use these documents for all new planning and implementation work on branch `code
 - `docs/API_v1_3_4.md`
 - `docs/releases/2026-03-19_GICS_v1_3_4_iteration_open.md`
 - `GICS_1_3_4_ARCHITECTURE.MD`
+- `GICS_1_3_4_CLIENT_CONSUMPTION_SCOPE.md`
 
 ## Baseline inherited references
 

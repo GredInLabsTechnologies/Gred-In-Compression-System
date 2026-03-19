@@ -28,11 +28,14 @@
     "files": [
         "dist/src",
         "clients/python/gics_client.py",
+        "GICS_1_3_4_CLIENT_CONSUMPTION_SCOPE.md",
         "README.md",
         "CHANGELOG.md"
     ],
     "scripts": {
-        "build": "tsc",
+        "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+        "build": "npm run clean && tsc",
+        "prepack": "npm run build",
         "cli": "tsx src/cli/index.ts",
         "test": "vitest run",
         "test:coverage": "vitest run --coverage",

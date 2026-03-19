@@ -7,7 +7,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.3.4] - In development
+## [1.3.4] - 2026-03-19
 
 ### Added
 
@@ -33,11 +33,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - `seedPolicy`
 - Runtime and inference telemetry with CLI access through `gics daemon telemetry`.
 - Verification hardening regression coverage, including encrypted header checks and schema float-field coverage.
+- `npm pack` now rebuilds from a clean `dist/` via `prepack`, avoiding stale tarball artifacts.
 
 ### Changed
 
 - Bumped the working package version from `1.3.3` to `1.3.4`.
 - Deprecated `1.3.3` and earlier planning documents for new implementation work.
+- File-lock stale cleanup now preserves freshly created lock markers long enough to avoid deleting live locks during creation races.
 - Updated top-level references so `1.3.4` is the active development line.
 - Introduced `encMode=2` with IV derivation from `fileNonce + segmentOrdinal + streamId`.
 - Encrypted append now rejects unsafe legacy append paths from `encMode=1`.
@@ -50,6 +52,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Resilience shell now clears timers correctly, applies hysteresis, and caps half-open probes.
 - Audit chain mutation paths are serialized.
 - Generic schema encoding now routes floating numeric fields through float-safe codecs instead of integer-only codecs.
+- Build packaging now cleans `dist/` before compilation so published tarballs cannot retain stale artifacts.
 
 ### Fixed
 

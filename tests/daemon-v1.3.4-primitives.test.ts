@@ -112,6 +112,68 @@ describe('Daemon 1.3.4 primitives and IPC', () => {
         });
     });
 
+    it('forces atomic WAL semantics when putMany uses idempotency keys', async () => {
+        await withTempDir(async (dir) => {
+            const config: GICSDaemonConfig = {
+                socketPath: makeSocketPath('gics-putmany-idempotent-non-atomic'),
+                dataPath: path.join(dir, 'data'),
+                tokenPath: path.join(dir, 'token.txt'),
+                walType: 'binary',
+            };
+            const daemon = new GICSDaemon(config);
+            await daemon.start();
+
+            try {
+                const token = (await fs.readFile(config.tokenPath, 'utf8')).trim();
+                const payload = {
+                    records: [
+                        { key: 'jobs:1', fields: { value: 1 } },
+                        { key: 'jobs:2', fields: { value: 2 } },
+                    ],
+                    atomic: false,
+                    idempotency_key: 'jobs-batch',
+                    verify: true,
+                };
+
+                const first = await sendRequest(config.socketPath, {
+                    method: 'putMany',
+                    params: payload,
+                    id: 1,
+                    token,
+                });
+                expect(first.result.ok).toBe(true);
+                expect(first.result.atomic).toBe(true);
+                expect(first.result.deduplicated).toBe(false);
+
+                const repeated = await sendRequest(config.socketPath, {
+                    method: 'putMany',
+                    params: payload,
+                    id: 2,
+                    token,
+                });
+                expect(repeated.result.ok).toBe(true);
+                expect(repeated.result.atomic).toBe(true);
+                expect(repeated.result.deduplicated).toBe(true);
+
+                const conflicting = await sendRequest(config.socketPath, {
+                    method: 'putMany',
+                    params: {
+                        ...payload,
+                        records: [
+                            { key: 'jobs:1', fields: { value: 9 } },
+                            { key: 'jobs:2', fields: { value: 2 } },
+                        ],
+                    },
+                    id: 3,
+                    token,
+                });
+                expect(conflicting.error.message).toMatch(/different payload/);
+            } finally {
+                await daemon.stop();
+            }
+        });
+    });
+
     it('delete persists tombstone atomically across restart', async () => {
         await withTempDir(async (dir) => {
             const config: GICSDaemonConfig = {

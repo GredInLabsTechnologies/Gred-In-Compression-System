@@ -63,6 +63,41 @@ describe('Official Node SDK', () => {
         });
     });
 
+    it('upgrades idempotent putMany calls to atomic durability when requested otherwise', async () => {
+        await withTempDir(async (dir) => {
+            const socketPath = makeSocketPath('gics-node-sdk-idempotent');
+            const tokenPath = path.join(dir, 'gics.token');
+            const daemon = new GICSDaemon({
+                socketPath,
+                dataPath: path.join(dir, 'data'),
+                tokenPath,
+                walType: 'binary',
+            });
+
+            await daemon.start();
+            try {
+                const client = new GICSNodeClient({ socketPath, tokenPath });
+                const first = await client.putMany([
+                    { key: 'sdk:idem:1', fields: { value: 1 } },
+                    { key: 'sdk:idem:2', fields: { value: 2 } },
+                ], { atomic: false, idempotencyKey: 'sdk-idem', verify: true });
+
+                expect(first.ok).toBe(true);
+                expect(first.atomic).toBe(true);
+
+                const repeated = await client.putMany([
+                    { key: 'sdk:idem:1', fields: { value: 1 } },
+                    { key: 'sdk:idem:2', fields: { value: 2 } },
+                ], { atomic: false, idempotencyKey: 'sdk-idem', verify: true });
+
+                expect(repeated.deduplicated).toBe(true);
+                expect(repeated.atomic).toBe(true);
+            } finally {
+                await daemon.stop();
+            }
+        });
+    });
+
     it('verifies standalone GICS files without the daemon', async () => {
         await withTempDir(async (dir) => {
             const outputPath = path.join(dir, 'sample.gics');

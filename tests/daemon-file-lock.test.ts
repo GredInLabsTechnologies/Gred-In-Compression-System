@@ -92,4 +92,72 @@ describe('FileLock (Roadmap v1.3.2 - Fase 1.5)', () => {
             }, 500);
         });
     });
+
+    it('reap stale exclusive lock files left by dead processes', async () => {
+        await withTempDir(async (dir) => {
+            const target = path.join(dir, 'segments');
+            const lockDir = `${target}.locks`;
+            await fs.mkdir(lockDir, { recursive: true });
+            const exclusiveLockPath = path.join(lockDir, 'exclusive.lock');
+            await fs.writeFile(exclusiveLockPath, JSON.stringify({
+                mode: 'exclusive',
+                pid: 999999,
+                acquiredAt: Date.now() - 60_000,
+            }), 'utf8');
+            const staleDate = new Date(Date.now() - 60_000);
+            await fs.utimes(exclusiveLockPath, staleDate, staleDate);
+
+            const lock = new FileLock(target);
+            await lock.acquire('exclusive', 500, 10);
+            await lock.release();
+        });
+    });
+
+    it('reap stale shared lock files before granting a new exclusive lock', async () => {
+        await withTempDir(async (dir) => {
+            const target = path.join(dir, 'segments');
+            const lockDir = `${target}.locks`;
+            await fs.mkdir(lockDir, { recursive: true });
+            const sharedLockPath = path.join(lockDir, 'shared-stale.lock');
+            await fs.writeFile(sharedLockPath, JSON.stringify({
+                mode: 'shared',
+                pid: 999999,
+                acquiredAt: Date.now() - 60_000,
+            }), 'utf8');
+            const staleDate = new Date(Date.now() - 60_000);
+            await fs.utimes(sharedLockPath, staleDate, staleDate);
+
+            const lock = new FileLock(target);
+            await lock.acquire('exclusive', 500, 10);
+            await lock.release();
+        });
+    });
+
+    it('does not reap malformed fresh lock files that may still be in-flight', async () => {
+        await withTempDir(async (dir) => {
+            const target = path.join(dir, 'segments');
+            const lockDir = `${target}.locks`;
+            await fs.mkdir(lockDir, { recursive: true });
+            await fs.writeFile(path.join(lockDir, 'exclusive.lock'), '{', 'utf8');
+
+            const lock = new FileLock(target);
+            await expect(lock.acquire('exclusive', 80, 10)).rejects.toBeInstanceOf(FileLockTimeoutError);
+        });
+    });
+
+    it('reaps malformed lock files once they are outside the freshness grace window', async () => {
+        await withTempDir(async (dir) => {
+            const target = path.join(dir, 'segments');
+            const lockDir = `${target}.locks`;
+            const exclusiveLockPath = path.join(lockDir, 'exclusive.lock');
+            await fs.mkdir(lockDir, { recursive: true });
+            await fs.writeFile(exclusiveLockPath, '{', 'utf8');
+            const staleDate = new Date(Date.now() - 60_000);
+            await fs.utimes(exclusiveLockPath, staleDate, staleDate);
+
+            const lock = new FileLock(target);
+            await lock.acquire('exclusive', 500, 10);
+            await lock.release();
+        });
+    });
 });

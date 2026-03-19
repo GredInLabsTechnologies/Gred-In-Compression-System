@@ -1,11 +1,11 @@
 # GICS - Deterministic Time-Series Compression
 
 ![Version](https://img.shields.io/badge/version-1.3.4-blue)
-![Status](https://img.shields.io/badge/status-in_development-orange)
+![Status](https://img.shields.io/badge/status-production_ready-brightgreen)
 ![License](https://img.shields.io/badge/license-proprietary-red)
 
-> Iteration `1.3.4` is open on branch `codex/1.3.4`.
-> This line is a new development cycle, not a hotfix continuation of `1.3.3`.
+> Release `1.3.4` is the active production line on branch `codex/1.3.4`.
+> This line supersedes `1.3.3` as the current packaged release.
 
 ## What Is GICS?
 
@@ -62,6 +62,7 @@ Runtime requirements: Node.js `>=18`.
 - Root export: core API, daemon runtime, insight engine, inference engine, and public types
 - `@gredinlabstechnologies/gics-core/clients/node`: official Node/TypeScript daemon client
 - `clients/python/gics_client.py`: official Python client module shipped inside the package
+- `GICS_1_3_4_CLIENT_CONSUMPTION_SCOPE.md`: release contract for VIGIL, GIMO, GIST, and other consumers
 
 ## Core Quick Start
 

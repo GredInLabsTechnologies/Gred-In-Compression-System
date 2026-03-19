@@ -453,6 +453,12 @@ export class GICSDaemon {
         return entry?.fields != null && stableStringify(entry.fields) === stableStringify(fields);
     }
 
+    private async withIdempotencyLock<T>(idempotencySystemKey: string, fn: () => Promise<T>): Promise<T> {
+        const lockId = createHash('sha256').update(idempotencySystemKey).digest('hex');
+        const lockTarget = path.join(this.config.dataPath, '.idempotency-locks', `${lockId}.lock`);
+        return await FileLock.withExclusiveLock(lockTarget, fn, this.fileLockTimeoutMs);
+    }
+
     private noteSyntheticScan(): Promise<void> {
         return this.modules.registry.onScan({ items: [], nextCursor: null }, this.moduleContext);
     }
@@ -1544,119 +1550,128 @@ export class GICSDaemon {
             return cloneRecord({ key, fields });
         });
 
-        const atomic = params?.atomic ?? true;
+        const requestedAtomic = Boolean(params?.atomic ?? true);
         const verify = Boolean(params?.verify ?? false);
         const idempotencyKey = params?.idempotency_key ? String(params.idempotency_key) : (params?.idempotencyKey ? String(params.idempotencyKey) : null);
-        const requestHash = hashPutManyPayload(records, Boolean(atomic), verify);
+        const idempotencySystemKey = idempotencyKey ? makeIdempotencyKey(idempotencyKey) : null;
+        const effectiveAtomic = idempotencySystemKey ? true : requestedAtomic;
 
-        let idempotencySystemKey: string | null = null;
-        let idempotencyFields: Record<string, number | string> | null = null;
-        if (idempotencyKey) {
-            idempotencySystemKey = makeIdempotencyKey(idempotencyKey);
-            const existing = this.stateIndex.getVisible(idempotencySystemKey, true);
-            const existingHash = typeof existing?.fields?.request_hash === 'string' ? existing.fields.request_hash : null;
-            if (existingHash && existingHash !== requestHash) {
-                return {
-                    jsonrpc: '2.0',
-                    id,
-                    error: { code: -32602, message: `Idempotency key ${idempotencyKey} was already used with a different payload` },
+        const executePutMany = async (): Promise<any> => {
+            const requestHash = hashPutManyPayload(records, effectiveAtomic, verify);
+
+            let idempotencyFields: Record<string, number | string> | null = null;
+            if (idempotencySystemKey) {
+                const existing = this.stateIndex.getVisible(idempotencySystemKey, true);
+                const existingHash = typeof existing?.fields?.request_hash === 'string' ? existing.fields.request_hash : null;
+                if (existingHash && existingHash !== requestHash) {
+                    return {
+                        jsonrpc: '2.0',
+                        id,
+                        error: { code: -32602, message: `Idempotency key ${idempotencyKey} was already used with a different payload` },
+                    };
+                }
+                if (existingHash === requestHash) {
+                    return {
+                        jsonrpc: '2.0',
+                        id,
+                        result: {
+                            ok: true,
+                            count: records.length,
+                            atomic: effectiveAtomic,
+                            verified: verify,
+                            idempotencyKey,
+                            deduplicated: true,
+                        },
+                    };
+                }
+
+                // Crash-safe dedupe needs the idempotency marker and all records in one WAL batch.
+                idempotencyFields = {
+                    operation: 'putMany',
+                    request_hash: requestHash,
+                    record_count: records.length,
+                    atomic: effectiveAtomic ? 1 : 0,
+                    verify: verify ? 1 : 0,
+                    processed_at_ms: Date.now(),
+                    first_key: records[0]!.key,
+                    last_key: records[records.length - 1]!.key,
                 };
             }
-            if (existingHash === requestHash) {
-                return {
-                    jsonrpc: '2.0',
-                    id,
-                    result: {
-                        ok: true,
-                        count: records.length,
-                        atomic: Boolean(atomic),
-                        verified: verify,
-                        idempotencyKey,
-                        deduplicated: true,
-                    },
-                };
-            }
 
-            idempotencyFields = {
-                operation: 'putMany',
-                request_hash: requestHash,
-                record_count: records.length,
-                atomic: Boolean(atomic) ? 1 : 0,
-                verify: verify ? 1 : 0,
-                processed_at_ms: Date.now(),
-                first_key: records[0]!.key,
-                last_key: records[records.length - 1]!.key,
-            };
-        }
-
-        const timestamp = Date.now();
-        for (const record of records) {
-            await this.modules.registry.beforeWrite({
-                key: record.key,
-                fields: { ...record.fields },
-                timestamp,
-            }, this.moduleContext);
-        }
-
-        const walEntries: WALBatchEntry[] = records.map((record) => ({
-            op: Operation.PUT,
-            key: record.key,
-            payload: { ...record.fields },
-        }));
-        if (idempotencySystemKey && idempotencyFields) {
-            walEntries.push({
-                op: Operation.PUT,
-                key: idempotencySystemKey,
-                payload: { ...idempotencyFields },
-            });
-        }
-
-        if (atomic) {
-            await this.wal.appendBatch(walEntries);
-        } else {
-            for (const entry of walEntries) {
-                await this.wal.append(entry.op, entry.key, entry.payload);
-            }
-        }
-
-        for (const record of records) {
-            this.applyHotPut(record.key, record.fields, timestamp);
-        }
-        if (idempotencySystemKey && idempotencyFields) {
-            this.applyHotPut(idempotencySystemKey, idempotencyFields, timestamp);
-        }
-
-        for (const record of records) {
-            await this.modules.registry.onWrite({
-                key: record.key,
-                fields: { ...record.fields },
-                timestamp,
-            }, this.moduleContext);
-        }
-
-        if (verify) {
+            const timestamp = Date.now();
             for (const record of records) {
-                if (!this.verifyHotRecord(record.key, record.fields)) {
-                    throw new Error(`putMany verification failed for key ${record.key}`);
+                await this.modules.registry.beforeWrite({
+                    key: record.key,
+                    fields: { ...record.fields },
+                    timestamp,
+                }, this.moduleContext);
+            }
+
+            const walEntries: WALBatchEntry[] = records.map((record) => ({
+                op: Operation.PUT,
+                key: record.key,
+                payload: { ...record.fields },
+            }));
+            if (idempotencySystemKey && idempotencyFields) {
+                walEntries.push({
+                    op: Operation.PUT,
+                    key: idempotencySystemKey,
+                    payload: { ...idempotencyFields },
+                });
+            }
+
+            if (effectiveAtomic) {
+                await this.wal.appendBatch(walEntries);
+            } else {
+                for (const entry of walEntries) {
+                    await this.wal.append(entry.op, entry.key, entry.payload);
                 }
             }
-        }
 
-        const autoFlush = await this.maybeAutoFlush();
-        return {
-            jsonrpc: '2.0',
-            id,
-            result: {
-                ok: true,
-                count: records.length,
-                atomic: Boolean(atomic),
-                verified: verify,
-                idempotencyKey: idempotencyKey ?? undefined,
-                deduplicated: false,
-                autoFlushed: autoFlush != null,
-                flush: autoFlush ?? undefined,
-            },
+            for (const record of records) {
+                this.applyHotPut(record.key, record.fields, timestamp);
+            }
+            if (idempotencySystemKey && idempotencyFields) {
+                this.applyHotPut(idempotencySystemKey, idempotencyFields, timestamp);
+            }
+
+            for (const record of records) {
+                await this.modules.registry.onWrite({
+                    key: record.key,
+                    fields: { ...record.fields },
+                    timestamp,
+                }, this.moduleContext);
+            }
+
+            if (verify) {
+                for (const record of records) {
+                    if (!this.verifyHotRecord(record.key, record.fields)) {
+                        throw new Error(`putMany verification failed for key ${record.key}`);
+                    }
+                }
+            }
+
+            const autoFlush = await this.maybeAutoFlush();
+            return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                    ok: true,
+                    count: records.length,
+                    atomic: effectiveAtomic,
+                    verified: verify,
+                    idempotencyKey: idempotencyKey ?? undefined,
+                    deduplicated: false,
+                    autoFlushed: autoFlush != null,
+                    flush: autoFlush ?? undefined,
+                },
+            };
         };
+
+        if (idempotencySystemKey) {
+            return await this.withIdempotencyLock(idempotencySystemKey, executePutMany);
+        }
+        return await executePutMany();
     }
 
     private async handleCountPrefix(id: any, params: any): Promise<any> {
