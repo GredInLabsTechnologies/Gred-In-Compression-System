@@ -83,8 +83,10 @@ export class ResilienceShell {
 
     private failures: number[] = [];
     private circuitOpenedAt = 0;
-    private halfOpenProbes = 0;
+    private halfOpenSuccessfulProbes = 0;
+    private halfOpenInFlight = 0;
     private pendingOps = 0;
+    private backpressureActive = false;
 
     constructor(config: ResilienceConfig = {}) {
         this.failureThreshold = config.circuitBreaker?.failureThreshold ?? 5;
@@ -129,16 +131,22 @@ export class ResilienceShell {
         timeoutMs: number
     ): Promise<T> {
         this.updateCircuitState();
+        this.updateBackpressureState();
 
-        // Backpressure check
+        if (this.backpressureActive) {
+            throw new GICSUnavailable(
+                `Backpressure: queue above lowWaterMark (${this.lowWaterMark})`,
+                this.getMetadata(0, 'Backpressure limit reached')
+            );
+        }
         if (this.pendingOps >= this.highWaterMark) {
+            this.backpressureActive = true;
             throw new GICSUnavailable(
                 `Backpressure: queue at highWaterMark (${this.highWaterMark})`,
                 this.getMetadata(0, 'Backpressure limit reached')
             );
         }
 
-        // Circuit breaker check
         if (this.circuitState === 'OPEN') {
             throw new GICSCircuitOpen(
                 'Circuit breaker is OPEN',
@@ -146,7 +154,18 @@ export class ResilienceShell {
             );
         }
 
+        const halfOpenProbe = this.circuitState === 'HALF_OPEN';
+        if (halfOpenProbe && this.halfOpenInFlight >= this.halfOpenMaxProbes) {
+            throw new GICSCircuitOpen(
+                'Circuit breaker is HALF_OPEN and probe limit is exhausted',
+                this.getMetadata(0, 'Circuit HALF_OPEN probe limit reached')
+            );
+        }
+
         this.pendingOps++;
+        if (halfOpenProbe) {
+            this.halfOpenInFlight++;
+        }
         let attempts = 0;
         let lastError: Error | null = null;
 
@@ -177,27 +196,36 @@ export class ResilienceShell {
                 }
             }
 
-            // Todos los intentos fallaron
             throw new GICSTimeout(
                 `Operation timed out after ${attempts} attempts`,
                 this.getMetadata(attempts, lastError?.message)
             );
         } finally {
             this.pendingOps--;
+            if (halfOpenProbe) {
+                this.halfOpenInFlight = Math.max(0, this.halfOpenInFlight - 1);
+            }
+            this.updateBackpressureState();
         }
     }
 
     private async withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-        return Promise.race([
-            promise,
-            new Promise<T>((_, reject) =>
-                setTimeout(() => {
-                    const err = new Error('Operation timed out');
-                    err.name = 'TimeoutError';
-                    reject(err);
-                }, ms)
-            ),
-        ]);
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const timeout = new Promise<T>((_, reject) => {
+            timer = setTimeout(() => {
+                const err = new Error('Operation timed out');
+                err.name = 'TimeoutError';
+                reject(err);
+            }, ms);
+        });
+
+        try {
+            return await Promise.race([promise, timeout]);
+        } finally {
+            if (timer) {
+                clearTimeout(timer);
+            }
+        }
     }
 
     private async delay(attempt: number): Promise<void> {
@@ -213,11 +241,12 @@ export class ResilienceShell {
 
     private recordSuccess(): void {
         if (this.circuitState === 'HALF_OPEN') {
-            this.halfOpenProbes++;
-            if (this.halfOpenProbes >= this.halfOpenMaxProbes) {
+            this.halfOpenSuccessfulProbes++;
+            if (this.halfOpenSuccessfulProbes >= this.halfOpenMaxProbes) {
                 this.circuitState = 'CLOSED';
                 this.failures = [];
-                this.halfOpenProbes = 0;
+                this.halfOpenSuccessfulProbes = 0;
+                this.halfOpenInFlight = 0;
             }
         }
     }
@@ -230,7 +259,8 @@ export class ResilienceShell {
         if (this.circuitState === 'HALF_OPEN') {
             this.circuitState = 'OPEN';
             this.circuitOpenedAt = now;
-            this.halfOpenProbes = 0;
+            this.halfOpenSuccessfulProbes = 0;
+            this.halfOpenInFlight = 0;
         } else if (this.failures.length >= this.failureThreshold) {
             this.circuitState = 'OPEN';
             this.circuitOpenedAt = now;
@@ -244,13 +274,21 @@ export class ResilienceShell {
         if (this.circuitState === 'OPEN') {
             if (now - this.circuitOpenedAt >= this.halfOpenAfterMs) {
                 this.circuitState = 'HALF_OPEN';
-                this.halfOpenProbes = 0;
+                this.halfOpenSuccessfulProbes = 0;
+                this.halfOpenInFlight = 0;
             }
         } else if (this.circuitState === 'CLOSED') {
             if (this.failures.length >= this.failureThreshold) {
                 this.circuitState = 'OPEN';
                 this.circuitOpenedAt = now;
             }
+        }
+    }
+
+    private updateBackpressureState(): void {
+        if (!this.backpressureActive) return;
+        if (this.pendingOps <= this.lowWaterMark) {
+            this.backpressureActive = false;
         }
     }
 

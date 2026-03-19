@@ -1,5 +1,5 @@
 /**
- * GICS CLI Commands (Phase 10 → v1.3.3 UX)
+ * GICS CLI Commands (Phase 10 → v1.3.4 UX)
  *
  * Implements: encode, decode, verify, info, bench, profile, inference, daemon
  * Zero external dependencies, ANSI UX via ui.ts
@@ -590,21 +590,22 @@ ${c.bold('Options:')}
 }
 
 /**
- * gics daemon start|stop|status
+ * gics daemon start|stop|status|telemetry
  */
 export async function daemonCommand(ctx: CLIContext): Promise<number> {
     const subcommand = ctx.args[0];
     const subArgs = ctx.args.slice(1);
 
-    if (hasFlag(ctx.args, '--help') || !subcommand || !['start', 'stop', 'status'].includes(subcommand)) {
+    if (hasFlag(ctx.args, '--help') || !subcommand || !['start', 'stop', 'status', 'telemetry'].includes(subcommand)) {
         console.log(`${c.bold('gics daemon')} — Manage the GICS background daemon
 
-${c.bold('Usage:')} gics daemon <start|stop|status> [options]
+${c.bold('Usage:')} gics daemon <start|stop|status|telemetry> [options]
 
 ${c.bold('Subcommands:')}
   start    Start the daemon (foreground)
   stop     Stop a running daemon
   status   Check daemon status
+  telemetry  Read daemon telemetry metrics/events
 
 ${c.bold('Options (start):')}
   --data-path <dir>     Data directory (default: ~/.gics/data)
@@ -616,7 +617,14 @@ ${c.bold('Options (start):')}
 ${c.bold('Options (status):')}
   --json                Emit machine-readable JSON
   --pretty              Pretty-print JSON
-  --token-path <path>   Explicit daemon token path`);
+  --token-path <path>   Explicit daemon token path
+
+${c.bold('Options (telemetry):')}
+  --events              Return recent structured events instead of metrics
+  --type <eventType>    Filter events by type
+  --limit <N>           Limit events returned (default: 100)
+  --json                Emit machine-readable JSON
+  --pretty              Pretty-print JSON`);
         return subcommand ? 0 : 2;
     }
 
@@ -627,6 +635,8 @@ ${c.bold('Options (status):')}
             return daemonStop();
         case 'status':
             return daemonStatus(subArgs);
+        case 'telemetry':
+            return daemonTelemetry(subArgs);
         default:
             return 2;
     }
@@ -1073,7 +1083,7 @@ async function daemonStop(): Promise<number> {
 async function daemonStatus(args: string[]): Promise<number> {
     try {
         const { socketPath, token } = await resolveDaemonTarget(args);
-        const response = await daemonRpcCall(socketPath, token, 'ping', {}, 3000);
+        const response = await daemonRpcCall(socketPath, token, 'pingVerbose', {}, 3000);
         if (response.error) {
             if (wantsJson(args)) {
                 writeJson(response, wantsPrettyJson(args));
@@ -1110,6 +1120,67 @@ async function daemonStatus(args: string[]): Promise<number> {
             console.log(c.red('Daemon not configured (no token file)'));
         } else {
             console.log(c.red(`Daemon not running: ${err.message}`));
+        }
+        return 1;
+    }
+}
+
+async function daemonTelemetry(args: string[]): Promise<number> {
+    const eventsMode = hasFlag(args, '--events');
+    const limit = Math.max(0, Number(parseFlag(args, '--limit') ?? '100'));
+    const type = parseFlag(args, '--type') ?? undefined;
+
+    try {
+        const { socketPath, token } = await resolveDaemonTarget(args);
+        const response = await daemonRpcCall(
+            socketPath,
+            token,
+            eventsMode ? 'getTelemetryEvents' : 'getTelemetry',
+            eventsMode ? { limit, type } : {},
+            10_000,
+        );
+
+        if (response.error) {
+            if (wantsJson(args)) {
+                writeJson(response, wantsPrettyJson(args));
+            } else {
+                console.error(c.red(`Error: ${response.error.message}`));
+            }
+            return 1;
+        }
+
+        const result = response.result ?? {};
+        if (wantsJson(args) || wantsPrettyJson(args)) {
+            writeJson(result, wantsPrettyJson(args) || !wantsJson(args));
+            return 0;
+        }
+
+        if (eventsMode) {
+            const events = Array.isArray(result.events) ? result.events : [];
+            const rows = events.map((event: any) => [
+                String(event.type ?? ''),
+                new Date(Number(event.recordedAt ?? 0)).toISOString(),
+                JSON.stringify(event.data ?? {}),
+            ]);
+            console.log(table(['Type', 'Recorded At', 'Data'], rows));
+            return 0;
+        }
+
+        const metrics = Array.isArray(result.metrics) ? result.metrics : [];
+        const rows = metrics.map((metric: any) => [
+            String(metric.name ?? ''),
+            String(metric.type ?? ''),
+            String(metric.unit ?? ''),
+            String(Array.isArray(metric.samples) ? metric.samples.length : 0),
+        ]);
+        console.log(table(['Metric', 'Type', 'Unit', 'Series'], rows));
+        console.log(c.dim(`Captured at ${new Date(Number(result.capturedAt ?? Date.now())).toISOString()} (${metrics.length} metrics)`));
+        return 0;
+    } catch (err: any) {
+        if (wantsJson(args) || wantsPrettyJson(args)) {
+            writeJson({ error: err.message }, wantsPrettyJson(args) || !wantsJson(args));
+        } else {
+            console.error(c.red(err.message));
         }
         return 1;
     }

@@ -174,4 +174,68 @@ describe('ResilienceShell (fase 6)', () => {
         await shell.executeRead(successOp);
         expect(shell.getCircuitState()).toBe('CLOSED');
     });
+
+    it('backpressure aplica histéresis hasta bajar de lowWaterMark', async () => {
+        const shell = new ResilienceShell({
+            backpressure: { highWaterMark: 3, lowWaterMark: 1 },
+            timeout: { writeMs: 5000 },
+        });
+
+        const releases: Array<() => void> = [];
+        const slowOp = () => new Promise<string>((resolve) => {
+            releases.push(() => resolve('ok'));
+        });
+
+        const p1 = shell.executeWrite(slowOp);
+        const p2 = shell.executeWrite(slowOp);
+        const p3 = shell.executeWrite(slowOp);
+
+        await expect(shell.executeWrite(slowOp)).rejects.toBeInstanceOf(GICSUnavailable);
+
+        releases[0]!();
+        await p1;
+
+        await expect(shell.executeWrite(async () => 'still_blocked')).rejects.toBeInstanceOf(GICSUnavailable);
+
+        releases[1]!();
+        releases[2]!();
+        await Promise.all([p2, p3]);
+        await expect(shell.executeWrite(async () => 'ok')).resolves.toBe('ok');
+    });
+
+    it('HALF_OPEN limita probes concurrentes', async () => {
+        const shell = new ResilienceShell({
+            circuitBreaker: {
+                failureThreshold: 1,
+                windowMs: 60_000,
+                halfOpenAfterMs: 30,
+                halfOpenMaxProbes: 1,
+            },
+            retry: { maxAttempts: 1 },
+            timeout: { readMs: 20 },
+        });
+
+        await expect(shell.executeRead(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            return 'timeout';
+        })).rejects.toThrow(GICSTimeout);
+
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        expect(shell.getCircuitState()).toBe('HALF_OPEN');
+
+        let release!: () => void;
+        const probeGate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const firstProbe = shell.executeRead(async () => {
+            await probeGate;
+            return 'ok';
+        });
+
+        await expect(shell.executeRead(async () => 'second')).rejects.toThrow(GICSCircuitOpen);
+
+        release();
+        await expect(firstProbe).resolves.toBe('ok');
+        expect(shell.getCircuitState()).toBe('CLOSED');
+    });
 });

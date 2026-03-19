@@ -144,4 +144,26 @@ describe('AuditChain (fase 7)', () => {
             await chain.close();
         });
     });
+
+    it('serializa appends concurrentes sin romper secuencia ni chain hash', async () => {
+        await withTempDir(async (dir) => {
+            const auditPath = path.join(dir, 'audit.chain');
+            const chain = new AuditChain({ filePath: auditPath, checkpointInterval: 50 });
+
+            await Promise.all(Array.from({ length: 200 }, (_, index) => {
+                return chain.append('system', 'put', `k${index}`, { index });
+            }));
+
+            const verification = await chain.verify();
+            expect(verification.valid).toBe(true);
+
+            const exported = await chain.export();
+            const parsed = exported.map((line) => JSON.parse(line));
+            expect(parsed).toHaveLength(200);
+            expect(parsed[0].sequence).toBe(1);
+            expect(parsed[199].sequence).toBe(200);
+
+            await chain.close();
+        });
+    });
 });

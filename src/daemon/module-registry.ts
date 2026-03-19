@@ -1,4 +1,5 @@
 import type { StateIndexEntry, StateIndexScanResult } from './state-index.js';
+import type { TelemetrySink } from '../telemetry/collector.js';
 
 export interface ModuleManifest {
     id: string;
@@ -92,6 +93,7 @@ export interface ModuleContext {
     upsertSystemRecord(key: string, fields: Record<string, number | string>): Promise<void>;
     now(): number;
     getStateSnapshot(): StateIndexEntry[];
+    telemetry?: TelemetrySink | null;
 }
 
 export interface DaemonModule {

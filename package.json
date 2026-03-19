@@ -5,6 +5,16 @@
     "type": "module",
     "main": "dist/src/index.js",
     "types": "dist/src/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/src/index.d.ts",
+            "import": "./dist/src/index.js"
+        },
+        "./clients/node": {
+            "types": "./dist/src/clients/node.d.ts",
+            "import": "./dist/src/clients/node.js"
+        }
+    },
     "bin": {
         "gics": "dist/src/cli/index.js"
     },
@@ -17,6 +27,7 @@
     },
     "files": [
         "dist/src",
+        "clients/python/gics_client.py",
         "README.md",
         "CHANGELOG.md"
     ],

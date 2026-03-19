@@ -1,3 +1,5 @@
+import type { TelemetrySink } from '../telemetry/collector.js';
+
 export type GICSv2Logger = {
     info?: (msg: string) => void;
     warn?: (msg: string) => void;
@@ -37,6 +39,8 @@ export type GICSv2EncoderOptions = {
     sidecarWriter?: GICSv2SidecarWriter | null;
     /** Optional logger hook to surface CHM / debug messages without console.* in src/. */
     logger?: GICSv2Logger | null;
+    /** Optional structured telemetry sink for runtime metrics/events. */
+    telemetry?: TelemetrySink | null;
     /** Segment size limit in bytes (uncompressed estimation). Default 1MB. */
     segmentSizeLimit?: number;
     /**
@@ -88,6 +92,8 @@ export type GICSv2DecoderOptions = {
     logger?: GICSv2Logger | null;
     /** Password for AES-256-GCM encryption (v1.3+). */
     password?: string;
+    /** Optional structured telemetry sink for runtime metrics/events. */
+    telemetry?: TelemetrySink | null;
 };
 
 export type GICSv2AdaptiveRotationOptions = {

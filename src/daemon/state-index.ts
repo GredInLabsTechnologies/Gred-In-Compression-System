@@ -41,6 +41,15 @@ export interface StateIndexScanResult {
     nextCursor: string | null;
 }
 
+export interface StateIndexScanSummary {
+    prefix: string;
+    count: number;
+    oldestTimestamp: number | null;
+    latestTimestamp: number | null;
+    latestKey: string | null;
+    tiers: Record<StateIndexTier, number>;
+}
+
 interface StateIndexFileData {
     version: 1;
     entries: StateIndexEntry[];
@@ -258,6 +267,65 @@ export class StateIndex {
         return { items: out, nextCursor };
     }
 
+    countPrefix(prefix: string = '', options: Pick<StateIndexScanOptions, 'tiers' | 'includeSystem' | 'mode'> = {}): number {
+        let count = 0;
+        for (const _entry of this.iterVisibleEntries(prefix, options)) {
+            count += 1;
+        }
+        return count;
+    }
+
+    latestByPrefix(prefix: string = '', options: Pick<StateIndexScanOptions, 'tiers' | 'includeSystem' | 'mode'> = {}): StateIndexScanItem | null {
+        let latest: StateIndexEntry | null = null;
+        for (const entry of this.iterVisibleEntries(prefix, options)) {
+            if (!latest || entry.timestamp > latest.timestamp || (entry.timestamp === latest.timestamp && entry.key.localeCompare(latest.key) > 0)) {
+                latest = entry;
+            }
+        }
+
+        if (!latest || !latest.fields) {
+            return null;
+        }
+
+        return {
+            key: latest.key,
+            fields: { ...latest.fields },
+            tier: latest.tier,
+            timestamp: latest.timestamp,
+        };
+    }
+
+    scanSummary(prefix: string = '', options: Pick<StateIndexScanOptions, 'tiers' | 'includeSystem' | 'mode'> = {}): StateIndexScanSummary {
+        let count = 0;
+        let oldestTimestamp: number | null = null;
+        let latestTimestamp: number | null = null;
+        let latestKey: string | null = null;
+        const tiers: Record<StateIndexTier, number> = { hot: 0, warm: 0, cold: 0 };
+
+        for (const entry of this.iterVisibleEntries(prefix, options)) {
+            count += 1;
+            tiers[entry.tier] += 1;
+            if (oldestTimestamp == null || entry.timestamp < oldestTimestamp) {
+                oldestTimestamp = entry.timestamp;
+            }
+            if (latestTimestamp == null || entry.timestamp > latestTimestamp) {
+                latestTimestamp = entry.timestamp;
+                latestKey = entry.key;
+            } else if (latestTimestamp === entry.timestamp && latestKey != null && entry.key.localeCompare(latestKey) > 0) {
+                latestKey = entry.key;
+            }
+        }
+
+        return {
+            prefix,
+            count,
+            oldestTimestamp,
+            latestTimestamp,
+            latestKey,
+            tiers,
+        };
+    }
+
     entriesForSegment(segmentRef: string): string[] {
         return Array.from(this.entries.values())
             .filter((entry) => entry.segmentRef === segmentRef)
@@ -276,6 +344,33 @@ export class StateIndex {
 
     snapshotEntries(): StateIndexEntry[] {
         return Array.from(this.entries.values()).map((entry) => this.cloneEntry(entry));
+    }
+
+    private *iterVisibleEntries(
+        prefix: string,
+        options: Pick<StateIndexScanOptions, 'tiers' | 'includeSystem' | 'mode'>,
+    ): Generator<StateIndexEntry> {
+        const includeSystem = options.includeSystem ?? false;
+        const mode = options.mode ?? 'current';
+        const tiers = options.tiers === 'all' || !options.tiers
+            ? null
+            : new Set(options.tiers);
+
+        if (mode !== 'current') {
+            throw new Error(`Unsupported scan mode: ${mode}`);
+        }
+
+        const keys = includeSystem ? this.sortedKeys : this.sortedKeys.filter((key) => !isHiddenSystemKey(key));
+        for (const key of keys) {
+            if (prefix && !key.startsWith(prefix)) {
+                continue;
+            }
+            const entry = this.entries.get(key);
+            if (!entry || entry.deleted || !entry.fields) continue;
+            if (tiers && !tiers.has(entry.tier)) continue;
+            if (!includeSystem && isHiddenSystemKey(key)) continue;
+            yield this.cloneEntry(entry);
+        }
     }
 
     private recordDeletedTarget(targetKey: string, timestamp: number, tier: StateIndexTier, segmentRef: string | null): void {

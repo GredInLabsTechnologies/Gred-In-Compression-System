@@ -20,6 +20,7 @@ import {
     verifyAuth,
     decryptSection
 } from './encryption.js';
+import { durationSeconds, normalizeBooleanLabel, normalizeErrorType, normalizeSchemaKind } from '../telemetry/utils.js';
 
 interface DecompressionResult {
     time: number[];
@@ -72,6 +73,7 @@ export class GICSv2Decoder {
             integrityMode: 'strict',
             logger: null,
             password: '',
+            telemetry: null,
         };
         this.options = { ...defaults, ...options };
     }
@@ -195,6 +197,41 @@ export class GICSv2Decoder {
         await this.bootstrapV3();
     }
 
+    private fileLabels(): Record<string, string> {
+        return {
+            encrypted: normalizeBooleanLabel(this.isEncrypted),
+            schema_kind: normalizeSchemaKind(this.hasSchema),
+        };
+    }
+
+    private recordIntegrityFailure(stage: string, error: unknown): void {
+        const errorType = normalizeErrorType(error);
+        this.options.telemetry?.incrementCounter(
+            'gics_integrity_failures_total',
+            { stage, error_type: errorType },
+            1,
+            'Integrity and corruption failures detected while verifying or decoding GICS files.',
+        );
+        this.options.telemetry?.recordEvent('integrity_failed', {
+            stage,
+            errorType,
+            message: error instanceof Error ? error.message : String(error),
+        });
+    }
+
+    private maybeRecordQueryDegraded(kind: 'legacy' | 'generic', considered: number, read: number, skipped: number): void {
+        if (considered < 4 || skipped > 0 || read < considered) {
+            return;
+        }
+        this.options.telemetry?.recordEvent('query_degraded', {
+            kind,
+            consideredSegments: considered,
+            readSegments: read,
+            skippedSegments: skipped,
+            reason: 'no_segment_skips',
+        });
+    }
+
     private async bootstrapV3(): Promise<void> {
         this.resetBootstrapState();
         if (!this.verifyMagic()) {
@@ -253,23 +290,70 @@ export class GICSv2Decoder {
      * Optimized query: Only decompresses segments that MIGHT contain the itemId.
      */
     async query(itemId: number): Promise<Snapshot[]> {
-        if (this.data.length < GICS_HEADER_SIZE_V3) throw new Error(ERR_DATA_TOO_SHORT);
-        await this.parseHeader();
-        if (this.hasSchema) {
-            throw new IntegrityError('query() only supports legacy numeric files. Use queryGeneric() for schema-based files.');
-        }
+        const startedAt = Date.now();
+        let considered = 0;
+        let read = 0;
+        let skipped = 0;
+        try {
+            if (this.data.length < GICS_HEADER_SIZE_V3) throw new Error(ERR_DATA_TOO_SHORT);
+            await this.parseHeader();
+            if (this.hasSchema) {
+                throw new IntegrityError('query() only supports legacy numeric files. Use queryGeneric() for schema-based files.');
+            }
 
-        const dataEnd = this.data.length - FILE_EOS_SIZE;
-        const result: Snapshot[] = [];
-        let segmentOrdinal = 0;
+            const dataEnd = this.data.length - FILE_EOS_SIZE;
+            const result: Snapshot[] = [];
+            let segmentOrdinal = 0;
 
-        while (this.pos < dataEnd) {
-            const { snapshots, nextPos } = await this.decodeSegment(true, itemId, undefined, segmentOrdinal);
-            result.push(...snapshots);
-            this.pos = nextPos;
-            segmentOrdinal++;
+            while (this.pos < dataEnd) {
+                const decoded = await this.decodeSegment(true, itemId, undefined, segmentOrdinal);
+                result.push(...decoded.snapshots);
+                this.pos = decoded.nextPos;
+                considered++;
+                if (decoded.skipped) skipped++;
+                else read++;
+                segmentOrdinal++;
+            }
+
+            this.options.telemetry?.incrementCounter(
+                'gics_query_total',
+                { kind: 'legacy', result: 'ok' },
+                1,
+                'Optimized query executions against GICS segment files.',
+            );
+            this.options.telemetry?.observeHistogram(
+                'gics_query_duration_seconds',
+                durationSeconds(startedAt),
+                { kind: 'legacy' },
+                {
+                    unit: 'seconds',
+                    description: 'Latency of optimized GICS query executions.',
+                },
+            );
+            this.options.telemetry?.incrementCounter('gics_query_segments_considered_total', { kind: 'legacy' }, considered, 'Segments considered during optimized GICS queries.');
+            this.options.telemetry?.incrementCounter('gics_query_segments_read_total', { kind: 'legacy' }, read, 'Segments read during optimized GICS queries.');
+            this.options.telemetry?.incrementCounter('gics_query_segments_skipped_total', { kind: 'legacy' }, skipped, 'Segments skipped during optimized GICS queries.');
+            this.maybeRecordQueryDegraded('legacy', considered, read, skipped);
+            return result;
+        } catch (error) {
+            this.options.telemetry?.incrementCounter(
+                'gics_query_total',
+                { kind: 'legacy', result: 'error', error_type: normalizeErrorType(error) },
+                1,
+                'Optimized query executions against GICS segment files.',
+            );
+            this.options.telemetry?.observeHistogram(
+                'gics_query_duration_seconds',
+                durationSeconds(startedAt),
+                { kind: 'legacy' },
+                {
+                    unit: 'seconds',
+                    description: 'Latency of optimized GICS query executions.',
+                },
+            );
+            this.recordIntegrityFailure('query', error);
+            throw error;
         }
-        return result;
     }
 
     /**
@@ -277,21 +361,73 @@ export class GICSv2Decoder {
      * Returns matching generic snapshots, skipping segments via bloom filter.
      */
     async queryGeneric(itemKey: number | string): Promise<GenericSnapshot<Record<string, number | string>>[]> {
-        await this.parseHeader();
+        const startedAt = Date.now();
+        let considered = 0;
+        let read = 0;
+        let skipped = 0;
+        try {
+            await this.parseHeader();
 
-        const dataEnd = this.data.length - FILE_EOS_SIZE;
-        const result: GenericSnapshot<Record<string, number | string>>[] = [];
-        let segmentOrdinal = 0;
+            const dataEnd = this.data.length - FILE_EOS_SIZE;
+            const result: GenericSnapshot<Record<string, number | string>>[] = [];
+            let segmentOrdinal = 0;
 
-        while (this.pos < dataEnd) {
-            const snapshots = await this.querySegmentForGeneric(itemKey, segmentOrdinal);
-            if (snapshots) result.push(...snapshots);
-            segmentOrdinal++;
+            while (this.pos < dataEnd) {
+                const decoded = await this.querySegmentForGeneric(itemKey, segmentOrdinal);
+                if (decoded.snapshots) result.push(...decoded.snapshots);
+                this.pos = decoded.nextPos;
+                considered++;
+                if (decoded.skipped) skipped++;
+                else read++;
+                segmentOrdinal++;
+            }
+
+            this.options.telemetry?.incrementCounter(
+                'gics_query_total',
+                { kind: 'generic', result: 'ok' },
+                1,
+                'Optimized query executions against GICS segment files.',
+            );
+            this.options.telemetry?.observeHistogram(
+                'gics_query_duration_seconds',
+                durationSeconds(startedAt),
+                { kind: 'generic' },
+                {
+                    unit: 'seconds',
+                    description: 'Latency of optimized GICS query executions.',
+                },
+            );
+            this.options.telemetry?.incrementCounter('gics_query_segments_considered_total', { kind: 'generic' }, considered, 'Segments considered during optimized GICS queries.');
+            this.options.telemetry?.incrementCounter('gics_query_segments_read_total', { kind: 'generic' }, read, 'Segments read during optimized GICS queries.');
+            this.options.telemetry?.incrementCounter('gics_query_segments_skipped_total', { kind: 'generic' }, skipped, 'Segments skipped during optimized GICS queries.');
+            this.maybeRecordQueryDegraded('generic', considered, read, skipped);
+            return result;
+        } catch (error) {
+            this.options.telemetry?.incrementCounter(
+                'gics_query_total',
+                { kind: 'generic', result: 'error', error_type: normalizeErrorType(error) },
+                1,
+                'Optimized query executions against GICS segment files.',
+            );
+            this.options.telemetry?.observeHistogram(
+                'gics_query_duration_seconds',
+                durationSeconds(startedAt),
+                { kind: 'generic' },
+                {
+                    unit: 'seconds',
+                    description: 'Latency of optimized GICS query executions.',
+                },
+            );
+            this.recordIntegrityFailure('query', error);
+            throw error;
         }
-        return result;
     }
 
-    private async querySegmentForGeneric(itemKey: number | string, segmentOrdinal: number): Promise<GenericSnapshot<Record<string, number | string>>[] | null> {
+    private async querySegmentForGeneric(itemKey: number | string, segmentOrdinal: number): Promise<{
+        snapshots: GenericSnapshot<Record<string, number | string>>[] | null;
+        nextPos: number;
+        skipped: boolean;
+    }> {
         const { header, sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
         this.verifySegmentIntegrity(segmentStart, nextPos, footer);
 
@@ -300,8 +436,7 @@ export class GICSv2Decoder {
             : !index.contains(itemKey);
 
         if (shouldSkip) {
-            this.pos = nextPos;
-            return null;
+            return { snapshots: null, nextPos, skipped: true };
         }
 
         let snapshots: GenericSnapshot<Record<string, number | string>>[];
@@ -325,14 +460,14 @@ export class GICSv2Decoder {
                 }));
         }
 
-        this.pos = nextPos;
-        return snapshots;
+        return { snapshots, nextPos, skipped: false };
     }
 
     /**
      * Verifies the entire file integrity (Hash Chain, CRCs) WITHOUT decompressing payloads.
      */
     async verifyIntegrityOnly(): Promise<boolean> {
+        const startedAt = Date.now();
         try {
             if (!this.verifyMagic()) return false;
             this.pos = 4;
@@ -366,8 +501,39 @@ export class GICSv2Decoder {
             }
 
             this.verifyFileEOS(integrity);
+            this.options.telemetry?.incrementCounter(
+                'gics_verify_total',
+                { result: 'ok', ...this.fileLabels() },
+                1,
+                'Integrity verification runs executed against GICS files.',
+            );
+            this.options.telemetry?.observeHistogram(
+                'gics_verify_duration_seconds',
+                durationSeconds(startedAt),
+                this.fileLabels(),
+                {
+                    unit: 'seconds',
+                    description: 'Latency of integrity verification runs against GICS files.',
+                },
+            );
             return true;
-        } catch {
+        } catch (error) {
+            this.options.telemetry?.incrementCounter(
+                'gics_verify_total',
+                { result: 'invalid', ...this.fileLabels() },
+                1,
+                'Integrity verification runs executed against GICS files.',
+            );
+            this.options.telemetry?.observeHistogram(
+                'gics_verify_duration_seconds',
+                durationSeconds(startedAt),
+                this.fileLabels(),
+                {
+                    unit: 'seconds',
+                    description: 'Latency of integrity verification runs against GICS files.',
+                },
+            );
+            this.recordIntegrityFailure('verify', error);
             return false;
         }
     }
@@ -452,14 +618,14 @@ export class GICSv2Decoder {
         itemId?: number,
         chain?: IntegrityChain,
         segmentOrdinal: number = 0
-    ): Promise<{ snapshots: Snapshot[], nextPos: number, index: SegmentIndex }> {
+    ): Promise<{ snapshots: Snapshot[], nextPos: number, index: SegmentIndex, skipped: boolean }> {
         const { header, sections, index, footer, nextPos, segmentStart } = this.parseSegmentParts(this.pos);
 
         this.verifySegmentIntegrity(segmentStart, nextPos, footer);
 
         if (skipIfMissing && itemId !== undefined && !index.contains(itemId)) {
             if (chain) this.updateIntegrityChain(chain, sections);
-            return { snapshots: [], nextPos, index };
+            return { snapshots: [], nextPos, index, skipped: true };
         }
 
         const data = await this.decompressAndDecode(sections, chain, segmentOrdinal);
@@ -470,7 +636,7 @@ export class GICSv2Decoder {
             snapshots = snapshots.filter(s => s.items.has(itemId));
         }
 
-        return { snapshots, nextPos, index };
+        return { snapshots, nextPos, index, skipped: false };
     }
 
     private async decodeSegmentGeneric(chain?: IntegrityChain, segmentOrdinal: number = 0): Promise<{
@@ -791,18 +957,28 @@ export class GICSv2Decoder {
 
     private decryptSectionPayload(section: StreamSection, segmentOrdinal: number): Uint8Array {
         if (!this.encryptionKey || !this.encryptionFileNonce) throw new Error("Encryption key or nonce missing");
-        return decryptSection(
-            section.payload,
-            section.authTag!,
-            this.encryptionKey,
-            this.encryptionFileNonce,
-            section.streamId,
-            this.fileHeaderBytes!,
-            {
-                encMode: this.encryptionMode,
-                segmentOrdinal,
-            }
-        );
+        try {
+            return decryptSection(
+                section.payload,
+                section.authTag!,
+                this.encryptionKey,
+                this.encryptionFileNonce,
+                section.streamId,
+                this.fileHeaderBytes!,
+                {
+                    encMode: this.encryptionMode,
+                    segmentOrdinal,
+                }
+            );
+        } catch (error) {
+            this.options.telemetry?.incrementCounter(
+                'gics_crypto_failures_total',
+                { op: 'decrypt', error_type: normalizeErrorType(error) },
+                1,
+                'Cryptographic failures raised while decrypting GICS section payloads.',
+            );
+            throw error;
+        }
     }
 
     private decodeAndDistributeSection(streamId: StreamId, manifest: BlockManifestEntry[], decompressed: Uint8Array, context: ContextV0, res: DecompressionResult) {

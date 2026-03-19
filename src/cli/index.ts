@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * GICS CLI Entrypoint (v1.3.3)
+ * GICS CLI Entrypoint (v1.3.4)
  *
  * Zero-dependency CLI tool for GICS operations
  * Usage: gics <command> [args...]
@@ -35,7 +35,7 @@ const COMMANDS = {
 };
 
 function printUsage(): void {
-    console.log(`${c.bold('GICS CLI')} ${c.dim('v1.3.3')} — Deterministic Time-Series Compression
+    console.log(`${c.bold('GICS CLI')} ${c.dim('v1.3.4')} — Deterministic Time-Series Compression
 
 ${c.bold('Usage:')} gics <command> [args...]
 
@@ -57,6 +57,7 @@ ${c.bold('Examples:')}
   ${c.dim('gics verify data.gics')}
   ${c.dim('gics info data.gics')}
   ${c.dim('gics bench data.json --runs 5')}
+  ${c.dim('gics daemon telemetry --pretty')}
   ${c.dim(`gics rpc scan --params-json '{"prefix":"orders:"}' --pretty`)}
   ${c.dim('gics daemon start')}
 
@@ -73,7 +74,7 @@ async function main(): Promise<number> {
     }
 
     if (command === '--version' || command === '-v') {
-        console.log('1.3.3');
+        console.log('1.3.4');
         return 0;
     }
 

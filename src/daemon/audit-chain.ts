@@ -76,6 +76,7 @@ export class AuditChain {
     private initPromise: Promise<void> | null = null;
     private totalEntries = 0;
     private lastVerifyResult: { valid: boolean; corrupted: number[] } | null = null;
+    private mutationQueue: Promise<void> = Promise.resolve();
 
     constructor(config: AuditChainConfig) {
         this.filePath = config.filePath;
@@ -112,43 +113,52 @@ export class AuditChain {
         this.writeStream = createWriteStream(this.filePath, { flags: 'a' });
     }
 
+    private async enqueueMutation<T>(task: () => Promise<T>): Promise<T> {
+        const run = this.mutationQueue.then(task, task);
+        this.mutationQueue = run.then(() => undefined, () => undefined);
+        return run;
+    }
+
     async append(
         actor: string,
         action: string,
         target: string,
         payload: Record<string, any>
     ): Promise<AuditEntry> {
-        await this.initialize();
+        return this.enqueueMutation(async () => {
+            await this.initialize();
 
-        const payloadStr = JSON.stringify(payload);
-        const payloadHash = payloadStr.length > 1024 ? sha256(payloadStr) : payloadStr;
+            const payloadStr = JSON.stringify(payload);
+            const payloadHash = payloadStr.length > 1024 ? sha256(payloadStr) : payloadStr;
 
-        const entry: Omit<AuditEntry, 'hash'> = {
-            sequence: ++this.sequence,
-            timestamp: Date.now(),
-            actor,
-            action,
-            target,
-            payload: payloadHash,
-            prevHash: this.prevHash,
-        };
+            const entry: Omit<AuditEntry, 'hash'> = {
+                sequence: ++this.sequence,
+                timestamp: Date.now(),
+                actor,
+                action,
+                target,
+                payload: payloadHash,
+                prevHash: this.prevHash,
+            };
 
-        const hash = computeEntryHash(entry);
-        const fullEntry: AuditEntry = { ...entry, hash };
+            const hash = computeEntryHash(entry);
+            const fullEntry: AuditEntry = { ...entry, hash };
 
-        this.prevHash = hash;
-        this.batchHashes.push(hash);
-        this.totalEntries++;
+            this.prevHash = hash;
+            this.batchHashes.push(hash);
+            this.totalEntries++;
 
-        return new Promise((resolve, reject) => {
-            this.writeStream!.write(JSON.stringify(fullEntry) + '\n', async (err) => {
-                if (err) return reject(err);
-                if (this.fsyncOnCommit) {
-                    await this.fsyncFile().catch(() => {}); // best-effort
-                }
-                this.maybeCheckpoint().catch(() => {}); // Best-effort
-                resolve(fullEntry);
+            await new Promise<void>((resolve, reject) => {
+                this.writeStream!.write(JSON.stringify(fullEntry) + '\n', (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
             });
+            if (this.fsyncOnCommit) {
+                await this.fsyncFile().catch(() => {});
+            }
+            await this.maybeCheckpoint();
+            return fullEntry;
         });
     }
 
@@ -245,11 +255,13 @@ export class AuditChain {
     }
 
     async close(): Promise<void> {
-        if (!this.writeStream) return;
-        return new Promise((resolve) => {
-            this.writeStream!.end(() => {
-                this.writeStream = null;
-                resolve();
+        await this.enqueueMutation(async () => {
+            if (!this.writeStream) return;
+            await new Promise<void>((resolve) => {
+                this.writeStream!.end(() => {
+                    this.writeStream = null;
+                    resolve();
+                });
             });
         });
     }

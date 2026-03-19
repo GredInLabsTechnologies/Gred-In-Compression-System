@@ -47,6 +47,16 @@ export interface ScopeProfile {
     updatedAt: number;
 }
 
+export interface SeedProfileInput {
+    scope: string;
+    hostFingerprint?: string;
+    version?: number;
+    updatedAt?: number;
+    stats?: Partial<ScopeProfileStats>;
+    preferences?: Partial<ScopeProfile['preferences']>;
+    policyHints?: Partial<ScopeProfile['policyHints']>;
+}
+
 export interface StoredPolicyRecord {
     key: string;
     systemKey: string;
@@ -62,6 +72,21 @@ export interface StoredPolicyRecord {
     recommendedCandidateId?: string;
     payload: Record<string, unknown>;
     evidenceKeys: string[];
+}
+
+export interface SeedPolicyInput {
+    domain: string;
+    scope: string;
+    subject?: string;
+    policyVersion?: string;
+    profileVersion?: string;
+    generatedAt?: number;
+    basis?: string[];
+    weights?: Record<string, number>;
+    thresholds?: Record<string, number>;
+    recommendedCandidateId?: string;
+    payload?: Record<string, unknown>;
+    evidenceKeys?: string[];
 }
 
 export interface StoredDecisionRecord {
@@ -413,6 +438,31 @@ export class InferenceStateStore {
         });
     }
 
+    seedProfile(seed: SeedProfileInput): ScopeProfile {
+        const existing = this.profiles.get(seed.scope);
+        const hostFingerprint = seed.hostFingerprint ?? existing?.hostFingerprint ?? 'seed:manual';
+        const profile = existing ? clone(existing) : this.getProfile(seed.scope, hostFingerprint);
+        profile.hostFingerprint = hostFingerprint;
+        profile.stats = {
+            ...profile.stats,
+            ...(seed.stats ?? {}),
+        };
+        profile.preferences = {
+            ...profile.preferences,
+            ...(seed.preferences ?? {}),
+        };
+        profile.policyHints = {
+            ...profile.policyHints,
+            ...(seed.policyHints ?? {}),
+        };
+        profile.version = seed.version != null
+            ? Math.max(profile.version + 1, Math.floor(seed.version))
+            : profile.version + 1;
+        profile.updatedAt = seed.updatedAt ?? Date.now();
+        this.profiles.set(seed.scope, profile);
+        return clone(profile);
+    }
+
     recordOutcome(
         domain: string,
         candidateId: string,
@@ -463,6 +513,38 @@ export class InferenceStateStore {
         this.policies.set(record.key, clone(record));
         this.runtime.lastPolicyAt = record.generatedAt;
         return clone(record);
+    }
+
+    seedPolicy(seed: SeedPolicyInput): StoredPolicyRecord {
+        const key = buildPolicyStorageKey(seed.domain, seed.scope, seed.subject);
+        const existing = this.policies.get(key);
+        const generatedAt = seed.generatedAt ?? Date.now();
+        const record: StoredPolicyRecord = {
+            key,
+            systemKey: buildPolicySystemKey(seed.domain, seed.scope, seed.subject),
+            domain: seed.domain,
+            scope: seed.scope,
+            subject: seed.subject,
+            policyVersion: seed.policyVersion ?? existing?.policyVersion ?? `seed:${seed.domain}`,
+            profileVersion: seed.profileVersion ?? existing?.profileVersion ?? `profile-v${this.profiles.get(seed.scope)?.version ?? 0}`,
+            generatedAt,
+            basis: seed.basis ? [...seed.basis] : [...(existing?.basis ?? [])],
+            weights: {
+                ...(existing?.weights ?? {}),
+                ...(seed.weights ?? {}),
+            },
+            thresholds: {
+                ...(existing?.thresholds ?? {}),
+                ...(seed.thresholds ?? {}),
+            },
+            recommendedCandidateId: seed.recommendedCandidateId ?? existing?.recommendedCandidateId,
+            payload: {
+                ...(existing?.payload ?? {}),
+                ...(seed.payload ?? {}),
+            },
+            evidenceKeys: seed.evidenceKeys ? [...seed.evidenceKeys] : [...(existing?.evidenceKeys ?? [`_infer|profile|${seed.scope}`])],
+        };
+        return this.upsertPolicy(record);
     }
 
     getPolicy(domain: string, scope: string, subject?: string): StoredPolicyRecord | null {

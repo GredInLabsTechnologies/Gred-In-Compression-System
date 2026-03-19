@@ -275,6 +275,42 @@ describe('CLI Tool (Phase 10)', () => {
         });
     });
 
+    it('daemon telemetry exposes machine-readable metrics', async () => {
+        await withTempDir(async (dir) => {
+            const dataPath = path.join(dir, 'data');
+            const tokenPath = path.join(dir, 'gics.token');
+            const socketPath = makeSocketPath('gics-cli-telemetry');
+            const daemon = new GICSDaemon({ socketPath, dataPath, tokenPath, walType: 'binary' });
+
+            await daemon.start();
+            try {
+                await execFileAsync('node', [
+                    cliPath,
+                    'rpc',
+                    'put',
+                    '--socket-path', socketPath,
+                    '--token-path', tokenPath,
+                    '--params-json', JSON.stringify({ key: 'telemetry:item:1', fields: { value: 7 } }),
+                ]);
+
+                const telemetry = await execFileAsync('node', [
+                    cliPath,
+                    'daemon',
+                    'telemetry',
+                    '--socket-path', socketPath,
+                    '--token-path', tokenPath,
+                    '--json',
+                ]);
+                const parsed = JSON.parse(telemetry.stdout);
+                expect(Array.isArray(parsed.metrics)).toBe(true);
+                expect(parsed.metrics.some((metric: any) => metric.name === 'gics_memtable_entries')).toBe(true);
+                expect(parsed.metrics.some((metric: any) => metric.name === 'gics_rpc_requests_total')).toBe(true);
+            } finally {
+                await daemon.stop();
+            }
+        });
+    });
+
     it('inference commands expose machine-readable decisions and runtime health', async () => {
         await withTempDir(async (dir) => {
             const dataPath = path.join(dir, 'data');

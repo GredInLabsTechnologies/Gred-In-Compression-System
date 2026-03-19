@@ -4,6 +4,8 @@ import {
     InferenceKeys,
     InferenceStateStore,
     type CandidateOutcomeStats,
+    type SeedPolicyInput,
+    type SeedProfileInput,
     type ScopeProfile,
     type StoredDecisionRecord,
     type StoredFeedbackRecord,
@@ -36,10 +38,21 @@ export interface OutcomeArtifacts {
     stats: CandidateOutcomeStats;
     profile: ScopeProfile;
     policy: StoredPolicyRecord | null;
+    linkedDecision: boolean;
+    decisionLagMs: number | null;
+    feedbackScore: number;
 }
 
 function stableId(raw: unknown): string {
-    return createHash('sha256').update(JSON.stringify(raw)).digest('hex').slice(0, 16);
+    return createHash('sha256').update(stableStringify(raw)).digest('hex').slice(0, 16);
+}
+
+function stableStringify(value: unknown): string {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).sort((a, b) => a.localeCompare(b));
+    return '{' + keys.map((key) => JSON.stringify(key) + ':' + stableStringify(obj[key])).join(',') + '}';
 }
 
 function clamp(value: number, min: number = 0, max: number = 1): number {
@@ -67,6 +80,13 @@ function feedbackScore(result: string | undefined, success: boolean): number {
     }
 }
 
+function normalizeStorageMode(value: unknown): 'current' | 'read_heavy' | 'write_heavy' {
+    const raw = String(value ?? '').trim().toLowerCase();
+    if (raw === 'policy.read_heavy' || raw === 'read_heavy') return 'read_heavy';
+    if (raw === 'policy.write_heavy' || raw === 'write_heavy') return 'write_heavy';
+    return 'current';
+}
+
 export class GICSInferenceEngine {
     private readonly hostFingerprint: string;
     private readonly engineVersion = 'gics-inference-engine-v1';
@@ -83,6 +103,14 @@ export class GICSInferenceEngine {
 
     async save(): Promise<void> {
         await this.store.save();
+    }
+
+    seedProfile(seed: SeedProfileInput): ScopeProfile {
+        return this.store.seedProfile(seed);
+    }
+
+    seedPolicy(seed: SeedPolicyInput): StoredPolicyRecord {
+        return this.store.seedPolicy(seed);
     }
 
     recordWrite(scope: string, payloadBytes: number): ScopeProfile {
@@ -121,6 +149,7 @@ export class GICSInferenceEngine {
         if (!candidateId) return null;
 
         const success = result === 'success' || result === 'ok' || result === 'true';
+        const feedbackScoreValue = feedbackScore(result, success);
         const feedback: StoredFeedbackRecord = {
             feedbackId: `${Date.now()}|${stableId({ domain, candidateId, decisionId, scope, subject, result, metrics })}`,
             systemKey: '',
@@ -142,7 +171,7 @@ export class GICSInferenceEngine {
             success,
             latencyMs: metrics?.latencyMs,
             costScore: metrics?.costScore ?? metrics?.costUsd,
-            feedbackScore: feedbackScore(result, success),
+            feedbackScore: feedbackScoreValue,
             result: feedback.result,
         });
 
@@ -165,7 +194,7 @@ export class GICSInferenceEngine {
                 });
             } else if (domain === 'storage.policy') {
                 profile = this.store.updateProfile(scope, this.hostFingerprint, (draft) => {
-                    draft.policyHints.storageMode = candidateId;
+                    draft.policyHints.storageMode = normalizeStorageMode(candidateId);
                 });
             }
         }
@@ -176,7 +205,15 @@ export class GICSInferenceEngine {
         })) ?? []);
         this.store.upsertPolicy(policy);
 
-        return { feedback, stats, profile, policy };
+        return {
+            feedback,
+            stats,
+            profile,
+            policy,
+            linkedDecision: decision != null,
+            decisionLagMs: decision ? Math.max(0, feedback.recordedAt - decision.createdAt) : null,
+            feedbackScore: feedbackScoreValue,
+        };
     }
 
     infer(request: InferenceRequest): InferenceDecision {
@@ -462,15 +499,23 @@ export class GICSInferenceEngine {
     private buildStoragePolicy(profile: ScopeProfile, base: StoredPolicyRecord): StoredPolicyRecord {
         const scanHeavy = profile.stats.scans > Math.max(1, profile.stats.writes);
         const writeHeavy = profile.stats.writes >= Math.max(1, profile.stats.reads);
-        let mode = 'policy.current';
-        if (scanHeavy) mode = 'policy.read_heavy';
-        else if (writeHeavy) mode = 'policy.write_heavy';
+        let mode = normalizeStorageMode(profile.policyHints.storageMode);
+        if (mode === 'current') {
+            if (scanHeavy) mode = 'read_heavy';
+            else if (writeHeavy) mode = 'write_heavy';
+        }
         return {
             ...base,
             basis: [`scans=${profile.stats.scans}`, `writes=${profile.stats.writes}`, `flushes=${profile.stats.flushes}`],
-            weights: { bandit: 0.35, scanPressure: scanHeavy ? 0.3 : 0.1, writePressure: writeHeavy ? 0.3 : 0.1, safety: 0.15 },
+            weights: { bandit: 0.35, modeMatch: 0.2, scanPressure: scanHeavy ? 0.2 : 0.1, writePressure: writeHeavy ? 0.2 : 0.1, safety: 0.15 },
             thresholds: { scanHeavyCutoff: profile.stats.writes || 1, writeHeavyCutoff: profile.stats.reads || 1 },
-            payload: { mode, recommendedMaxMemSizeBytes: writeHeavy ? 64 * 1024 * 1024 : 24 * 1024 * 1024, recommendedMaxDirtyCount: scanHeavy ? 1500 : 4000, recommendedWarmRetentionMs: scanHeavy ? 14 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000 },
+            payload: {
+                mode,
+                recommendedCandidateId: `policy.${mode}`,
+                recommendedMaxMemSizeBytes: writeHeavy ? 64 * 1024 * 1024 : 24 * 1024 * 1024,
+                recommendedMaxDirtyCount: scanHeavy ? 1500 : 4000,
+                recommendedWarmRetentionMs: scanHeavy ? 14 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000,
+            },
         };
     }
 
@@ -541,25 +586,37 @@ export class GICSInferenceEngine {
     }
 
     private scoreStorage(candidate: CandidateInput, profile: ScopeProfile, policy: StoredPolicyRecord, components: number[], weights: number[], basis: string[]): void {
-        const mode = typeof candidate.payload.mode === 'string' ? candidate.payload.mode : candidate.id;
-        const recMode = typeof policy.payload.mode === 'string' ? policy.payload.mode : 'policy.current';
-        
-        let modeScore = 0.45;
+        const mode = normalizeStorageMode(candidate.payload.mode ?? candidate.id);
+        const recMode = normalizeStorageMode(policy.payload.mode ?? policy.payload.recommendedCandidateId);
+
+        let modeScore = 0.4;
         if (mode === recMode) modeScore = 1;
         else if (mode === 'current') modeScore = 0.65;
-        
-        const scanHeavy = profile.stats.scans > Math.max(1, profile.stats.writes) ? 1 : 0.35;
-        const writeHeavy = profile.stats.writes >= Math.max(1, profile.stats.reads) ? 1 : 0.35;
-        const safety = candidate.id === 'policy.current' ? 1 : 0.75;
-        
-        components.push(modeScore, scanHeavy, writeHeavy, safety);
-        weights.push(policy.weights.scanPressure ?? 0.2, policy.weights.scanPressure ?? 0.1, policy.weights.writePressure ?? 0.1, policy.weights.safety ?? 0.15);
+
+        const scanDemand = profile.stats.scans > Math.max(1, profile.stats.writes);
+        const writeDemand = profile.stats.writes >= Math.max(1, profile.stats.reads);
+        const scanMatch = mode === 'read_heavy'
+            ? (scanDemand ? 1 : 0.3)
+            : (mode === 'current' ? 0.55 : 0.15);
+        const writeMatch = mode === 'write_heavy'
+            ? (writeDemand ? 1 : 0.3)
+            : (mode === 'current' ? 0.55 : 0.15);
+        const safety = mode === 'current' ? 1 : 0.75;
+
+        components.push(modeScore, scanMatch, writeMatch, safety);
+        weights.push(
+            policy.weights.modeMatch ?? 0.2,
+            policy.weights.scanPressure ?? 0.2,
+            policy.weights.writePressure ?? 0.2,
+            policy.weights.safety ?? 0.15,
+        );
         Object.assign(candidate.payload, {
+            mode,
             recommendedMaxMemSizeBytes: policy.payload.recommendedMaxMemSizeBytes,
             recommendedMaxDirtyCount: policy.payload.recommendedMaxDirtyCount,
             recommendedWarmRetentionMs: policy.payload.recommendedWarmRetentionMs,
         });
-        basis.push(`mode=${mode}`, `recommendedMode=${recMode}`);
+        basis.push(`mode=${mode}`, `recommendedMode=${recMode}`, `scanDemand=${scanDemand ? 1 : 0}`, `writeDemand=${writeDemand ? 1 : 0}`);
     }
 
     private deriveProfileHints(
@@ -582,9 +639,9 @@ export class GICSInferenceEngine {
         }
 
         if (domain === 'storage.policy') {
-            const mode = typeof policyPayload.mode === 'string' ? policyPayload.mode : 'policy.current';
+            const mode = normalizeStorageMode(policyPayload.mode);
             return {
-                storageMode: recommendedId ?? mode,
+                storageMode: normalizeStorageMode(recommendedId ?? mode),
                 maxMemSizeBytes: Math.floor(toNumber(recommendedCandidate.recommendedMaxMemSizeBytes ?? policyPayload.recommendedMaxMemSizeBytes, 0)),
                 maxDirtyCount: toNumber(recommendedCandidate.recommendedMaxDirtyCount ?? policyPayload.recommendedMaxDirtyCount, 0),
                 warmRetentionMs: toNumber(recommendedCandidate.recommendedWarmRetentionMs ?? policyPayload.recommendedWarmRetentionMs, 0),

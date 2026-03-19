@@ -29,6 +29,7 @@ import {
     generateEncryptionSecrets,
     verifyAuth
 } from './encryption.js';
+import { normalizeBooleanLabel, normalizeSchemaKind } from '../telemetry/utils.js';
 
 interface DataFeatures {
     timestamps: number[];
@@ -109,6 +110,16 @@ export class GICSv2Encoder {
                 throw new Error('Cannot append encrypted GICS file without password.');
             }
             if (appendState.encryptionHeader.encMode !== GICS_ENC_MODE_SEGMENT_STREAM) {
+                options.telemetry?.incrementCounter(
+                    'gics_legacy_append_rejections_total',
+                    { reason: 'legacy_encryption_mode' },
+                    1,
+                    'Rejected append attempts against legacy encrypted files that cannot be safely extended.',
+                );
+                options.telemetry?.recordEvent('legacy_append_blocked', {
+                    reason: 'legacy_encryption_mode',
+                    encMode: appendState.encryptionHeader.encMode,
+                });
                 throw new Error(`Cannot append encrypted legacy GICS file with encMode=${appendState.encryptionHeader.encMode}. Re-encode to encMode=2 first.`);
             }
 
@@ -120,6 +131,12 @@ export class GICSv2Encoder {
             encoder.encryptionKey = deriveKey(options.password, encoder.encryptionSalt, encoder.pbkdf2Iterations);
 
             if (!verifyAuth(encoder.encryptionKey, encoder.authVerify)) {
+                options.telemetry?.incrementCounter(
+                    'gics_crypto_failures_total',
+                    { op: 'append_open', error_type: 'invalid_password' },
+                    1,
+                    'Cryptographic failures raised while opening or appending encrypted files.',
+                );
                 throw new Error('Cannot append encrypted GICS file: invalid password.');
             }
         } else if (appendState.prevRootHash && encoder.encryptionKey) {
@@ -145,6 +162,7 @@ export class GICSv2Encoder {
             probeInterval: 4,
             sidecarWriter: null,
             logger: null,
+            telemetry: null,
             segmentSizeLimit: 1024 * 1024, // 1MB
             minSnapshotsPerSegment: 256,
             maxSnapshotsPerSegment: 1024,
@@ -214,6 +232,30 @@ export class GICSv2Encoder {
 
     getFileOffset(): number {
         return this.fileOffset;
+    }
+
+    private getTelemetryLabels(): Record<string, string> {
+        return {
+            encrypted: normalizeBooleanLabel(this.encryptionKey !== null),
+            schema_kind: normalizeSchemaKind(Boolean(this.options.schema)),
+        };
+    }
+
+    private streamClass(streamId: number): string {
+        switch (streamId) {
+            case StreamId.TIME:
+                return 'time';
+            case StreamId.SNAPSHOT_LEN:
+                return 'snapshot_len';
+            case StreamId.ITEM_ID:
+                return 'item_id';
+            case StreamId.VALUE:
+                return 'value';
+            case StreamId.QUANTITY:
+                return 'quantity';
+            default:
+                return streamId >= SCHEMA_STREAM_BASE ? 'schema_field' : 'other';
+        }
     }
 
     private emitFileHeader(): Uint8Array {
@@ -1167,6 +1209,45 @@ export class GICSv2Encoder {
             quarantine_rate: quarRate,
             quarantine_blocks: chmStats.quar_blocks
         };
+
+        const labels = this.getTelemetryLabels();
+        const totalRawBytes = blockStats.reduce((sum, stat) => sum + stat.raw_bytes, 0);
+        const totalEncodedBytes = blockStats.reduce((sum, stat) => sum + stat.bytes, 0);
+        const ratio = totalEncodedBytes > 0 ? totalRawBytes / totalEncodedBytes : 0;
+
+        if (ratio > 0 && Number.isFinite(ratio)) {
+            this.options.telemetry?.observeHistogram(
+                'gics_compression_ratio',
+                ratio,
+                labels,
+                {
+                    unit: 'ratio',
+                    description: 'Observed compression ratio across encoded GICS segments.',
+                },
+            );
+        }
+
+        if (chmStats.quar_blocks > 0) {
+            this.options.telemetry?.incrementCounter(
+                'gics_quarantine_blocks_total',
+                labels,
+                chmStats.quar_blocks,
+                'Blocks routed to quarantine/fixed64 due to safety or quality heuristics.',
+            );
+        }
+
+        for (const stat of blockStats) {
+            this.options.telemetry?.incrementCounter(
+                'gics_codec_selection_total',
+                {
+                    ...labels,
+                    codec: String(stat.codec),
+                    stream_class: this.streamClass(stat.stream_id),
+                },
+                1,
+                'Codec selections emitted by the GICS encoder.',
+            );
+        }
     }
 
     async finalize(): Promise<void> {

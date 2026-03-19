@@ -6,6 +6,7 @@ export const SYSTEM_NAMESPACE_PREFIXES = [
     '_infer/',
 ] as const;
 export const TOMBSTONE_PREFIX = '_sys|tombstone|';
+export const IDEMPOTENCY_PREFIX = '_sys|idempotency|';
 
 export function isSystemKey(key: string): boolean {
     return SYSTEM_NAMESPACE_PREFIXES.some((prefix) => key.startsWith(prefix));
@@ -21,6 +22,24 @@ export function makeTombstoneKey(targetKey: string): string {
 
 export function isTombstoneKey(key: string): boolean {
     return key.startsWith(TOMBSTONE_PREFIX);
+}
+
+export function makeIdempotencyKey(rawKey: string): string {
+    return `${IDEMPOTENCY_PREFIX}${encodeURIComponent(rawKey)}`;
+}
+
+export function isIdempotencyKey(key: string): boolean {
+    return key.startsWith(IDEMPOTENCY_PREFIX);
+}
+
+export function parseIdempotencyKey(key: string): string | null {
+    if (!isIdempotencyKey(key)) return null;
+    const encoded = key.slice(IDEMPOTENCY_PREFIX.length);
+    try {
+        return decodeURIComponent(encoded);
+    } catch {
+        return null;
+    }
 }
 
 export function parseTombstoneTarget(key: string): string | null {

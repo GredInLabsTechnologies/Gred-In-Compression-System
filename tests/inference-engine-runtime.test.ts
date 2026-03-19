@@ -7,6 +7,7 @@ import type { ModuleContext } from '../src/daemon/module-registry.js';
 import { GICSInferenceEngine } from '../src/inference/engine.js';
 import { InferenceEngineModule } from '../src/inference/module.js';
 import { InferenceStateStore } from '../src/inference/state-store.js';
+import { TelemetryCollector } from '../src/telemetry/collector.js';
 
 async function withTempDir(run: (dir: string) => Promise<void>): Promise<void> {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gics-inference-runtime-'));
@@ -23,7 +24,10 @@ function makeSocketPath(name: string): string {
         : path.join(os.tmpdir(), `${name}-${Date.now()}-${Math.random().toString(36).slice(2)}.sock`);
 }
 
-function makeContext(systemRecords: Map<string, Record<string, number | string>> = new Map()): ModuleContext {
+function makeContext(
+    systemRecords: Map<string, Record<string, number | string>> = new Map(),
+    telemetry?: TelemetryCollector,
+): ModuleContext {
     return {
         emitEvent: () => undefined,
         upsertSystemRecord: async (key, fields) => {
@@ -31,6 +35,7 @@ function makeContext(systemRecords: Map<string, Record<string, number | string>>
         },
         now: () => Date.now(),
         getStateSnapshot: () => [],
+        telemetry,
     };
 }
 
@@ -298,6 +303,105 @@ describe('Inference engine runtime', () => {
             expect(recommendations.result.some((item: any) => item.type === 'inference_decision')).toBe(true);
 
             await daemonB.stop();
+        });
+    });
+
+    it('emits inference runtime and quality telemetry', async () => {
+        await withTempDir(async (dir) => {
+            const telemetry = new TelemetryCollector();
+            const records = new Map<string, Record<string, number | string>>();
+            const ctx = makeContext(records, telemetry);
+            const module = new InferenceEngineModule(dir, 'host:default', {
+                flushIntervalMs: 60_000,
+                flushOpsThreshold: 10_000,
+                eagerFlushOnInfer: false,
+                eagerFlushOnOutcome: false,
+            });
+
+            await module.init(ctx);
+            const decision = await module.infer({
+                domain: 'ops.provider_select',
+                subject: 'gimo',
+                context: { scope: 'host:default' },
+                candidates: [
+                    { id: 'haiku', latencyMs: 90, cost: 0.2 },
+                    { id: 'sonnet', latencyMs: 110, cost: 0.25 },
+                ],
+            }, ctx);
+
+            expect(decision?.decisionId).toBeDefined();
+
+            await module.onOutcome({
+                domain: 'ops.provider_select',
+                decisionId: decision!.decisionId,
+                result: 'success',
+                context: {
+                    scope: 'host:default',
+                    subject: 'gimo',
+                    candidateId: decision!.recommended?.id ?? decision!.ranking[0].id,
+                },
+                metrics: {
+                    latencyMs: 100,
+                    costScore: 0.2,
+                },
+                timestamp: Date.now(),
+            }, ctx);
+
+            await module.forceFlush();
+
+            const metricNames = telemetry.snapshot().metrics.map((metric) => metric.name);
+            expect(metricNames).toContain('gics_infer_requests_total');
+            expect(metricNames).toContain('gics_infer_outcomes_total');
+            expect(metricNames).toContain('gics_infer_feedback_score');
+            expect(metricNames).toContain('gics_infer_publish_total');
+            expect(metricNames).toContain('gics_infer_flush_total');
+        });
+    });
+
+    it('supports explicit profile/policy seeds and uses them in storage scoring', async () => {
+        await withTempDir(async (dir) => {
+            const store = new InferenceStateStore(path.join(dir, 'state.json'), 'host:default');
+            const engine = new GICSInferenceEngine(store, 'host:default');
+            await engine.load();
+
+            engine.seedProfile({
+                scope: 'host:default',
+                stats: {
+                    scans: 50,
+                    writes: 4,
+                    reads: 12,
+                },
+                policyHints: {
+                    storageMode: 'read_heavy',
+                },
+            });
+            engine.seedPolicy({
+                domain: 'storage.policy',
+                scope: 'host:default',
+                recommendedCandidateId: 'policy.read_heavy',
+                payload: {
+                    mode: 'read_heavy',
+                    recommendedMaxMemSizeBytes: 16 * 1024 * 1024,
+                    recommendedMaxDirtyCount: 1200,
+                    recommendedWarmRetentionMs: 7 * 24 * 60 * 60 * 1000,
+                },
+                weights: {
+                    bandit: 0.2,
+                    modeMatch: 0.3,
+                    scanPressure: 0.25,
+                    writePressure: 0.1,
+                    safety: 0.15,
+                },
+            });
+
+            const decision = engine.infer({
+                domain: 'storage.policy',
+                context: { scope: 'host:default' },
+            });
+
+            expect(engine.getProfile('host:default').policyHints.storageMode).toBe('read_heavy');
+            expect(engine.getPolicy('storage.policy', 'host:default')?.recommendedCandidateId).toBe('policy.read_heavy');
+            expect(decision.recommended?.id).toBe('policy.read_heavy');
         });
     });
 });

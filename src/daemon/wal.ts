@@ -2,13 +2,28 @@ import * as fs from 'node:fs/promises';
 import { createWriteStream, existsSync, readFileSync, WriteStream } from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
+import type { TelemetrySink } from '../telemetry/collector.js';
+import { normalizeErrorType } from '../telemetry/utils.js';
 
 export enum Operation {
     PUT = 0x01,
-    DELETE = 0x02
+    DELETE = 0x02,
+    BATCH = 0x03,
 }
 
-export type WALPayload = Record<string, number | string>;
+export type WALScalar = number | string | boolean | null;
+export type RecordPayload = Record<string, number | string>;
+export type WALPayload = Record<string, WALScalar | WALBatchEntry[]>;
+
+export interface WALBatchEntry {
+    op: Operation.PUT | Operation.DELETE;
+    key: string;
+    payload: RecordPayload;
+}
+
+interface WALBatchPayload extends WALPayload {
+    entries: WALBatchEntry[];
+}
 
 export type WALType = 'binary' | 'jsonl';
 export type WALFsyncMode = 'strict' | 'best_effort';
@@ -19,11 +34,13 @@ export interface WALProviderOptions {
     checkpointEveryOps?: number;
     checkpointEveryMs?: number;
     maxWalSizeMB?: number;
+    telemetry?: TelemetrySink | null;
 }
 
 export interface WALProvider {
-    append(op: Operation, key: string, payload: WALPayload): Promise<void>;
-    replay(handler: (op: Operation, key: string, payload: WALPayload) => void): Promise<void>;
+    append(op: Operation, key: string, payload: RecordPayload): Promise<void>;
+    appendBatch(entries: WALBatchEntry[]): Promise<void>;
+    replay(handler: (op: Operation, key: string, payload: RecordPayload) => void): Promise<void>;
     truncate(): Promise<void>;
     close(): Promise<void>;
 }
@@ -63,7 +80,47 @@ function stableStringify(value: unknown): string {
     return '{' + keys.map((k) => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') + '}';
 }
 
-type StateEntry = { lsn: bigint; payload: WALPayload };
+function cloneRecordPayload(payload: RecordPayload): RecordPayload {
+    return { ...payload };
+}
+
+function cloneBatchEntry(entry: WALBatchEntry): WALBatchEntry {
+    return {
+        op: entry.op,
+        key: entry.key,
+        payload: cloneRecordPayload(entry.payload),
+    };
+}
+
+function isBatchPayload(payload: WALPayload): payload is WALBatchPayload {
+    return Array.isArray((payload as WALBatchPayload).entries);
+}
+
+function expandWALEntry(op: Operation, key: string, payload: WALPayload): WALBatchEntry[] {
+    if (op === Operation.BATCH) {
+        if (!isBatchPayload(payload)) {
+            throw new Error(`Malformed WAL batch payload for key ${key}`);
+        }
+        return payload.entries.map((entry) => {
+            if (entry.op !== Operation.PUT && entry.op !== Operation.DELETE) {
+                throw new Error(`Malformed WAL batch entry op for key ${entry.key}`);
+            }
+            return cloneBatchEntry(entry);
+        });
+    }
+
+    if (op !== Operation.PUT && op !== Operation.DELETE) {
+        throw new Error(`Unsupported WAL operation: ${op}`);
+    }
+
+    return [{
+        op,
+        key,
+        payload: cloneRecordPayload(payload as Record<string, number | string>),
+    }];
+}
+
+type StateEntry = { lsn: bigint; payload: RecordPayload };
 type StateMap = Map<string, StateEntry>;
 
 interface V2Checkpoint {
@@ -71,13 +128,14 @@ interface V2Checkpoint {
     lsn: string;
     timestamp: number;
     sha256: string;
-    state: Record<string, WALPayload>;
+    state: Record<string, RecordPayload>;
 }
 
 const BIN_MAGIC = Buffer.from('GWV2', 'ascii');
 const BIN_VERSION = 2;
 
 abstract class BaseWALProvider implements WALProvider {
+    protected static readonly BATCH_KEY = '__wal_batch__';
     protected readonly filePath: string;
     protected readonly checkpointPath: string;
     protected writeStream: WriteStream | null = null;
@@ -86,6 +144,7 @@ abstract class BaseWALProvider implements WALProvider {
     protected readonly checkpointEveryOps: number;
     protected readonly checkpointEveryMs: number;
     protected readonly maxWalSizeBytes: number;
+    protected readonly telemetry: TelemetrySink | null;
 
     protected lastLsn: bigint = 0n;
     protected opsSinceCheckpoint = 0;
@@ -103,6 +162,7 @@ abstract class BaseWALProvider implements WALProvider {
         this.checkpointEveryOps = Math.max(1, options.checkpointEveryOps ?? 500);
         this.checkpointEveryMs = Math.max(1000, options.checkpointEveryMs ?? 30000);
         this.maxWalSizeBytes = Math.max(0.001, options.maxWalSizeMB ?? 50) * 1024 * 1024;
+        this.telemetry = options.telemetry ?? null;
     }
 
     protected async ensureInitialized(): Promise<void> {
@@ -122,7 +182,7 @@ abstract class BaseWALProvider implements WALProvider {
     protected abstract ensureWalReady(): Promise<void>;
     protected abstract loadStateFromWal(): Promise<void>;
     protected abstract appendEntry(lsn: bigint, op: Operation, key: string, payload: WALPayload, timestamp: number): Promise<void>;
-    protected abstract replayTail(afterLsn: bigint, handler: (op: Operation, key: string, payload: WALPayload, lsn: bigint) => void): Promise<void>;
+    protected abstract replayTail(afterLsn: bigint, handler: (op: Operation, key: string, payload: RecordPayload, lsn: bigint) => void): Promise<void>;
     protected abstract compactToState(): Promise<void>;
 
     protected async ensureOpen(): Promise<void> {
@@ -165,10 +225,12 @@ abstract class BaseWALProvider implements WALProvider {
     }
 
     protected applyState(op: Operation, key: string, payload: WALPayload, lsn: bigint): void {
-        if (op === Operation.PUT) {
-            this.state.set(key, { lsn, payload: { ...payload } });
-        } else if (op === Operation.DELETE) {
-            this.state.delete(key);
+        for (const entry of expandWALEntry(op, key, payload)) {
+            if (entry.op === Operation.PUT) {
+                this.state.set(entry.key, { lsn, payload: cloneRecordPayload(entry.payload) });
+            } else if (entry.op === Operation.DELETE) {
+                this.state.delete(entry.key);
+            }
         }
     }
 
@@ -180,7 +242,7 @@ abstract class BaseWALProvider implements WALProvider {
 
         if (!shouldCheckpoint) return;
 
-        const orderedState: Record<string, WALPayload> = {};
+        const orderedState: Record<string, RecordPayload> = {};
         for (const key of Array.from(this.state.keys()).sort((a, b) => a.localeCompare(b))) {
             orderedState[key] = { ...this.state.get(key)!.payload };
         }
@@ -193,7 +255,23 @@ abstract class BaseWALProvider implements WALProvider {
             sha256: sha256Hex(stateRaw),
             state: orderedState
         };
-        await fs.appendFile(this.checkpointPath, `${JSON.stringify(checkpoint)}\n`, 'utf8');
+        try {
+            await fs.appendFile(this.checkpointPath, `${JSON.stringify(checkpoint)}\n`, 'utf8');
+            this.telemetry?.incrementCounter(
+                'gics_wal_checkpoint_total',
+                { result: 'ok' },
+                1,
+                'Durable WAL checkpoints written to checkpoint storage.',
+            );
+        } catch (error) {
+            this.telemetry?.incrementCounter(
+                'gics_wal_checkpoint_total',
+                { result: 'error', error_type: normalizeErrorType(error) },
+                1,
+                'Durable WAL checkpoints written to checkpoint storage.',
+            );
+            throw error;
+        }
 
         this.opsSinceCheckpoint = 0;
         this.lastCheckpointAt = now;
@@ -204,7 +282,7 @@ abstract class BaseWALProvider implements WALProvider {
         }
     }
 
-    protected async loadCheckpoint(): Promise<{ lsn: bigint; state: Record<string, WALPayload> } | null> {
+    protected async loadCheckpoint(): Promise<{ lsn: bigint; state: Record<string, RecordPayload> } | null> {
         if (!existsSync(this.checkpointPath)) return null;
         const raw = await fs.readFile(this.checkpointPath, 'utf8');
         const lines = raw.split('\n').map((x) => x.trim()).filter(Boolean);
@@ -225,24 +303,60 @@ abstract class BaseWALProvider implements WALProvider {
         return null;
     }
 
-    async append(op: Operation, key: string, payload: WALPayload): Promise<void> {
+    async append(op: Operation, key: string, payload: RecordPayload): Promise<void> {
+        if (op !== Operation.PUT && op !== Operation.DELETE) {
+            throw new Error(`append() only supports PUT/DELETE, received op=${op}`);
+        }
+        await this.appendBatch([{
+            op,
+            key,
+            payload: cloneRecordPayload(payload),
+        }]);
+    }
+
+    async appendBatch(entries: WALBatchEntry[]): Promise<void> {
+        if (!Array.isArray(entries) || entries.length === 0) {
+            return;
+        }
+
+        const normalized = entries.map((entry) => {
+            if (entry.op !== Operation.PUT && entry.op !== Operation.DELETE) {
+                throw new Error(`appendBatch() only supports PUT/DELETE entries, received op=${entry.op}`);
+            }
+            return cloneBatchEntry(entry);
+        });
+
         await this.enqueueMutation(async () => {
             await this.ensureInitialized();
             await this.ensureOpen();
 
             const nextLsn = this.lastLsn + 1n;
             const ts = Date.now();
-            await this.appendEntry(nextLsn, op, key, payload, ts);
+            if (normalized.length === 1) {
+                const [entry] = normalized;
+                await this.appendEntry(nextLsn, entry.op, entry.key, entry.payload, ts);
+            } else {
+                await this.appendEntry(nextLsn, Operation.BATCH, BaseWALProvider.BATCH_KEY, {
+                    entries: normalized.map((entry) => cloneBatchEntry(entry)),
+                }, ts);
+            }
             await this.fsyncFile();
 
             this.lastLsn = nextLsn;
-            this.opsSinceCheckpoint++;
-            this.applyState(op, key, payload, nextLsn);
+            this.opsSinceCheckpoint += normalized.length;
+            this.applyState(
+                normalized.length === 1 ? normalized[0].op : Operation.BATCH,
+                normalized.length === 1 ? normalized[0].key : BaseWALProvider.BATCH_KEY,
+                normalized.length === 1
+                    ? normalized[0].payload
+                    : { entries: normalized.map((entry) => cloneBatchEntry(entry)) },
+                nextLsn,
+            );
             await this.maybeCheckpointAndCompact();
         });
     }
 
-    async replay(handler: (op: Operation, key: string, payload: WALPayload) => void): Promise<void> {
+    async replay(handler: (op: Operation, key: string, payload: RecordPayload) => void): Promise<void> {
         await this.ensureInitialized();
 
         const checkpoint = await this.loadCheckpoint();
@@ -442,14 +556,16 @@ export class BinaryWALProvider extends BaseWALProvider {
         });
     }
 
-    protected async replayTail(afterLsn: bigint, handler: (op: Operation, key: string, payload: WALPayload, lsn: bigint) => void): Promise<void> {
+    protected async replayTail(afterLsn: bigint, handler: (op: Operation, key: string, payload: RecordPayload, lsn: bigint) => void): Promise<void> {
         if (!existsSync(this.filePath)) return;
         const raw = await fs.readFile(this.filePath);
         if (raw.length === 0) return;
         const entries = parseBinaryV2Entries(raw);
         for (const e of entries) {
             if (e.lsn <= afterLsn) continue;
-            handler(e.op, e.key, e.payload, e.lsn);
+            for (const entry of expandWALEntry(e.op, e.key, e.payload)) {
+                handler(entry.op, entry.key, entry.payload, e.lsn);
+            }
         }
     }
 
@@ -581,11 +697,13 @@ export class JsonlWALProvider extends BaseWALProvider {
         });
     }
 
-    protected async replayTail(afterLsn: bigint, handler: (op: Operation, key: string, payload: WALPayload, lsn: bigint) => void): Promise<void> {
+    protected async replayTail(afterLsn: bigint, handler: (op: Operation, key: string, payload: RecordPayload, lsn: bigint) => void): Promise<void> {
         const entries = this.parseAllV2();
         for (const e of entries) {
             if (e.lsn <= afterLsn) continue;
-            handler(e.op, e.key, e.payload, e.lsn);
+            for (const entry of expandWALEntry(e.op, e.key, e.payload)) {
+                handler(entry.op, entry.key, entry.payload, e.lsn);
+            }
         }
     }
 

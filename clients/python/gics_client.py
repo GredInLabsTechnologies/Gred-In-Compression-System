@@ -4,6 +4,7 @@ import os
 import time
 import asyncio
 import threading
+import subprocess
 from typing import Callable, Optional
 
 class GICSClient:
@@ -196,6 +197,17 @@ class GICSClient:
         resp = self._call("delete", {"key": key})
         return self._unwrap_result(resp).get('ok', False)
 
+    def put_many(self, records, atomic=True, idempotency_key=None, verify=False):
+        params = {
+            "records": records,
+            "atomic": bool(atomic),
+            "verify": bool(verify),
+        }
+        if idempotency_key is not None:
+            params["idempotency_key"] = idempotency_key
+        resp = self._call("putMany", params)
+        return self._unwrap_result(resp)
+
     def scan(self, prefix="", tiers="all", include_system=False, limit=None, cursor=None, mode="current"):
         params = {"prefix": prefix, "tiers": tiers, "includeSystem": include_system, "mode": mode}
         if limit is not None:
@@ -204,6 +216,33 @@ class GICSClient:
             params["cursor"] = cursor
         resp = self._call("scan", params)
         return self._unwrap_result(resp).get('items', [])
+
+    def count_prefix(self, prefix="", tiers="all", include_system=False, mode="current"):
+        resp = self._call("countPrefix", {
+            "prefix": prefix,
+            "tiers": tiers,
+            "includeSystem": include_system,
+            "mode": mode,
+        })
+        return self._unwrap_result(resp)
+
+    def latest_by_prefix(self, prefix="", tiers="all", include_system=False, mode="current"):
+        resp = self._call("latestByPrefix", {
+            "prefix": prefix,
+            "tiers": tiers,
+            "includeSystem": include_system,
+            "mode": mode,
+        })
+        return self._unwrap_result(resp)
+
+    def scan_summary(self, prefix="", tiers="all", include_system=False, mode="current"):
+        resp = self._call("scanSummary", {
+            "prefix": prefix,
+            "tiers": tiers,
+            "includeSystem": include_system,
+            "mode": mode,
+        })
+        return self._unwrap_result(resp)
 
     def flush(self):
         resp = self._call("flush")
@@ -354,6 +393,49 @@ class GICSClient:
     def ping(self):
         return self._unwrap_result(self._call("ping"))
 
+    def ping_verbose(self):
+        return self._unwrap_result(self._call("pingVerbose"))
+
+    def seed_profile(self, scope, stats=None, preferences=None, policy_hints=None, host_fingerprint=None, version=None, updated_at=None):
+        params = {"scope": scope}
+        if stats is not None:
+            params["stats"] = stats
+        if preferences is not None:
+            params["preferences"] = preferences
+        if policy_hints is not None:
+            params["policyHints"] = policy_hints
+        if host_fingerprint is not None:
+            params["hostFingerprint"] = host_fingerprint
+        if version is not None:
+            params["version"] = version
+        if updated_at is not None:
+            params["updatedAt"] = updated_at
+        return self._unwrap_result(self._call("seedProfile", params))
+
+    def seed_policy(self, domain, scope, subject=None, policy_version=None, profile_version=None, basis=None, weights=None, thresholds=None, recommended_candidate_id=None, payload=None, evidence_keys=None, generated_at=None):
+        params = {"domain": domain, "scope": scope}
+        if subject is not None:
+            params["subject"] = subject
+        if policy_version is not None:
+            params["policyVersion"] = policy_version
+        if profile_version is not None:
+            params["profileVersion"] = profile_version
+        if basis is not None:
+            params["basis"] = basis
+        if weights is not None:
+            params["weights"] = weights
+        if thresholds is not None:
+            params["thresholds"] = thresholds
+        if recommended_candidate_id is not None:
+            params["recommendedCandidateId"] = recommended_candidate_id
+        if payload is not None:
+            params["payload"] = payload
+        if evidence_keys is not None:
+            params["evidenceKeys"] = evidence_keys
+        if generated_at is not None:
+            params["generatedAt"] = generated_at
+        return self._unwrap_result(self._call("seedPolicy", params))
+
     async def aput(self, key: str, fields: dict) -> bool:
         resp = await self._acall("put", {"key": key, "fields": fields})
         return self._unwrap_result(resp).get('ok', False)
@@ -366,9 +448,47 @@ class GICSClient:
         resp = await self._acall("delete", {"key": key})
         return self._unwrap_result(resp).get('ok', False)
 
+    async def aput_many(self, records, atomic=True, idempotency_key=None, verify=False):
+        params = {
+            "records": records,
+            "atomic": bool(atomic),
+            "verify": bool(verify),
+        }
+        if idempotency_key is not None:
+            params["idempotency_key"] = idempotency_key
+        resp = await self._acall("putMany", params)
+        return self._unwrap_result(resp)
+
     async def ascan(self, prefix: str = ""):
         resp = await self._acall("scan", {"prefix": prefix})
         return self._unwrap_result(resp).get('items', [])
+
+    async def acount_prefix(self, prefix="", tiers="all", include_system=False, mode="current"):
+        resp = await self._acall("countPrefix", {
+            "prefix": prefix,
+            "tiers": tiers,
+            "includeSystem": include_system,
+            "mode": mode,
+        })
+        return self._unwrap_result(resp)
+
+    async def alatest_by_prefix(self, prefix="", tiers="all", include_system=False, mode="current"):
+        resp = await self._acall("latestByPrefix", {
+            "prefix": prefix,
+            "tiers": tiers,
+            "includeSystem": include_system,
+            "mode": mode,
+        })
+        return self._unwrap_result(resp)
+
+    async def ascan_summary(self, prefix="", tiers="all", include_system=False, mode="current"):
+        resp = await self._acall("scanSummary", {
+            "prefix": prefix,
+            "tiers": tiers,
+            "includeSystem": include_system,
+            "mode": mode,
+        })
+        return self._unwrap_result(resp)
 
     async def aflush(self):
         resp = await self._acall("flush")
@@ -512,6 +632,121 @@ class GICSClient:
     async def aping(self):
         resp = await self._acall("ping")
         return self._unwrap_result(resp)
+
+    async def aping_verbose(self):
+        resp = await self._acall("pingVerbose")
+        return self._unwrap_result(resp)
+
+    async def aseed_profile(self, scope, stats=None, preferences=None, policy_hints=None, host_fingerprint=None, version=None, updated_at=None):
+        params = {"scope": scope}
+        if stats is not None:
+            params["stats"] = stats
+        if preferences is not None:
+            params["preferences"] = preferences
+        if policy_hints is not None:
+            params["policyHints"] = policy_hints
+        if host_fingerprint is not None:
+            params["hostFingerprint"] = host_fingerprint
+        if version is not None:
+            params["version"] = version
+        if updated_at is not None:
+            params["updatedAt"] = updated_at
+        resp = await self._acall("seedProfile", params)
+        return self._unwrap_result(resp)
+
+    async def aseed_policy(self, domain, scope, subject=None, policy_version=None, profile_version=None, basis=None, weights=None, thresholds=None, recommended_candidate_id=None, payload=None, evidence_keys=None, generated_at=None):
+        params = {"domain": domain, "scope": scope}
+        if subject is not None:
+            params["subject"] = subject
+        if policy_version is not None:
+            params["policyVersion"] = policy_version
+        if profile_version is not None:
+            params["profileVersion"] = profile_version
+        if basis is not None:
+            params["basis"] = basis
+        if weights is not None:
+            params["weights"] = weights
+        if thresholds is not None:
+            params["thresholds"] = thresholds
+        if recommended_candidate_id is not None:
+            params["recommendedCandidateId"] = recommended_candidate_id
+        if payload is not None:
+            params["payload"] = payload
+        if evidence_keys is not None:
+            params["evidenceKeys"] = evidence_keys
+        if generated_at is not None:
+            params["generatedAt"] = generated_at
+        resp = await self._acall("seedPolicy", params)
+        return self._unwrap_result(resp)
+
+
+class GICSDaemonSupervisor:
+    def __init__(self, node_executable='node', cli_path=None, cwd=None, address=None, token_path=None, data_path=None):
+        self.node_executable = node_executable
+        self.cwd = cwd or self._default_repo_root()
+        self.cli_path = cli_path or self._default_cli_path()
+        self.address = address
+        self.token_path = token_path
+        self.data_path = data_path
+        self.process = None
+
+    def _default_repo_root(self):
+        return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    def _default_cli_path(self):
+        root = self._default_repo_root()
+        candidate = os.path.join(root, 'dist', 'src', 'cli', 'index.js')
+        if os.path.exists(candidate):
+            return candidate
+        raise FileNotFoundError(f"Built CLI not found at {candidate}. Run 'npm run build' first.")
+
+    def start(self, wait=True, timeout=10.0, extra_args=None):
+        args = [self.node_executable, self.cli_path, 'daemon', 'start']
+        if self.data_path:
+            args.extend(['--data-path', self.data_path])
+        if self.address:
+            args.extend(['--socket-path', self.address])
+        if self.token_path:
+            args.extend(['--token-path', self.token_path])
+        if extra_args:
+            args.extend(extra_args)
+        self.process = subprocess.Popen(args, cwd=self.cwd)
+        if wait:
+            self.wait_until_ready(timeout=timeout)
+        return self.process
+
+    def wait_until_ready(self, timeout=10.0):
+        deadline = time.time() + timeout
+        client = GICSClient(address=self.address, token=None if self.token_path else None)
+        while time.time() < deadline:
+            try:
+                client.address = self.address or client.address
+                if self.token_path and os.path.exists(self.token_path):
+                    with open(self.token_path, 'r') as f:
+                        client._token = f.read().strip()
+                client.ping()
+                return True
+            except Exception:
+                time.sleep(0.1)
+        raise TimeoutError(f"GICS daemon did not become ready within {timeout} seconds")
+
+    def stop(self):
+        if self.process and self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=5)
+            return 0
+        return 0
+
+    def status(self):
+        client = GICSClient(address=self.address)
+        if self.token_path and os.path.exists(self.token_path):
+            with open(self.token_path, 'r') as f:
+                client._token = f.read().strip()
+        return client.ping_verbose()
 
 # Example Usage:
 # client = GICSClient()

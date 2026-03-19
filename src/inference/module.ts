@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { GICSInferenceEngine } from './engine.js';
-import { InferenceStateStore } from './state-store.js';
+import { InferenceStateStore, type SeedPolicyInput, type SeedProfileInput } from './state-store.js';
 import type {
     DaemonModule,
     InferenceDecision,
@@ -15,6 +15,7 @@ import type {
     ModuleWriteEvent,
     RecommendationQuery
 } from '../daemon/module-registry.js';
+import { durationSeconds, normalizeErrorType, normalizeOutcomeResult } from '../telemetry/utils.js';
 
 export interface InferenceEngineModuleOptions {
     flushIntervalMs?: number;
@@ -78,10 +79,12 @@ export class InferenceEngineModule implements DaemonModule {
     async init(ctx: ModuleContext): Promise<void> {
         this.ctx = ctx;
         await this.engine.load();
+        this.syncPendingTelemetry();
     }
 
     async restore(ctx: ModuleContext): Promise<void> {
         this.ctx = ctx;
+        this.syncPendingTelemetry();
     }
 
     async stop(): Promise<void> {
@@ -148,6 +151,14 @@ export class InferenceEngineModule implements DaemonModule {
     async onOutcome(event: ModuleOutcomeEvent, ctx: ModuleContext): Promise<void> {
         if (!event.domain) return;
         this.ctx = ctx;
+        const telemetry = this.telemetry();
+        const normalizedResult = normalizeOutcomeResult(event.result);
+        telemetry?.incrementCounter(
+            'gics_infer_outcomes_total',
+            { domain: event.domain, result: normalizedResult },
+            1,
+            'Inference outcome events observed by the inference engine.',
+        );
         const artifacts = this.engine.recordOutcome(
             event.domain,
             event.decisionId,
@@ -155,11 +166,62 @@ export class InferenceEngineModule implements DaemonModule {
             event.metrics,
             event.result
         );
-        if (!artifacts) return;
+        if (!artifacts) {
+            telemetry?.incrementCounter(
+                'gics_infer_outcome_linkage_total',
+                { domain: event.domain, linked: 'false' },
+                1,
+                'Whether inference outcomes could be linked back to a known decision/candidate.',
+            );
+            telemetry?.recordEvent('inference_outcome_orphaned', {
+                domain: event.domain,
+                decisionId: event.decisionId ?? null,
+            });
+            return;
+        }
+
+        telemetry?.incrementCounter(
+            'gics_infer_outcome_linkage_total',
+            { domain: event.domain, linked: artifacts.linkedDecision ? 'true' : 'false' },
+            1,
+            'Whether inference outcomes could be linked back to a known decision/candidate.',
+        );
+        telemetry?.observeHistogram(
+            'gics_infer_feedback_score',
+            artifacts.feedbackScore,
+            { domain: event.domain },
+            {
+                unit: 'score',
+                description: 'Feedback score assigned to inference outcomes.',
+            },
+        );
+        if (artifacts.decisionLagMs != null) {
+            telemetry?.observeHistogram(
+                'gics_infer_decision_to_outcome_seconds',
+                artifacts.decisionLagMs / 1000,
+                { domain: event.domain },
+                {
+                    unit: 'seconds',
+                    description: 'Elapsed time between an inference decision and its eventual outcome.',
+                },
+            );
+        } else {
+            telemetry?.recordEvent('inference_outcome_orphaned', {
+                domain: event.domain,
+                decisionId: event.decisionId ?? null,
+                feedbackId: artifacts.feedback.feedbackId,
+            });
+        }
 
         this.markProfileDirty(artifacts.profile.scope);
         if (artifacts.policy) {
             this.markPolicyDirty(artifacts.policy.key);
+            telemetry?.incrementCounter(
+                'gics_infer_policy_regenerations_total',
+                { domain: event.domain },
+                1,
+                'Policy regenerations triggered by inference feedback and outcomes.',
+            );
         }
         this.pendingFeedbackIds.add(artifacts.feedback.feedbackId);
         this.lastOutcomeAt = artifacts.feedback.recordedAt;
@@ -172,21 +234,74 @@ export class InferenceEngineModule implements DaemonModule {
 
     async infer(request: InferenceRequest, ctx: ModuleContext): Promise<InferenceDecision | null> {
         this.ctx = ctx;
-        const artifacts = this.engine.inferDetailed(request);
-        this.pendingDecisionIds.add(artifacts.decisionRecord.decisionId);
-        this.markProfileDirty(artifacts.profile.scope);
-        this.markPolicyDirty(artifacts.policy.key);
-        this.lastDecisionAt = artifacts.decision.createdAt;
-        this.noteMutation();
+        const telemetry = this.telemetry();
+        const startedAt = Date.now();
+        try {
+            const artifacts = this.engine.inferDetailed(request);
+            this.pendingDecisionIds.add(artifacts.decisionRecord.decisionId);
+            this.markProfileDirty(artifacts.profile.scope);
+            this.markPolicyDirty(artifacts.policy.key);
+            this.lastDecisionAt = artifacts.decision.createdAt;
+            this.noteMutation();
 
-        await this.publishDecision(ctx, artifacts.decisionRecord.decisionId);
-        await this.publishProfile(ctx, artifacts.profile.scope);
-        await this.publishPolicy(ctx, artifacts.policy.key);
+            telemetry?.observeHistogram(
+                'gics_infer_candidates',
+                artifacts.decision.ranking.length,
+                { domain: request.domain },
+                {
+                    unit: 'count',
+                    description: 'Number of candidates scored per inference request.',
+                },
+            );
+            telemetry?.incrementCounter(
+                'gics_infer_policy_regenerations_total',
+                { domain: request.domain },
+                1,
+                'Policy regenerations triggered by inference feedback and outcomes.',
+            );
 
-        if (this.options.eagerFlushOnInfer) {
-            await this.flushNow('infer');
+            await this.publishDecision(ctx, artifacts.decisionRecord.decisionId);
+            await this.publishProfile(ctx, artifacts.profile.scope);
+            await this.publishPolicy(ctx, artifacts.policy.key);
+
+            if (this.options.eagerFlushOnInfer) {
+                await this.flushNow('infer');
+            }
+
+            telemetry?.incrementCounter(
+                'gics_infer_requests_total',
+                { domain: request.domain, result: 'ok' },
+                1,
+                'Inference requests processed by the inference engine.',
+            );
+            telemetry?.observeHistogram(
+                'gics_infer_duration_seconds',
+                durationSeconds(startedAt),
+                { domain: request.domain },
+                {
+                    unit: 'seconds',
+                    description: 'Latency of inference requests handled by the inference engine.',
+                },
+            );
+            return artifacts.decision;
+        } catch (error) {
+            telemetry?.incrementCounter(
+                'gics_infer_requests_total',
+                { domain: request.domain, result: 'error', error_type: normalizeErrorType(error) },
+                1,
+                'Inference requests processed by the inference engine.',
+            );
+            telemetry?.observeHistogram(
+                'gics_infer_duration_seconds',
+                durationSeconds(startedAt),
+                { domain: request.domain },
+                {
+                    unit: 'seconds',
+                    description: 'Latency of inference requests handled by the inference engine.',
+                },
+            );
+            throw error;
         }
-        return artifacts.decision;
     }
 
     async getProfile(scope: string, ctx: ModuleContext): Promise<Record<string, unknown> | null> {
@@ -201,6 +316,26 @@ export class InferenceEngineModule implements DaemonModule {
 
     async getRecommendations(query: RecommendationQuery): Promise<Array<Record<string, unknown>>> {
         return this.engine.getRecommendations(query);
+    }
+
+    async seedProfile(seed: SeedProfileInput, ctx: ModuleContext): Promise<Record<string, unknown>> {
+        this.ctx = ctx;
+        const profile = this.engine.seedProfile(seed);
+        this.markProfileDirty(profile.scope);
+        this.noteMutation();
+        await this.publishProfile(ctx, profile.scope);
+        await this.flushNow('seedProfile');
+        return structuredClone(profile) as unknown as Record<string, unknown>;
+    }
+
+    async seedPolicy(seed: SeedPolicyInput, ctx: ModuleContext): Promise<Record<string, unknown>> {
+        this.ctx = ctx;
+        const policy = this.engine.seedPolicy(seed);
+        this.markPolicyDirty(policy.key);
+        this.noteMutation();
+        await this.publishPolicy(ctx, policy.key);
+        await this.flushNow('seedPolicy');
+        return structuredClone(policy) as unknown as Record<string, unknown>;
     }
 
     async health(): Promise<Record<string, unknown>> {
@@ -218,8 +353,8 @@ export class InferenceEngineModule implements DaemonModule {
             lastError: this.lastError,
             flushIntervalMs: this.options.flushIntervalMs,
             flushOpsThreshold: this.options.flushOpsThreshold,
-            pendingProfiles: Array.from(this.profileVersions.entries()).filter(([scope, version]) => this.publishedProfileVersions.get(scope) !== version).length,
-            pendingPolicies: Array.from(this.policyVersions.entries()).filter(([key, version]) => this.publishedPolicyVersions.get(key) !== version).length,
+            pendingProfiles: this.pendingProfilesCount(),
+            pendingPolicies: this.pendingPoliciesCount(),
             pendingDecisions: this.pendingDecisionIds.size,
             pendingFeedback: this.pendingFeedbackIds.size,
         };
@@ -233,9 +368,51 @@ export class InferenceEngineModule implements DaemonModule {
         await this.flushNow('manual');
     }
 
+    private telemetry() {
+        return this.ctx?.telemetry ?? null;
+    }
+
+    private pendingProfilesCount(): number {
+        return Array.from(this.profileVersions.entries())
+            .filter(([scope, version]) => this.publishedProfileVersions.get(scope) !== version)
+            .length;
+    }
+
+    private pendingPoliciesCount(): number {
+        return Array.from(this.policyVersions.entries())
+            .filter(([key, version]) => this.publishedPolicyVersions.get(key) !== version)
+            .length;
+    }
+
+    private syncPendingTelemetry(): void {
+        const telemetry = this.telemetry();
+        if (!telemetry) return;
+        telemetry.setGauge('gics_infer_pending_ops', this.pendingOps, {}, {
+            unit: 'count',
+            description: 'Pending inference mutations waiting to be durably flushed.',
+        });
+        telemetry.setGauge('gics_infer_pending_profiles', this.pendingProfilesCount(), {}, {
+            unit: 'count',
+            description: 'Inference profiles changed but not yet published to system storage.',
+        });
+        telemetry.setGauge('gics_infer_pending_policies', this.pendingPoliciesCount(), {}, {
+            unit: 'count',
+            description: 'Inference policies changed but not yet published to system storage.',
+        });
+        telemetry.setGauge('gics_infer_pending_decisions', this.pendingDecisionIds.size, {}, {
+            unit: 'count',
+            description: 'Inference decisions queued for publication.',
+        });
+        telemetry.setGauge('gics_infer_pending_feedback', this.pendingFeedbackIds.size, {}, {
+            unit: 'count',
+            description: 'Inference feedback records queued for publication.',
+        });
+    }
+
     private noteMutation(): void {
         this.dirtyVersion += 1;
         this.pendingOps += 1;
+        this.syncPendingTelemetry();
         if (this.pendingOps >= this.options.flushOpsThreshold) {
             void this.flushNow('threshold').catch(() => undefined);
             return;
@@ -266,6 +443,7 @@ export class InferenceEngineModule implements DaemonModule {
     }
 
     private async flushNow(reason: string): Promise<void> {
+        const startedAt = Date.now();
         const run = async () => {
             this.clearScheduledFlush();
             while (this.hasDirtyState()) {
@@ -274,13 +452,30 @@ export class InferenceEngineModule implements DaemonModule {
                 if (this.ctx) {
                     await this.publishPendingArtifacts(this.ctx);
                 }
-                await this.engine.save();
+                try {
+                    await this.engine.save();
+                    this.telemetry()?.incrementCounter(
+                        'gics_infer_save_total',
+                        { result: 'ok' },
+                        1,
+                        'Durable inference state saves performed by the inference engine.',
+                    );
+                } catch (error) {
+                    this.telemetry()?.incrementCounter(
+                        'gics_infer_save_total',
+                        { result: 'error', error_type: normalizeErrorType(error) },
+                        1,
+                        'Durable inference state saves performed by the inference engine.',
+                    );
+                    throw error;
+                }
                 this.flushedVersion = targetVersion;
                 this.pendingOps = this.dirtyVersion === this.flushedVersion ? 0 : this.pendingOps;
                 this.flushCount += 1;
                 this.lastFlushAt = Date.now();
                 this.lastFlushDurationMs = this.lastFlushAt - startedAt;
                 this.lastError = null;
+                this.syncPendingTelemetry();
                 if (!this.hasDirtyState()) break;
             }
         };
@@ -291,8 +486,44 @@ export class InferenceEngineModule implements DaemonModule {
 
         try {
             await this.flushChain;
+            this.telemetry()?.incrementCounter(
+                'gics_infer_flush_total',
+                { reason, result: 'ok' },
+                1,
+                'Inference flush attempts executed by the inference engine module.',
+            );
+            this.telemetry()?.observeHistogram(
+                'gics_infer_flush_duration_seconds',
+                durationSeconds(startedAt),
+                { reason },
+                {
+                    unit: 'seconds',
+                    description: 'Latency of inference flush cycles.',
+                },
+            );
         } catch (err: any) {
             this.lastError = `${reason}: ${err.message}`;
+            this.syncPendingTelemetry();
+            this.telemetry()?.incrementCounter(
+                'gics_infer_flush_total',
+                { reason, result: 'error', error_type: normalizeErrorType(err) },
+                1,
+                'Inference flush attempts executed by the inference engine module.',
+            );
+            this.telemetry()?.observeHistogram(
+                'gics_infer_flush_duration_seconds',
+                durationSeconds(startedAt),
+                { reason },
+                {
+                    unit: 'seconds',
+                    description: 'Latency of inference flush cycles.',
+                },
+            );
+            this.telemetry()?.recordEvent('flush_failed', {
+                reason,
+                errorType: normalizeErrorType(err),
+                message: err.message,
+            });
             throw err;
         }
     }
@@ -338,76 +569,170 @@ export class InferenceEngineModule implements DaemonModule {
 
     private async publishProfile(ctx: ModuleContext, scope: string): Promise<void> {
         const profile = this.engine.getProfile(scope);
-        await ctx.upsertSystemRecord(`_infer|profile|${scope}`, {
-            scope,
-            version: profile.version,
-            updated_at_ms: profile.updatedAt,
-            profile_json: JSON.stringify(profile),
-        });
-        const version = this.profileVersions.get(scope);
-        if (version !== undefined) {
-            this.publishedProfileVersions.set(scope, version);
+        try {
+            await ctx.upsertSystemRecord(`_infer|profile|${scope}`, {
+                scope,
+                version: profile.version,
+                updated_at_ms: profile.updatedAt,
+                profile_json: JSON.stringify(profile),
+            });
+            this.telemetry()?.incrementCounter(
+                'gics_infer_publish_total',
+                { artifact: 'profile', result: 'ok' },
+                1,
+                'Inference artifacts published into daemon system storage.',
+            );
+            this.telemetry()?.incrementCounter(
+                'gics_infer_profile_updates_total',
+                {},
+                1,
+                'Published profile updates performed by the inference engine.',
+            );
+            const version = this.profileVersions.get(scope);
+            if (version !== undefined) {
+                this.publishedProfileVersions.set(scope, version);
+            }
+            this.syncPendingTelemetry();
+        } catch (error) {
+            this.telemetry()?.incrementCounter(
+                'gics_infer_publish_total',
+                { artifact: 'profile', result: 'error', error_type: normalizeErrorType(error) },
+                1,
+                'Inference artifacts published into daemon system storage.',
+            );
+            this.telemetry()?.recordEvent('inference_publish_failed', {
+                artifact: 'profile',
+                scope,
+                errorType: normalizeErrorType(error),
+            });
+            throw error;
         }
     }
 
     private async publishPolicy(ctx: ModuleContext, policyKey: string): Promise<void> {
         const policy = this.engine.getPolicyByKey(policyKey);
         if (!policy) return;
-        await ctx.upsertSystemRecord(policy.systemKey, {
-            domain: policy.domain,
-            scope: policy.scope,
-            subject: policy.subject ?? '',
-            policy_version: policy.policyVersion,
-            profile_version: policy.profileVersion,
-            generated_at_ms: policy.generatedAt,
-            recommended_candidate_id: policy.recommendedCandidateId ?? '',
-            basis_json: JSON.stringify(policy.basis),
-            weights_json: JSON.stringify(policy.weights),
-            thresholds_json: JSON.stringify(policy.thresholds),
-            payload_json: JSON.stringify(policy.payload),
-            evidence_json: JSON.stringify(policy.evidenceKeys),
-        });
-        const version = this.policyVersions.get(policyKey);
-        if (version !== undefined) {
-            this.publishedPolicyVersions.set(policyKey, version);
+        try {
+            await ctx.upsertSystemRecord(policy.systemKey, {
+                domain: policy.domain,
+                scope: policy.scope,
+                subject: policy.subject ?? '',
+                policy_version: policy.policyVersion,
+                profile_version: policy.profileVersion,
+                generated_at_ms: policy.generatedAt,
+                recommended_candidate_id: policy.recommendedCandidateId ?? '',
+                basis_json: JSON.stringify(policy.basis),
+                weights_json: JSON.stringify(policy.weights),
+                thresholds_json: JSON.stringify(policy.thresholds),
+                payload_json: JSON.stringify(policy.payload),
+                evidence_json: JSON.stringify(policy.evidenceKeys),
+            });
+            this.telemetry()?.incrementCounter(
+                'gics_infer_publish_total',
+                { artifact: 'policy', result: 'ok' },
+                1,
+                'Inference artifacts published into daemon system storage.',
+            );
+            const version = this.policyVersions.get(policyKey);
+            if (version !== undefined) {
+                this.publishedPolicyVersions.set(policyKey, version);
+            }
+            this.syncPendingTelemetry();
+        } catch (error) {
+            this.telemetry()?.incrementCounter(
+                'gics_infer_publish_total',
+                { artifact: 'policy', result: 'error', error_type: normalizeErrorType(error) },
+                1,
+                'Inference artifacts published into daemon system storage.',
+            );
+            this.telemetry()?.recordEvent('inference_publish_failed', {
+                artifact: 'policy',
+                policyKey,
+                errorType: normalizeErrorType(error),
+            });
+            throw error;
         }
     }
 
     private async publishDecision(ctx: ModuleContext, decisionId: string): Promise<void> {
         const decision = this.engine.getDecision(decisionId);
         if (!decision) return;
-        await ctx.upsertSystemRecord(decision.systemKey, {
-            domain: decision.domain,
-            scope: decision.scope,
-            subject: decision.subject ?? '',
-            decision_id: decision.decisionId,
-            recommended_id: decision.recommendedId ?? '',
-            policy_key: decision.policyKey,
-            policy_version: decision.policyVersion,
-            profile_version: decision.profileVersion,
-            created_at_ms: decision.createdAt,
-            ranking_json: JSON.stringify(decision.ranking),
-            evidence_json: JSON.stringify(decision.evidenceKeys),
-        });
-        this.pendingDecisionIds.delete(decisionId);
+        try {
+            await ctx.upsertSystemRecord(decision.systemKey, {
+                domain: decision.domain,
+                scope: decision.scope,
+                subject: decision.subject ?? '',
+                decision_id: decision.decisionId,
+                recommended_id: decision.recommendedId ?? '',
+                policy_key: decision.policyKey,
+                policy_version: decision.policyVersion,
+                profile_version: decision.profileVersion,
+                created_at_ms: decision.createdAt,
+                ranking_json: JSON.stringify(decision.ranking),
+                evidence_json: JSON.stringify(decision.evidenceKeys),
+            });
+            this.telemetry()?.incrementCounter(
+                'gics_infer_publish_total',
+                { artifact: 'decision', result: 'ok' },
+                1,
+                'Inference artifacts published into daemon system storage.',
+            );
+            this.pendingDecisionIds.delete(decisionId);
+            this.syncPendingTelemetry();
+        } catch (error) {
+            this.telemetry()?.incrementCounter(
+                'gics_infer_publish_total',
+                { artifact: 'decision', result: 'error', error_type: normalizeErrorType(error) },
+                1,
+                'Inference artifacts published into daemon system storage.',
+            );
+            this.telemetry()?.recordEvent('inference_publish_failed', {
+                artifact: 'decision',
+                decisionId,
+                errorType: normalizeErrorType(error),
+            });
+            throw error;
+        }
     }
 
     private async publishFeedback(ctx: ModuleContext, feedbackId: string): Promise<void> {
         const feedback = this.engine.getFeedback(feedbackId);
         if (!feedback) return;
-        await ctx.upsertSystemRecord(feedback.systemKey, {
-            domain: feedback.domain,
-            scope: feedback.scope,
-            subject: feedback.subject ?? '',
-            feedback_id: feedback.feedbackId,
-            decision_id: feedback.decisionId ?? '',
-            candidate_id: feedback.candidateId,
-            success: feedback.success ? 1 : 0,
-            result: feedback.result,
-            recorded_at_ms: feedback.recordedAt,
-            metrics_json: JSON.stringify(feedback.metrics),
-            context_json: JSON.stringify(feedback.context ?? {}),
-        });
-        this.pendingFeedbackIds.delete(feedbackId);
+        try {
+            await ctx.upsertSystemRecord(feedback.systemKey, {
+                domain: feedback.domain,
+                scope: feedback.scope,
+                subject: feedback.subject ?? '',
+                feedback_id: feedback.feedbackId,
+                decision_id: feedback.decisionId ?? '',
+                candidate_id: feedback.candidateId,
+                success: feedback.success ? 1 : 0,
+                result: feedback.result,
+                recorded_at_ms: feedback.recordedAt,
+                metrics_json: JSON.stringify(feedback.metrics),
+                context_json: JSON.stringify(feedback.context ?? {}),
+            });
+            this.telemetry()?.incrementCounter(
+                'gics_infer_publish_total',
+                { artifact: 'feedback', result: 'ok' },
+                1,
+                'Inference artifacts published into daemon system storage.',
+            );
+            this.pendingFeedbackIds.delete(feedbackId);
+            this.syncPendingTelemetry();
+        } catch (error) {
+            this.telemetry()?.incrementCounter(
+                'gics_infer_publish_total',
+                { artifact: 'feedback', result: 'error', error_type: normalizeErrorType(error) },
+                1,
+                'Inference artifacts published into daemon system storage.',
+            );
+            this.telemetry()?.recordEvent('inference_publish_failed', {
+                artifact: 'feedback',
+                feedbackId,
+                errorType: normalizeErrorType(error),
+            });
+            throw error;
+        }
     }
 }

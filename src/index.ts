@@ -139,7 +139,7 @@ export { ConfidenceTracker } from './insight/confidence.js';
 export type { InsightConfidence, Outcome } from './insight/confidence.js';
 export { InsightPersistence } from './insight/persistence.js';
 export { StateIndex } from './daemon/state-index.js';
-export type { StateIndexEntry, StateIndexScanOptions, StateIndexScanResult } from './daemon/state-index.js';
+export type { StateIndexEntry, StateIndexScanOptions, StateIndexScanResult, StateIndexScanSummary } from './daemon/state-index.js';
 export { ModuleRegistry } from './daemon/module-registry.js';
 export type { InferenceRequest, InferenceDecision, RecommendationQuery } from './daemon/module-registry.js';
 export type { GICSModuleRuntimeConfig, GICSDaemonFileConfig, ResolvedDaemonConfig } from './daemon/config.js';
@@ -149,12 +149,24 @@ export type { InferenceArtifacts, OutcomeArtifacts } from './inference/engine.js
 export { InferenceEngineModule } from './inference/module.js';
 export type { InferenceEngineModuleOptions } from './inference/module.js';
 export { InferenceStateStore, InferenceKeys } from './inference/state-store.js';
+export { GICSNodeClient, verifyGICSFile } from './clients/node.js';
 export type {
     CandidateOutcomeStats,
     ScopeProfile,
     ScopeProfileStats,
+    SeedPolicyInput,
+    SeedProfileInput,
     StoredPolicyRecord,
     StoredDecisionRecord,
     StoredFeedbackRecord,
     InferenceRuntimeState,
 } from './inference/state-store.js';
+export type {
+    GICSNodeClientOptions,
+    GICSRecord,
+    GICSScanItem,
+    GICSScanOptions,
+    GICSScanResult,
+    GICSScanSummary,
+    GICSPutManyOptions,
+} from './clients/node.js';
