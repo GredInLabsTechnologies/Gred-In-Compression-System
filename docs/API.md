@@ -2,6 +2,10 @@
 
 > Complete reference for consuming, integrating, and operating GICS.
 
+> Deprecated for new implementation work in `1.3.4`.
+> This file remains a historical reference only.
+> For the active iteration, start from `docs/API_v1_3_4.md` and the `1.3.4` active document set.
+
 > `v1.3.3-pre` note: this file remains the legacy `v1.3.2` API reference. For the current development branch, use `docs/API_v1_3_3_PRE_RELEASE.md` together with `docs/FAILURE_MODES_v1_3_3_PRE_RELEASE.md`.
 
 ---

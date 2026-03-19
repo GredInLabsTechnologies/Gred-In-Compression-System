@@ -1,6 +1,6 @@
 {
     "name": "@gredinlabstechnologies/gics-core",
-    "version": "1.3.3",
+    "version": "1.3.4",
     "description": "GICS core compression library (generic)",
     "type": "module",
     "main": "dist/src/index.js",

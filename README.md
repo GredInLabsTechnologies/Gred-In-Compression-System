@@ -1,8 +1,12 @@
 # GICS — Deterministic Time-Series Compression
 
-![Version](https://img.shields.io/badge/version-1.3.3-blue)
-![Status](https://img.shields.io/badge/status-stable-green)
+![Version](https://img.shields.io/badge/version-1.3.4-blue)
+![Status](https://img.shields.io/badge/status-in_development-orange)
 ![License](https://img.shields.io/badge/license-proprietary-red)
+
+> Iteration `1.3.4` is open on branch `codex/1.3.4`.
+> This line is a new development cycle, not a hotfix continuation of `1.3.3`.
+> Planning and documentation are reset for `1.3.4`; previous-cycle docs are legacy unless explicitly carried forward.
 
 ## What Is GICS?
 
@@ -19,6 +23,9 @@
 
 ## Documentation
 
+Primary `1.3.4` planning references:
+`docs/ACTIVE_DOCS_v1_3_4.md`, `docs/DEPRECATIONS_v1_3_4.md`, `docs/PRODUCTION_PLAN_V1_3_4.md`, `docs/roadmaps/GICS_ROADMAP_v1_3_4.md`, `docs/API_v1_3_4.md`
+
 - **[API Reference (v1.3.3)](./docs/API_v1_3_3.md)** — Full public API, daemon RPC, inference, CLI
 - **[Failure Modes](./docs/FAILURE_MODES_v1_3_3.md)** — Recoverability and error semantics
 - **[Binary Format](./docs/FORMAT.md)** — Wire format specification
@@ -27,6 +34,9 @@
 - **[CHANGELOG](./CHANGELOG.md)** — Version history
 
 ---
+
+Active `1.3.4` planning set:
+`docs/ACTIVE_DOCS_v1_3_4.md`, `docs/DEPRECATIONS_v1_3_4.md`, `docs/PRODUCTION_PLAN_V1_3_4.md`, `docs/roadmaps/GICS_ROADMAP_v1_3_4.md`, `docs/API_v1_3_4.md`
 
 ## Installation
 
@@ -121,7 +131,7 @@ const restored = await GICS.unpack(encrypted, { password: 'secret' });
 
 ## Architecture
 
-### v1.3.3 Module Map
+### v1.3.4 Working Baseline
 
 ```
 @gredinlabstechnologies/gics-core
@@ -327,6 +337,8 @@ npm run profile   # Encoder parameter profiler
 
 ## Documentation Index
 
+Active `1.3.4` entry point: `docs/ACTIVE_DOCS_v1_3_4.md`
+
 - **[API Reference (v1.3.3)](./docs/API_v1_3_3.md)** — Full API, daemon RPC, inference, CLI
 - **[CHANGELOG](./CHANGELOG.md)** — Version history with detailed changes
 - **[Format Spec](./docs/FORMAT.md)** — Binary format specification
@@ -342,4 +354,4 @@ npm run profile   # Encoder parameter profiler
 
 ---
 
-*v1.3.3 | 2026-03-19*
+*v1.3.4 in development | 2026-03-19*

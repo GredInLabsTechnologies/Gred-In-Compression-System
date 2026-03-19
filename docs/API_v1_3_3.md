@@ -1,5 +1,9 @@
 # GICS v1.3.3 API Reference
 
+> Deprecated for new implementation work as of `1.3.4`.
+> Keep this file as historical release reference only.
+> The active API baseline for the new iteration is `docs/API_v1_3_4.md`.
+
 This is the API reference for `v1.3.3`.
 
 It covers:

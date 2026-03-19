@@ -7,6 +7,32 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.3.4] - In development
+
+### Added
+
+- Opened the dedicated development branch for the new iteration: `codex/1.3.4`.
+- Added the active `1.3.4` documentation set:
+  - `docs/ACTIVE_DOCS_v1_3_4.md`
+  - `docs/DEPRECATIONS_v1_3_4.md`
+  - `docs/PRODUCTION_PLAN_V1_3_4.md`
+  - `docs/roadmaps/GICS_ROADMAP_v1_3_4.md`
+  - `docs/API_v1_3_4.md`
+  - `docs/releases/2026-03-19_GICS_v1_3_4_iteration_open.md`
+  - `GICS_1_3_4_ARCHITECTURE.MD`
+
+### Changed
+
+- Bumped the working package version from `1.3.3` to `1.3.4`.
+- Moved the repository into a new iteration posture: preparation first, implementation later.
+- Deprecated `1.3.3` and earlier planning documents for new implementation work.
+- Updated top-level references so `1.3.4` is the active development line.
+
+### Notes
+
+- No runtime features were implemented in this step.
+- This change prepares the repository for `1.3.4` as a new iteration, not as a patch train over `1.3.3`.
+
 ## [1.3.3] - 2026-03-18
 
 ### Added

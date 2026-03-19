@@ -1,5 +1,9 @@
 # GICS v1.3.3 Pre-Release Failure Modes
 
+> Deprecated for new implementation work as of `1.3.4`.
+> This file remains historical evidence for the `1.3.3` cycle.
+> New failure-mode work must be documented under the active `1.3.4` document set.
+
 Date: 2026-03-18
 Branch: `dev/v1.3.3`
 State: `pre-release / internal source of truth`

@@ -1,55 +1,41 @@
-# GICS v1.3.3 — Roadmap (Preparation)
+# GICS v1.3.3 - Roadmap (Historical Preparation)
 
-**Fecha:** 2026-03-15T22:40:00+01:00  
-**Versión objetivo:** 1.3.3  
-**Estado:** En preparación  
-**Rama objetivo:** `dev/v1.3.3`
+> Deprecated for new implementation work as of `1.3.4`.
+> This roadmap remains historical reference for the `1.3.3` preparation cycle.
 
----
+Date: 2026-03-15T22:40:00+01:00
+Target version: `1.3.3`
+State: historical
+Original branch: `dev/v1.3.3`
 
-## Objetivo del ciclo 1.3.3
+## Objective of that cycle
 
-Preparar la siguiente iteración de GICS con una base documental limpia, sin ambigüedades entre material histórico y material activo de ejecución.
+Prepare the next GICS iteration on a clean documentation base, without ambiguity between historical material and active execution material.
 
-Esta hoja de ruta define el arranque de trabajo para 1.3.3 y reemplaza como guía activa a los roadmaps del ciclo 1.3.2.
+## Historical bootstrap scope
 
----
+1. Documentation transition
+   - mark docs up to `v1.3.2` as legacy for new work
+   - preserve historical traceability without deleting prior evidence
 
-## Alcance inicial (bootstrap)
+2. Branch preparation
+   - consolidate `dev/v1.3.3` as the base branch for planning and implementation
 
-1. **Transición documental**
-   - Marcar documentación <= v1.3.2 como legacy para nuevos trabajos.
-   - Mantener trazabilidad histórica sin eliminar evidencia previa.
+3. Planning framework
+   - leave roadmap, production plan, and deprecation ledger active for that cycle
 
-2. **Preparación de rama**
-   - Consolidar `dev/v1.3.3` como rama base para planificación/implementación.
+## Historical readiness criteria
 
-3. **Marco de planificación 1.3.3**
-   - Dejar activos los documentos base (roadmap + production plan + ledger de deprecación).
+That cycle was considered ready when:
 
----
+- branch `dev/v1.3.3` existed and was usable
+- documentation deprecation policy was explicit and versioned
+- bootstrap documents for `1.3.3` existed and were referenced from versioning
 
-## Entregables mínimos de preparación
+## Historical next step
 
-- `docs/DEPRECATIONS_v1_3_3.md`
-- `docs/roadmaps/GICS_ROADMAP_v1_3_3.md` (este documento)
-- `docs/PRODUCTION_PLAN_V1_3_3.md`
-- Actualización de referencias en `README.md` y `docs/VERSIONING.md`
+After this roadmap, the intended next phase was:
 
----
-
-## Criterio de “listo para implementar”
-
-Se considera listo cuando:
-
-- Existe rama `dev/v1.3.3` activa y usable.
-- La política de deprecación documental está explícita y versionada.
-- Los documentos de arranque 1.3.3 existen y son referenciables desde versionado.
-
----
-
-## Siguientes pasos (fase implementación)
-
-1. Definir objetivos técnicos concretos de 1.3.3 (feature set / hardening / performance).
-2. Establecer plan por fases con gates de verificación (`build`, `test`, `verify`, `bench` si aplica).
-3. Ejecutar ciclo normal de commits/PR sobre `dev/v1.3.3`.
+1. define technical objectives for `1.3.3`
+2. set phase plan and verification gates
+3. execute the cycle on `dev/v1.3.3`
