@@ -7,6 +7,46 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.3.5] - 2026-04-24
+
+### Fixed
+
+- **CLI** (`src/cli/commands.ts`): `gics daemon start` now honours `--token-path`.
+  The previous build silently ignored the flag and always read the token from
+  `~/.gics/gics.token`, while clients read from the path they actually passed.
+  Every non-`ping` RPC was rejected as `-32000 Unauthorized` while `ping` kept
+  reporting `alive=True`, so health probes lied for consumers sited outside
+  the home directory. `daemon start` now mirrors `resolveDaemonTarget()`:
+  CLI flags win over the config file, config file wins over built-in defaults.
+  The boot log now includes `Token: <resolved path>` to make future drift
+  visible with a one-line diff.
+  Reported by the GIMO team. See
+  `docs/reports/2026-04-24_GICS_1_3_5_BUG_DAEMON_IGNORES_TOKEN_PATH_FLAG.md`.
+- **Python SDK** (`clients/python/gics_client.py`): `GICSDaemonSupervisor.start`
+  no longer inherits the parent process's stdout/stderr when spawning the
+  Node daemon. Daemon lifecycle output (`[GICS] ...`, `[Supervisor] ...`)
+  is now redirected to `<data_path>/logs/gics_daemon.log` by default. This
+  unbreaks consumers that embed GICS inside MCP / LSP / JSON-RPC-over-stdio
+  hosts, where any non-JSON byte on stdout corrupts the protocol stream.
+  A new `log_path` keyword argument allows callers to override the destination
+  (or pass `os.devnull` to silence the daemon entirely). The daemon's stdin
+  is now also redirected to `DEVNULL` to prevent symmetric breakage if the
+  daemon ever reads from stdin in the future.
+  Reported by the GIMO team. See
+  `docs/reports/2026-04-09_GICS_1_3_5_BUG_PYTHON_SDK_STDIO_POLLUTION.md`.
+
+### Added
+
+- Regression tests `tests/daemon-token-path.test.ts` (3 tests): CLI flag
+  honoured, end-to-end put/scan with explicit token, and CLI > config
+  precedence.
+- Regression tests `clients/python/test_gics_client.py` (6 tests): stdio
+  redirection, default log path under `data_path`, custom `log_path` override,
+  log-dir creation, and fh cleanup on stop.
+- `daemon start` help banner now documents `--token-path`.
+
+---
+
 ## [1.3.4] - 2026-03-19
 
 ### Added

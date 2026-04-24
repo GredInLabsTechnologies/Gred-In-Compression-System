@@ -610,6 +610,7 @@ ${c.bold('Subcommands:')}
 ${c.bold('Options (start):')}
   --data-path <dir>     Data directory (default: ~/.gics/data)
   --socket-path <path>  Socket path (default: platform-specific)
+  --token-path <path>   Token file path (default: ~/.gics/gics.token)
   --wal-type <type>     WAL type: binary or jsonl (default: binary)
   --config <path>       Persistent daemon config file
   --modules <list>      Comma-separated enabled modules
@@ -992,8 +993,9 @@ async function inferenceFlush(args: string[]): Promise<number> {
 }
 
 async function daemonStart(args: string[]): Promise<number> {
-    const dataPath = parseFlag(args, '--data-path') ?? DEFAULT_DATA_PATH;
-    const socketPath = parseFlag(args, '--socket-path') ?? DEFAULT_SOCKET;
+    const explicitDataPath = parseFlag(args, '--data-path');
+    const explicitSocketPath = parseFlag(args, '--socket-path');
+    const explicitTokenPath = parseFlag(args, '--token-path');
     const walType = (parseFlag(args, '--wal-type') ?? 'binary') as 'binary' | 'jsonl';
     const configPath = parseFlag(args, '--config');
     const modulesOverride = parseModuleList(parseFlag(args, '--modules'));
@@ -1008,17 +1010,24 @@ async function daemonStart(args: string[]): Promise<number> {
     const { mkdirSync } = await import('fs');
     mkdirSync(GICS_HOME, { recursive: true });
 
-    const tokenPath = DEFAULT_TOKEN_PATH;
     const defaults = {
-        socketPath,
-        dataPath,
-        tokenPath,
+        socketPath: explicitSocketPath ?? DEFAULT_SOCKET,
+        dataPath: explicitDataPath ?? DEFAULT_DATA_PATH,
+        tokenPath: explicitTokenPath ?? DEFAULT_TOKEN_PATH,
         walType,
     };
     const resolved = await resolveDaemonConfig(configPath ?? DEFAULT_CONFIG_PATH, defaults, modulesOverride);
 
+    // CLI flags win over config file (CLI > config > default). Mirrors resolveDaemonTarget().
+    const socketPath = explicitSocketPath ?? resolved.daemon.socketPath;
+    const dataPath = explicitDataPath ?? resolved.daemon.dataPath;
+    const tokenPath = explicitTokenPath ?? resolved.daemon.tokenPath;
+
     const daemon = new GICSDaemon({
         ...resolved.daemon,
+        socketPath,
+        dataPath,
+        tokenPath,
         modules: resolved.modules,
         defaultProfileScope: resolved.profiles.defaultScope,
         configPath: resolved.filePath,
@@ -1039,8 +1048,8 @@ async function daemonStart(args: string[]): Promise<number> {
 
     try {
         await daemon.start();
-        console.log(c.green(`[GICS] Daemon started on ${resolved.daemon.socketPath}`));
-        console.log(c.dim(`[GICS] PID: ${process.pid} | Data: ${resolved.daemon.dataPath} | WAL: ${resolved.daemon.walType ?? walType}`));
+        console.log(c.green(`[GICS] Daemon started on ${socketPath}`));
+        console.log(c.dim(`[GICS] PID: ${process.pid} | Data: ${dataPath} | Token: ${tokenPath} | WAL: ${resolved.daemon.walType ?? walType}`));
         // Keep process alive
         await new Promise(() => {});
         return 0;

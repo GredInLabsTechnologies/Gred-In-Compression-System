@@ -692,7 +692,7 @@ class GICSClient:
 
 
 class GICSDaemonSupervisor:
-    def __init__(self, node_executable='node', cli_path=None, cwd=None, address=None, token_path=None, data_path=None):
+    def __init__(self, node_executable='node', cli_path=None, cwd=None, address=None, token_path=None, data_path=None, log_path=None):
         self.node_executable = node_executable
         self.cwd = cwd or self._default_repo_root()
         self.cli_path = cli_path or self._default_cli_path()
@@ -700,6 +700,11 @@ class GICSDaemonSupervisor:
         self.token_path = token_path
         self.data_path = data_path
         self.process = None
+        if log_path is None:
+            base = data_path or os.path.join(self.cwd or os.getcwd(), '.gics')
+            log_path = os.path.join(base, 'logs', 'gics_daemon.log')
+        self.log_path = log_path
+        self._log_fh = None
 
     def _default_repo_root(self):
         return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -721,7 +726,20 @@ class GICSDaemonSupervisor:
             args.extend(['--token-path', self.token_path])
         if extra_args:
             args.extend(extra_args)
-        self.process = subprocess.Popen(args, cwd=self.cwd)
+        # Redirect daemon stdio to a log file so human-readable lifecycle output
+        # does not pollute the parent's stdout. Critical when the parent speaks
+        # a structured protocol over stdio (MCP / LSP / JSON-RPC).
+        log_dir = os.path.dirname(self.log_path)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        self._log_fh = open(self.log_path, 'ab', buffering=0)
+        self.process = subprocess.Popen(
+            args,
+            cwd=self.cwd,
+            stdout=self._log_fh,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+        )
         if wait:
             self.wait_until_ready(timeout=timeout)
         return self.process
@@ -742,15 +760,22 @@ class GICSDaemonSupervisor:
         raise TimeoutError(f"GICS daemon did not become ready within {timeout} seconds")
 
     def stop(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait(timeout=5)
+        try:
+            if self.process and self.process.poll() is None:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait(timeout=5)
+                return 0
             return 0
-        return 0
+        finally:
+            if self._log_fh is not None:
+                try:
+                    self._log_fh.close()
+                finally:
+                    self._log_fh = None
 
     def status(self):
         client = GICSClient(address=self.address, token_path=self.token_path)
